@@ -1,0 +1,40 @@
+name: Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case or pain point
+      placeholder: "I want to train a GAN but there's no way to have two models..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How you'd like it to work
+      placeholder: "Add support for multiple computation graphs that can be composed..."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Graph Editor
+        - Training
+        - Data Loading
+        - Export
+        - Templates
+        - UI/UX
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Would you like to contribute this?
+      options:
+        - label: I'd be interested in implementing this

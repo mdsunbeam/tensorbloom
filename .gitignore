@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+app/node_modules/
+
+# Build output
+app/dist/
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# Python
+python/__pycache__/
+*.pyc
+*.pyo
+data/
+checkpoints/
+*.onnx
+*.pt
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Tauri
+*.ico.bak
+
+# Test artifacts
+test_model.*
+
+# Claude
+.claude/

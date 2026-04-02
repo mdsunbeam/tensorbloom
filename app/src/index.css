@@ -1,0 +1,258 @@
+@import "@xyflow/react/dist/style.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------- Dark theme (default) · Zinc palette ------------- */
+:root,
+[data-theme="dark"] {
+  --bg-primary: #09090b;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #27272a;
+  --bg-elevated: #3f3f46;
+  --border: #27272a;
+  --border-subtle: #1f1f23;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --accent-subtle: rgba(99, 102, 241, 0.1);
+  --edge-color: #52525b;
+  --bg-dot: #1f1f23;
+  --minimap-mask: rgba(9, 9, 11, 0.85);
+  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 14px rgba(0, 0, 0, 0.3);
+  --node-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.5), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --scrollbar-thumb: #3f3f46;
+  --scrollbar-track: transparent;
+  --danger: #ef4444;
+  --danger-subtle: rgba(239, 68, 68, 0.1);
+  --warning: #f59e0b;
+  --warning-subtle: rgba(245, 158, 11, 0.1);
+  --surface-glow: rgba(255, 255, 255, 0.02);
+
+  --node-linear: #3b82f6;
+  --node-conv: #8b5cf6;
+  --node-activation: #eab308;
+  --node-norm: #10b981;
+  --node-pool: #ec4899;
+  --node-dropout: #71717a;
+  --node-loss: #ef4444;
+  --node-io: #6366f1;
+  --node-recurrent: #06b6d4;
+  --node-transformer: #f97316;
+  --node-embedding: #d946ef;
+  --node-reshape: #0ea5e9;
+  --node-math: #f472b6;
+  --node-vision: #84cc16;
+  --node-data: #14b8a6;
+}
+
+/* ------------- Light theme · Zinc palette ------------- */
+[data-theme="light"] {
+  --bg-primary: #f4f4f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f4f4f5;
+  --bg-elevated: #fafafa;
+  --border: #e4e4e7;
+  --border-subtle: #f4f4f5;
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
+  --accent: #4f46e5;
+  --accent-hover: #6366f1;
+  --accent-subtle: rgba(79, 70, 229, 0.07);
+  --edge-color: #a1a1aa;
+  --bg-dot: #d4d4d8;
+  --minimap-mask: rgba(244, 244, 245, 0.85);
+  --node-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 4px 14px rgba(0, 0, 0, 0.04);
+  --node-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --scrollbar-thumb: #d4d4d8;
+  --scrollbar-track: transparent;
+  --danger: #dc2626;
+  --danger-subtle: rgba(220, 38, 38, 0.07);
+  --warning: #d97706;
+  --warning-subtle: rgba(217, 119, 6, 0.07);
+  --surface-glow: rgba(255, 255, 255, 0.5);
+
+  --node-linear: #2563eb;
+  --node-conv: #7c3aed;
+  --node-activation: #ca8a04;
+  --node-norm: #059669;
+  --node-pool: #db2777;
+  --node-dropout: #57534e;
+  --node-loss: #dc2626;
+  --node-io: #4f46e5;
+  --node-recurrent: #0891b2;
+  --node-transformer: #ea580c;
+  --node-embedding: #c026d3;
+  --node-reshape: #0284c7;
+  --node-math: #ec4899;
+  --node-vision: #65a30d;
+  --node-data: #0d9488;
+}
+
+/* ------------- Base reset ------------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ------------- Custom scrollbar ------------- */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* ------------- Focus ring ------------- */
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* ------------- Transitions ------------- */
+button, input, select {
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* ------------- React Flow overrides ------------- */
+.react-flow__background {
+  background: var(--bg-primary) !important;
+}
+
+
+.react-flow__controls {
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: var(--node-shadow) !important;
+}
+
+.react-flow__controls-button {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border) !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--bg-tertiary) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: var(--text-secondary) !important;
+}
+
+.react-flow__controls-button:hover svg {
+  fill: var(--text-primary) !important;
+}
+
+.react-flow__edge-path {
+  stroke: var(--edge-color) !important;
+  stroke-width: 2 !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 2.5 !important;
+}
+
+.react-flow__handle {
+  width: 12px !important;
+  height: 3px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.react-flow__handle-top {
+  top: 0 !important;
+}
+
+.react-flow__handle-bottom {
+  bottom: 0 !important;
+}
+
+.react-flow__handle-left {
+  left: 0 !important;
+  width: 3px !important;
+  height: 12px !important;
+}
+
+.react-flow__handle-right {
+  right: 0 !important;
+  width: 3px !important;
+  height: 12px !important;
+}
+
+/* When actively connecting, show target handles as small dots */
+.react-flow__handle.connectingto,
+.react-flow__handle.connectingfrom,
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle:hover {
+  opacity: 1;
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--accent) !important;
+  border-radius: 50% !important;
+}
+
+/* Error edge — root cause */
+.react-flow__edge-path.edge-error-root {
+  stroke: var(--danger) !important;
+  stroke-width: 2.5 !important;
+  stroke-dasharray: 8 4 !important;
+  animation: edge-error-flow 0.6s linear infinite !important;
+}
+
+/* Error edge — cascaded from upstream */
+.react-flow__edge-path.edge-error-cascaded {
+  stroke: var(--warning, #f59e0b) !important;
+  stroke-width: 2 !important;
+  stroke-dasharray: 6 4 !important;
+  opacity: 0.7 !important;
+  animation: edge-error-flow 0.8s linear infinite !important;
+}
+
+@keyframes edge-error-flow {
+  to { stroke-dashoffset: -12; }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.react-flow__connection-line {
+  stroke: var(--accent) !important;
+  stroke-width: 2 !important;
+}
