@@ -1,0 +1,49 @@
+name: Bug Report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Clear description of the bug
+      placeholder: "When I click Start Training with a ResNet-18 template..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: "Training should start and show loss curves"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open TensorBloom
+        2. Insert > From Template > ResNet-18
+        3. Click Start Training
+        4. See error...
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU (if applicable)
+      placeholder: "NVIDIA RTX 4090, or CPU only"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error logs
+      description: Paste any error messages from the Logs tab or console
+      render: shell
