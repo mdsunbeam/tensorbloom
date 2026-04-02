@@ -1,5 +1,7 @@
 # TensorBloom
 
+**[tensorbloom.org](https://tensorbloom.org)** · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
+
 Build, train, and export PyTorch neural networks visually. Drag-and-drop layers, connect them, train on real datasets with GPU acceleration, and export to ONNX or TorchScript — all without writing boilerplate code.
 
 ![TensorBloom — ResNet-18 with skip connections, live code generation, and model summary](docs/screenshot-hero.png)
@@ -156,6 +158,8 @@ TensorBloom v0.1 focuses on standard feedforward, convolutional, recurrent, and 
 See the [Roadmap](ROADMAP.md) for planned features.
 
 ## Documentation
+
+Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse locally:
 
 - [Getting Started](docs/guides/getting-started.md) — Build and train your first model
 - [Custom Data Guide](docs/guides/custom-data.md) — Load your own datasets
