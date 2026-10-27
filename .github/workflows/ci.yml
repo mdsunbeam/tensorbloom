@@ -47,3 +47,5 @@ jobs:
         run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
       - name: Run template tests
         run: python python/test_templates.py
+      - name: Run sidecar tests
+        run: python python/test_sidecar.py

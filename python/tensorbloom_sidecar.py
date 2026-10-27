@@ -623,6 +623,14 @@ import threading
 
 _train_stop_event = threading.Event()
 _train_thread: threading.Thread | None = None
+# CPU copy of the weights from the most recent training run, used by export
+_last_trained_state: dict[str, torch.Tensor] | None = None
+
+
+def _data_dir() -> str:
+    """Writable per-user directory for checkpoints and downloads (set by the Tauri host)."""
+    import os
+    return os.environ.get("TENSORBLOOM_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".tensorbloom")
 
 
 def _build_model_from_graph(graph_json: dict) -> nn.Module:
@@ -674,19 +682,18 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
         if mt and mt not in functional_ops:
             nid = n["id"]
             # Check if node has a code block definition
-            if "codeBlock" in n and n["codeBlock"]:
-                code_block_nodes.add(nid)
-                try:
+            label = n.get("label") or mt
+            try:
+                if "codeBlock" in n and n["codeBlock"]:
+                    code_block_nodes.add(nid)
                     submod = _build_code_block_module(n["codeBlock"])
-                    root.add_module(id_to_name[nid], submod)
-                except Exception:
-                    pass
-            else:
-                try:
+                elif n.get("customCode"):
+                    submod = _build_custom_block_module(n["customCode"], mt, n.get("params", {}))
+                else:
                     submod = build_module(mt, n.get("params", {}))
-                    root.add_module(id_to_name[nid], submod)
-                except Exception:
-                    pass
+            except Exception as e:
+                raise ValueError(f"Could not build layer '{label}' ({mt}): {e}") from e
+            root.add_module(id_to_name[nid], submod)
 
     # Build fx graph
     graph = torch.fx.Graph()
@@ -829,14 +836,23 @@ def _build_optimizer(config: dict, params) -> torch.optim.Optimizer:
         return torch.optim.Adam(params, lr=lr, weight_decay=wd)
 
 
-def _build_scheduler(config: dict | None, optimizer):
+def _build_scheduler(config: dict | None, optimizer, epochs: int = 10, steps_per_epoch: int = 1):
     if not config or config.get("type") == "None":
         return None
     stype = config["type"]
     if stype == "StepLR":
         return torch.optim.lr_scheduler.StepLR(optimizer, step_size=config.get("step_size", 5), gamma=config.get("gamma", 0.1))
     elif stype == "CosineAnnealingLR":
-        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.get("T_max", 10))
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.get("T_max", epochs))
+    elif stype == "OneCycleLR":
+        # Stepped once per batch; the configured optimizer LR is the peak LR
+        return torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=config.get("max_lr", optimizer.param_groups[0]["lr"]),
+            epochs=epochs,
+            steps_per_epoch=max(steps_per_epoch, 1),
+            pct_start=config.get("pct_start", 0.3),
+        )
     elif stype == "ExponentialLR":
         return torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=config.get("gamma", 0.95))
     elif stype == "ReduceLROnPlateau":
@@ -1625,7 +1641,7 @@ def _compute_correct(output, target):
 
 def _train_loop(graph_json: dict, config: dict):
     """Runs in a separate thread. Captures stdout/stderr as train.log notifications."""
-    global _train_stop_event
+    global _train_stop_event, _last_trained_state
     old_stdout, old_stderr = sys.stdout, sys.stderr
     sys.stdout = _LogCapture("stdout")
     sys.stderr = _LogCapture("stderr")
@@ -1670,7 +1686,6 @@ def _train_loop(graph_json: dict, config: dict):
                          if n.get("type") == "placeholder" or n.get("moduleType") == "Input")
 
         optimizer = _build_optimizer(config.get("optimizer", {}), model.parameters())
-        scheduler = _build_scheduler(config.get("scheduler"), optimizer)
 
         # Extract loss from graph if a Loss node exists, otherwise use config
         graph_loss_type, graph_loss_params, target_batch_idx = _extract_loss_from_graph(graph_json)
@@ -1694,6 +1709,14 @@ def _train_loop(graph_json: dict, config: dict):
         if test_loader:
             print(f"         {len(test_loader.dataset)} test samples")
         print(f"Training for {epochs} epochs...")
+
+        scheduler = _build_scheduler(config.get("scheduler"), optimizer, epochs=epochs, steps_per_epoch=len(train_loader))
+        step_per_batch = isinstance(scheduler, torch.optim.lr_scheduler.OneCycleLR)
+
+        import os
+        import time
+        ckpt_dir = config.get("checkpoint_dir") or os.path.join(_data_dir(), "checkpoints", time.strftime("%Y%m%d-%H%M%S"))
+        print(f"Checkpoints: {os.path.abspath(ckpt_dir)}")
 
         use_amp = config.get("mixed_precision", False) and device.type == "cuda"
         scaler = torch.amp.GradScaler() if use_amp else None
@@ -1758,6 +1781,9 @@ def _train_loop(graph_json: dict, config: dict):
                     if clip_max_norm:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_max_norm)
                     optimizer.step()
+
+                if step_per_batch:
+                    scheduler.step()
 
                 epoch_loss += loss.item()
                 num_batches += 1
@@ -1859,10 +1885,8 @@ def _train_loop(graph_json: dict, config: dict):
 
             # Auto-checkpoint every 5 epochs
             if epoch % 5 == 0 or epoch == epochs:
-                import os
-                ckpt_dir = config.get("checkpoint_dir", "./checkpoints")
                 os.makedirs(ckpt_dir, exist_ok=True)
-                ckpt_path = os.path.join(ckpt_dir, f"checkpoint_epoch_{epoch}.pt")
+                ckpt_path = os.path.abspath(os.path.join(ckpt_dir, f"checkpoint_epoch_{epoch}.pt"))
                 ckpt_data = {
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
@@ -1879,7 +1903,7 @@ def _train_loop(graph_json: dict, config: dict):
                     "epoch": epoch,
                 })
 
-            if scheduler:
+            if scheduler and not step_per_batch:
                 if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                     scheduler.step(val_loss if val_loss is not None else avg_loss)
                 else:
@@ -1896,6 +1920,8 @@ def _train_loop(graph_json: dict, config: dict):
                     if patience_counter >= early_stop_cfg.get("patience", 5):
                         send_notification("train.progress", {"status": "early_stop", "epoch": epoch})
                         break
+
+        _last_trained_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
         print("Training complete.")
         send_notification("train.progress", {"status": "complete"})
@@ -1971,10 +1997,43 @@ def _apply_weight_init(model: nn.Module, init_type: str = "default"):
 # Export
 # ---------------------------------------------------------------------------
 
+def _build_export_model(params: dict) -> tuple[nn.Module, str]:
+    """Build the model for export and load the requested weights.
+
+    params["weights"]: "trained" (last training run, default), "checkpoint"
+    (params["checkpoint_path"]), or "random" (fresh initialization).
+    """
+    model = _build_model_from_graph(params["graph"])
+    source = params.get("weights", "trained")
+
+    if source == "checkpoint":
+        path = params.get("checkpoint_path")
+        if not path:
+            raise ValueError("No checkpoint file selected")
+        ckpt = torch.load(path, map_location="cpu", weights_only=True)
+        state = ckpt.get("model_state_dict", ckpt) if isinstance(ckpt, dict) else None
+        if not isinstance(state, dict):
+            raise ValueError(f"{path} does not contain a model state dict")
+    elif source == "trained":
+        if _last_trained_state is None:
+            raise ValueError("No trained weights yet. Train the model first, "
+                             "pick a checkpoint file, or choose 'Untrained'.")
+        state = _last_trained_state
+    else:
+        return model.eval(), "random"
+
+    try:
+        model.load_state_dict(state)
+    except RuntimeError as e:
+        raise ValueError("The saved weights don't match the current graph. "
+                         f"Did the architecture change since training?\n{e}") from e
+    return model.eval(), source
+
+
 def export_onnx(params: dict) -> dict:
     """Export model to ONNX format."""
-    model = _build_model_from_graph(params["graph"])
-    model.eval()
+    import os
+    model, weights = _build_export_model(params)
 
     input_shapes = params.get("input_shapes", {"x": [1, 3, 224, 224]})
     dummy_inputs = []
@@ -1983,10 +2042,9 @@ def export_onnx(params: dict) -> dict:
         dummy_inputs.append(torch.randn(*shape))
         input_names.append(name)
 
-    output_path = params.get("output_path", "./model.onnx")
+    output_path = os.path.abspath(params.get("output_path", "model.onnx"))
     dummy = tuple(dummy_inputs) if len(dummy_inputs) > 1 else dummy_inputs[0]
 
-    import io, os
     # Suppress verbose output to avoid Windows encoding issues with emoji
     old_stdout = sys.stdout
     sys.stdout = io.TextIOWrapper(io.BytesIO(), encoding="utf-8")
@@ -2000,16 +2058,16 @@ def export_onnx(params: dict) -> dict:
         )
     finally:
         sys.stdout = old_stdout
-    return {"path": output_path, "success": True}
+    return {"path": output_path, "success": True, "weights": weights}
 
 
 def export_torchscript(params: dict) -> dict:
     """Export model to TorchScript format."""
-    model = _build_model_from_graph(params["graph"])
-    model.eval()
+    import os
+    model, weights = _build_export_model(params)
 
     method = params.get("method", "trace")
-    output_path = params.get("output_path", "./model.pt")
+    output_path = os.path.abspath(params.get("output_path", "model.pt"))
 
     if method == "script":
         scripted = torch.jit.script(model)
@@ -2021,7 +2079,7 @@ def export_torchscript(params: dict) -> dict:
         traced = torch.jit.trace(model, dummy)
         traced.save(output_path)
 
-    return {"path": output_path, "success": True}
+    return {"path": output_path, "success": True, "weights": weights}
 
 
 def _tensor_info(name: str, tensor: torch.Tensor) -> dict:
@@ -2560,6 +2618,23 @@ class _DynModule(nn.Module):
     exec_globals = {"torch": torch, "nn": nn, "F": torch.nn.functional}
     exec(class_code, exec_globals)
     return exec_globals["_DynModule"]()
+
+
+def _build_custom_block_module(code: str, class_name: str, params: dict) -> nn.Module:
+    """Build a module from a user-defined custom block (full class source code)."""
+    exec_globals: dict[str, Any] = {"torch": torch, "nn": nn, "F": torch.nn.functional,
+                                    "__name__": "tensorbloom_custom"}
+    exec(code, exec_globals)
+    cls = exec_globals.get(class_name)
+    if not (isinstance(cls, type) and issubclass(cls, nn.Module)):
+        # Fall back to the last nn.Module subclass defined in the code
+        defined = [v for v in exec_globals.values()
+                   if isinstance(v, type) and issubclass(v, nn.Module) and v.__module__ == "tensorbloom_custom"]
+        if not defined:
+            raise ValueError(f"No nn.Module subclass found in custom block '{class_name}'")
+        cls = defined[-1]
+    clean = {k: v for k, v in params.items() if v is not None and not k.startswith("_")}
+    return cls(**clean)
 
 
 # ---------------------------------------------------------------------------

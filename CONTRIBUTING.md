@@ -26,7 +26,8 @@ Thanks for your interest in contributing! Here's how to get started.
 2. Make your changes
 3. Run `npm run build` in `app/` to verify TypeScript compiles
 4. Run `python python/test_templates.py` to verify template models
-5. Open a pull request
+5. Run `python python/test_sidecar.py` to verify training, checkpoints, and export
+6. Open a pull request
 
 ## Guidelines
 

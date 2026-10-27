@@ -36,10 +36,16 @@ pub async fn start_sidecar(app: AppHandle) -> Result<String, String> {
         .ok_or("Python environment not set up")?;
     let script_path = get_script_path(&app)?;
 
+    // Run from the app data dir so relative paths (dataset downloads, checkpoints,
+    // exports) land somewhere writable instead of the install directory.
+    std::fs::create_dir_all(&app_data).map_err(|e| e.to_string())?;
+
     // Spawn the process
     let mut cmd = Command::new(&python_path);
     cmd.arg("-u")  // unbuffered
         .arg(&script_path)
+        .current_dir(&app_data)
+        .env("TENSORBLOOM_DATA_DIR", &app_data)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());

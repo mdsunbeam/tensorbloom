@@ -6,6 +6,18 @@ TensorBloom can export your trained model in three formats: ONNX, TorchScript, a
 
 Go to **File > Export Model** (or `Ctrl+E`) to open the export dialog.
 
+### Weights
+
+Choose which weights go into the exported file:
+
+- **Last training run** (default) — the weights from the most recent training run in this session, including runs you stopped early
+- **Checkpoint file** — any checkpoint saved during training (defaults to the latest one)
+- **Untrained** — the architecture with freshly initialized weights
+
+If you change the graph after training, the saved weights no longer fit and export tells you so. Retrain, or pick a checkpoint that matches the current graph.
+
+Checkpoints are saved every 5 epochs and at the end of training, in a folder per run under the app's data directory. The training log prints the folder at the start of each run.
+
 ## ONNX
 
 **Best for:** Production deployment, cross-framework compatibility, inference optimization.
@@ -78,7 +90,7 @@ class Model(nn.Module):
 
 ## Tips
 
-- **Train before exporting** — Export uses the current model weights. Train first to get meaningful weights.
+- **Train before exporting** — Export uses the weights from your last training run. Train first, or pick a checkpoint file.
 - **Test the export** — Load the exported model in a separate script and verify it produces the same outputs.
 - **ONNX for production** — If deploying to a server or edge device, ONNX with runtime optimization is usually the best choice.
 - **Code for research** — If you want to continue developing the model in a Jupyter notebook or script, export the Python code.
