@@ -45,6 +45,8 @@ jobs:
           python-version: "3.11"
       - name: Install PyTorch (CPU)
         run: pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+      - name: Install ONNX (for export tests)
+        run: pip install onnx onnxscript
       - name: Run template tests
         run: python python/test_templates.py
       - name: Run sidecar tests
