@@ -1,5 +1,6 @@
 import { TEMPLATES, TEMPLATE_CATEGORY_ORDER, TEMPLATE_CATEGORY_LABELS } from "../lib/templates";
 import type { TemplateCategory } from "../lib/templates";
+import { useEscapeKey } from "../lib/use-escape-key";
 
 interface TemplatesDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ function groupedTemplates(): { category: TemplateCategory; items: { index: numbe
 }
 
 export default function TemplatesDialog({ open, onClose, onSelect }: TemplatesDialogProps) {
+  useEscapeKey(onClose, { enabled: open });
   if (!open) return null;
 
   const sections = groupedTemplates();

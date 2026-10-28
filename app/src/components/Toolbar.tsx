@@ -6,18 +6,18 @@ import { downloadProject, loadProjectFile, deserializeProject } from "../lib/pro
 import { autoLayout } from "../lib/auto-layout";
 import { computeModelSummary, formatParamCount } from "../lib/model-summary";
 import { toast } from "./Toast";
+import { useEscapeKey } from "../lib/use-escape-key";
 
 interface ToolbarProps {
   onShowImport: () => void;
   onShowTemplates: () => void;
   onShowExport: () => void;
   onShowSpotlight: () => void;
-  onShowSweep: () => void;
   onShowCustomBlock: () => void;
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowSweep, onShowCustomBlock, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -39,6 +39,9 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenu]);
+
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  useEscapeKey(closeMenu, { enabled: openMenu !== null });
 
   const handleSave = useCallback(async () => {
     const { nodes, edges, projectName } = useGraphStore.getState();
@@ -112,11 +115,6 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { label: "Auto-Layout", shortcut: "Ctrl+L", action: handleAutoLayout },
         { type: "separator" },
         { label: `${theme === "dark" ? "Light" : "Dark"} Theme`, action: toggleTheme },
-      ],
-    },
-    {
-      label: "Tools", id: "tools", items: [
-        { label: "Hyperparameter Sweep...", action: onShowSweep },
       ],
     },
   ];

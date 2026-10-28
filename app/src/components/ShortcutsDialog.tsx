@@ -1,3 +1,5 @@
+import { useEscapeKey } from "../lib/use-escape-key";
+
 interface ShortcutsDialogProps {
   open: boolean;
   onClose: () => void;
@@ -12,13 +14,12 @@ const SHORTCUTS = [
 
   { section: "Edit" },
   { key: "Ctrl+Z", action: "Undo" },
-  { key: "Ctrl+Shift+Z", action: "Redo" },
+  { key: "Ctrl+Shift+Z", action: "Redo (also Ctrl+Y)" },
   { key: "Ctrl+A", action: "Select all nodes" },
   { key: "Ctrl+C", action: "Copy selected nodes" },
   { key: "Ctrl+V", action: "Paste copied nodes" },
   { key: "Delete", action: "Delete selected nodes" },
   { key: "Ctrl+D", action: "Duplicate selected nodes" },
-  { key: "Ctrl+G", action: "Group selected nodes" },
   { key: "Double-click", action: "Rename node" },
   { key: "Right-click", action: "Context menu" },
 
@@ -32,11 +33,13 @@ const SHORTCUTS = [
   { key: "Ctrl+.", action: "Toggle right panel" },
   { key: "Ctrl+M", action: "Toggle minimap" },
   { key: "Ctrl+?", action: "Keyboard shortcuts" },
-  { key: "Scroll", action: "Zoom in/out" },
-  { key: "Click + Drag", action: "Pan canvas" },
+  { key: "Scroll", action: "Pan canvas" },
+  { key: "Ctrl+Scroll", action: "Zoom in/out" },
+  { key: "Drag empty canvas", action: "Pan canvas" },
 ];
 
 export default function ShortcutsDialog({ open, onClose }: ShortcutsDialogProps) {
+  useEscapeKey(onClose, { enabled: open });
   if (!open) return null;
 
   return (

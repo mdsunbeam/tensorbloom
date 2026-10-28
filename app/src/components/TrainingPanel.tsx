@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
 import { toast } from "./Toast";
+import NumberField from "./NumberField";
 import {
   DATASET_METADATA,
   checkDatasetCompatibility,
@@ -519,8 +520,7 @@ function Select({ value, options, onChange }: { value: string; options: string[]
 
 function NumberInput({ value, step, min, max, onChange }: { value: number; step: number; min?: number; max?: number; onChange: (v: number) => void }) {
   return (
-    <input type="number" value={value} step={step} min={min} max={max}
-      onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
+    <NumberField value={value} step={step} min={min} max={max} onChange={onChange}
       className={inputClass} style={inputStyle} />
   );
 }

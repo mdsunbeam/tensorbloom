@@ -18,12 +18,11 @@ const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
-const SweepDialog = lazy(() => import("./components/SweepDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
 import { useThemeStore } from "./store/theme-store";
 import { useGraphStore } from "./store/graph-store";
-import { useHistoryStore } from "./store/history-store";
+import { useHistoryStore, isApplyingHistory } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
 import { downloadProject, loadProjectFile, deserializeProject } from "./lib/project";
 import { autoLayout } from "./lib/auto-layout";
@@ -51,7 +50,6 @@ export default function App() {
   const [connectFrom, setConnectFrom] = useState<ConnectFromContext | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [sweepOpen, setSweepOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -138,33 +136,32 @@ export default function App() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const ctrl = e.ctrlKey || e.metaKey;
+      // With Shift held (or Caps Lock on) letter keys arrive uppercase, e.g. Ctrl+Shift+Z is "Z"
+      const key = e.key.toLowerCase();
       // Let browser handle clipboard/undo shortcuts when focus is in a text field
       const tag = (e.target as HTMLElement)?.tagName;
       const editable = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
-      if (editable && ctrl && ["a", "c", "v", "x", "z", "y"].includes(e.key)) return;
-      if (ctrl && e.key === "z" && !e.shiftKey) { e.preventDefault(); useHistoryStore.getState().undo(); }
-      else if (ctrl && e.key === "z" && e.shiftKey) { e.preventDefault(); useHistoryStore.getState().redo(); }
-      else if (ctrl && e.key === "y") { e.preventDefault(); useHistoryStore.getState().redo(); }
-      else if (ctrl && e.key === "s") { e.preventDefault(); const s = useGraphStore.getState(); downloadProject(s.projectName, s.nodes, s.edges).then((r) => { if (r !== null) toast.success("Project saved"); }); }
-      else if (ctrl && e.key === "o") { e.preventDefault(); handleOpenFile(); }
-      else if (ctrl && e.key === "n") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().clearGraph(); useGraphStore.getState().setProjectName("Untitled"); }
-      else if (ctrl && e.key === "i") { e.preventDefault(); setImportOpen(true); }
-      else if (ctrl && e.key === "l") { e.preventDefault(); handleAutoLayout(); }
-      else if (ctrl && e.key === "k") { e.preventDefault(); setSpotlightOpen(true); }
-      else if (ctrl && e.key === "e") { e.preventDefault(); setExportOpen(true); }
-      else if (ctrl && e.key === "d") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().duplicateSelected(); }
-      else if (ctrl && e.key === "c") { useGraphStore.getState().copySelected(); }
-      else if (ctrl && e.key === "v") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().paste(); }
-      else if (ctrl && e.key === "a") { e.preventDefault(); useGraphStore.getState().selectAll(); }
-      else if (ctrl && e.key === "g") {
-        e.preventDefault();
-        const name = prompt("Group name:", "Block") ?? "Block";
-        if (name) { useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().groupSelected(name); }
-      }
-      else if (ctrl && e.key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
-      else if (ctrl && e.key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
-      else if (ctrl && e.key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
-      else if (ctrl && (e.key === "/" || e.key === "?")) { e.preventDefault(); setShortcutsOpen(true); }
+      if (editable && ctrl && ["a", "c", "v", "x", "z", "y"].includes(key)) return;
+      if (ctrl && key === "z" && !e.shiftKey) { e.preventDefault(); useHistoryStore.getState().undo(); }
+      else if (ctrl && key === "z" && e.shiftKey) { e.preventDefault(); useHistoryStore.getState().redo(); }
+      else if (ctrl && key === "y") { e.preventDefault(); useHistoryStore.getState().redo(); }
+      else if (ctrl && (key === "/" || key === "?")) { e.preventDefault(); setShortcutsOpen(true); }
+      // Other Ctrl+Shift combos stay with the webview (e.g. Ctrl+Shift+I opens devtools)
+      else if (e.shiftKey) return;
+      else if (ctrl && key === "s") { e.preventDefault(); const s = useGraphStore.getState(); downloadProject(s.projectName, s.nodes, s.edges).then((r) => { if (r !== null) toast.success("Project saved"); }); }
+      else if (ctrl && key === "o") { e.preventDefault(); handleOpenFile(); }
+      else if (ctrl && key === "n") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().clearGraph(); useGraphStore.getState().setProjectName("Untitled"); }
+      else if (ctrl && key === "i") { e.preventDefault(); setImportOpen(true); }
+      else if (ctrl && key === "l") { e.preventDefault(); handleAutoLayout(); }
+      else if (ctrl && key === "k") { e.preventDefault(); setSpotlightOpen(true); }
+      else if (ctrl && key === "e") { e.preventDefault(); setExportOpen(true); }
+      else if (ctrl && key === "d") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().duplicateSelected(); }
+      else if (ctrl && key === "c") { useGraphStore.getState().copySelected(); }
+      else if (ctrl && key === "v") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().paste(); }
+      else if (ctrl && key === "a") { e.preventDefault(); useGraphStore.getState().selectAll(); }
+      else if (ctrl && key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
+      else if (ctrl && key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
+      else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -174,6 +171,8 @@ export default function App() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const unsub = useGraphStore.subscribe((state, prev) => {
+      // An undo/redo isn't a new edit; snapshotting it would wipe the redo stack
+      if (isApplyingHistory()) return;
       if (state.nodes.length !== prev.nodes.length || state.edges.length !== prev.edges.length) {
         clearTimeout(timer);
         timer = setTimeout(() => useHistoryStore.getState().pushSnapshot(), 300);
@@ -218,8 +217,14 @@ export default function App() {
       useGraphStore.getState().loadGraph(autoLayout(nodes, edges), edges);
       useGraphStore.getState().setProjectName("Imported Model");
       toast.success("Model imported successfully");
-    } catch {
-      throw new Error("Import requires the Python sidecar. Start with `npx tauri dev` or run: python python/tensorbloom_sidecar.py");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Only blame setup when the sidecar is really down; otherwise show the actual error (e.g. a syntax error)
+      if (msg.startsWith("Sidecar not available")) {
+        const detail = msg.replace(/^Sidecar not available:\s*/, "");
+        throw new Error(`Import needs the Python environment, which isn't running (${detail}).`);
+      }
+      throw new Error(`Couldn't import this code: ${msg}`);
     }
   }, []);
 
@@ -276,7 +281,7 @@ export default function App() {
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
-  }, []);
+  }, [bottomTab]);
 
   // Show setup screen if Python not ready
   if (!checkingPython && !pythonReady) {
@@ -311,7 +316,6 @@ export default function App() {
         onShowTemplates={() => setTemplatesOpen(true)}
         onShowExport={() => setExportOpen(true)}
         onShowSpotlight={() => setSpotlightOpen(true)}
-        onShowSweep={() => setSweepOpen(true)}
         onShowCustomBlock={() => setCustomBlockOpen(true)}
         gpuInfo={gpuInfo}
       />
@@ -338,7 +342,7 @@ export default function App() {
 
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
-            <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
+            <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} onShowTemplates={() => setTemplatesOpen(true)} minimapVisible={minimapVisible} />
           </div>
 
           {/* Bottom panel bar with tabs */}
@@ -434,16 +438,13 @@ export default function App() {
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
-        {sweepOpen && <SweepDialog open={sweepOpen} onClose={() => setSweepOpen(false)} onLaunch={(runs) => {
-          toast.info(`Sweep launched: ${runs.length} run${runs.length !== 1 ? "s" : ""}`);
-        }} />}
         {customBlockOpen && <CustomBlockDialog open={customBlockOpen} onClose={() => setCustomBlockOpen(false)} />}
         {compareOpen && compareModel && <CompareDialog open={compareOpen} onClose={() => setCompareOpen(false)}
           modelA={{ name: useGraphStore.getState().projectName, nodes: useGraphStore.getState().nodes }}
           modelB={compareModel}
         />}
       </Suspense>
-      <ToastContainer />
+      <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
       <DragOverlay />
     </div>
   );

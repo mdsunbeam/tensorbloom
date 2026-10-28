@@ -244,10 +244,11 @@ function CustomMinimap({ visible }: { visible: boolean }) {
 
 interface GraphEditorProps {
   onShowSpotlight: (connectFrom?: ConnectFromContext) => void;
+  onShowTemplates: () => void;
   minimapVisible: boolean;
 }
 
-export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEditorProps) {
+export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapVisible }: GraphEditorProps) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const onNodesChange = useGraphStore((s) => s.onNodesChange);
@@ -443,6 +444,15 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
             <div className="text-[11px] mb-3" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
               Drag layers from the left panel, or start from a template
             </div>
+            <button
+              onClick={onShowTemplates}
+              className="pointer-events-auto mb-4 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white"
+              style={{ background: "var(--accent)" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+            >
+              Start from a template
+            </button>
             <div className="flex items-center justify-center gap-3 text-[10px]" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
               <span>
                 <kbd className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Ctrl+K</kbd> search layers

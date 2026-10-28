@@ -4,6 +4,7 @@ import { MODULE_REGISTRY } from "../lib/registry";
 import type { ModuleDef, NodeCategory } from "../lib/types";
 import { customBlockDef, saveCustomBlock } from "../lib/custom-blocks";
 import { toast } from "./Toast";
+import { useEscapeKey } from "../lib/use-escape-key";
 
 interface CustomBlockDialogProps {
   open: boolean;
@@ -32,6 +33,7 @@ export default function CustomBlockDialog({ open, onClose }: CustomBlockDialogPr
   const [name, setName] = useState("ConvBlock");
   const [category, setCategory] = useState<NodeCategory>("conv");
   const [params, setParams] = useState("in_channels:int=64, out_channels:int=64, kernel_size:int=3");
+  useEscapeKey(onClose, { enabled: open, ignoreInTextarea: code !== TEMPLATE });
 
   if (!open) return null;
 

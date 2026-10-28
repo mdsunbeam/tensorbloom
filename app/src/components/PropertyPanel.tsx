@@ -12,6 +12,7 @@ import { safePythonId, DEFAULT_DATA_OUTPUTS } from "../lib/types";
 import type { ShapeError } from "../lib/shape-inference";
 import { isDatasetNode, DATASET_METADATA, extractDatasetConfig, DATA_PRESETS, type DataDomain, type IntrospectionResult, type ProbeResult } from "../lib/dataset-metadata";
 import { sidecarCall } from "../lib/sidecar";
+import NumberField from "./NumberField";
 
 type Tab = "properties" | "training";
 
@@ -997,8 +998,8 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             <div className="text-[10px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Vision</div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Image Size</label>
-              <input type="number" value={p.image_size == null ? "" : String(p.image_size)} min={8} max={1024}
-                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) updateNodeParam(node.id, "image_size", v); }}
+              <NumberField value={p.image_size} integer min={8} max={1024}
+                onChange={(v) => updateNodeParam(node.id, "image_size", v)}
                 className={inputCls} style={inputStyle} />
             </div>
             <div>
@@ -1017,14 +1018,14 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             <div className="text-[10px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Text</div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Max Length</label>
-              <input type="number" value={p.max_length == null ? "" : String(p.max_length)} min={8} max={2048}
-                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) updateNodeParam(node.id, "max_length", v); }}
+              <NumberField value={p.max_length} integer min={8} max={2048}
+                onChange={(v) => updateNodeParam(node.id, "max_length", v)}
                 className={inputCls} style={inputStyle} />
             </div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Vocab Size</label>
-              <input type="number" value={p.vocab_size == null ? "" : String(p.vocab_size)} min={100} max={100000}
-                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) updateNodeParam(node.id, "vocab_size", v); }}
+              <NumberField value={p.vocab_size} integer min={100} max={100000}
+                onChange={(v) => updateNodeParam(node.id, "vocab_size", v)}
                 className={inputCls} style={inputStyle} />
             </div>
             {/* Column dropdowns from introspection */}
@@ -1151,8 +1152,8 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             </label>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Rotation (deg)</label>
-              <input type="number" value={p.rotation == null ? "0" : String(p.rotation)} min={0} max={180}
-                onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v)) updateNodeParam(node.id, "rotation", v); }}
+              <NumberField value={p.rotation ?? 0} integer min={0} max={180}
+                onChange={(v) => updateNodeParam(node.id, "rotation", v)}
                 className={inputCls} style={inputStyle} />
             </div>
           </div>
@@ -1163,8 +1164,8 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
           <div className="px-4 pb-3" style={{ borderTop: "1px solid var(--border)" }}>
             <div className="mt-2">
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Val Split</label>
-              <input type="number" value={p.val_split == null ? "0.2" : String(p.val_split)} step="any" min={0} max={0.5}
-                onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) updateNodeParam(node.id, "val_split", v); }}
+              <NumberField value={p.val_split ?? 0.2} step="any" min={0} max={0.5}
+                onChange={(v) => updateNodeParam(node.id, "val_split", v)}
                 className={inputCls} style={inputStyle} />
             </div>
           </div>
@@ -1224,8 +1225,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
       <DataPreview node={node} />
 
       <div style={{ borderTop: "1px solid var(--border)" }}>
-        <div className="px-4 py-2 text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>ID: {node.id}</div>
-        <div className="px-4 pb-3">
+        <div className="px-4 py-3">
           <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
             style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
             onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
@@ -1684,8 +1684,7 @@ function NodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
             >Convert to Code Block</button>
           </div>
         )}
-        <div className="px-4 py-2 text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>ID: {node.id}</div>
-        <div className="px-4 pb-3">
+        <div className="px-4 py-3">
           <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
             style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
             onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
@@ -1928,8 +1927,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
           >Revert to Standard</button>
         </div>
-        <div className="px-4 py-2 text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>ID: {node.id}</div>
-        <div className="px-4 pb-3">
+        <div className="px-4 py-3">
           <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
             style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
             onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
@@ -1965,8 +1963,8 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
           {param.options?.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       ) : param.type === "int" || param.type === "float" ? (
-        <input type="number" value={value == null ? "" : String(value)} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
-          onChange={(e) => { const v = param.type === "int" ? parseInt(e.target.value, 10) : parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }}
+        <NumberField value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
+          onChange={onChange}
           className={c} style={s} />
       ) : (
         <input type="text" value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} className={c} style={s} />

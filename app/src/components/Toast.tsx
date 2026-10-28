@@ -33,14 +33,15 @@ export const toast = {
   warning: (msg: string) => useToastStore.getState().add(msg, "warning", 4000),
 };
 
-export default function ToastContainer() {
+/** rightOffset keeps toasts over the canvas, clear of the right panel (px from the window edge). */
+export default function ToastContainer({ rightOffset = 304 }: { rightOffset?: number }) {
   const toasts = useToastStore((s) => s.toasts);
   const remove = useToastStore((s) => s.remove);
 
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-[19rem] z-50 flex flex-col gap-2 pointer-events-none">
+    <div className="fixed bottom-4 z-50 flex flex-col gap-2 pointer-events-none" style={{ right: rightOffset }}>
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onDismiss={() => remove(t.id)} />
       ))}
