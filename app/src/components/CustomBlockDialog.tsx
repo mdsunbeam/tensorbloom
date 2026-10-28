@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useGraphStore } from "../store/graph-store";
 import { MODULE_REGISTRY } from "../lib/registry";
 import type { ModuleDef, NodeCategory } from "../lib/types";
+import { customBlockDef, saveCustomBlock } from "../lib/custom-blocks";
 import { toast } from "./Toast";
 
 interface CustomBlockDialogProps {
@@ -50,24 +51,9 @@ export default function CustomBlockDialog({ open, onClose }: CustomBlockDialogPr
       };
     }).filter(Boolean) as ModuleDef["params"];
 
-    // Register the custom module
-    const def: ModuleDef = {
-      type: name,
-      label: name,
-      category,
-      description: `Custom block: ${name}`,
-      params: paramDefs,
-      inputHandles: [{ id: "in", label: "in", dataType: "tensor" }],
-      outputHandles: [{ id: "out", label: "out", dataType: "tensor" }],
-    };
-
-    MODULE_REGISTRY[name] = def;
-
-    // Store the code so the sidecar can use it
-    const existing = localStorage.getItem("tensorbloom-custom-blocks") ?? "{}";
-    const blocks = JSON.parse(existing);
-    blocks[name] = { code, params: paramDefs, category };
-    localStorage.setItem("tensorbloom-custom-blocks", JSON.stringify(blocks));
+    // Register the custom module and persist its code so training/export can build it
+    MODULE_REGISTRY[name] = customBlockDef(name, paramDefs, category);
+    saveCustomBlock(name, { code, params: paramDefs, category });
 
     toast.success(`Custom block "${name}" created`);
     onClose();

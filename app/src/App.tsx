@@ -31,7 +31,8 @@ import { TEMPLATES, prependDatasetNode } from "./lib/templates";
 import { startAutoSave, restoreAutoSave } from "./lib/auto-save";
 import { sidecarCall } from "./lib/sidecar";
 import { MODULE_REGISTRY } from "./lib/registry";
-import type { NodeCategory, ModuleDef } from "./lib/types";
+import { restoreCustomBlocks } from "./lib/custom-blocks";
+import type { NodeCategory } from "./lib/types";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
@@ -69,26 +70,7 @@ export default function App() {
 
   // Restore custom blocks from localStorage on startup
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("tensorlab-custom-blocks");
-      if (saved) {
-        const blocks = JSON.parse(saved);
-        for (const [name, block] of Object.entries(blocks)) {
-          const b = block as { params: ModuleDef["params"]; category: string };
-          if (!MODULE_REGISTRY[name]) {
-            MODULE_REGISTRY[name] = {
-              type: name,
-              label: name,
-              category: b.category as NodeCategory,
-              description: `Custom block: ${name}`,
-              params: b.params,
-              inputHandles: [{ id: "in", label: "in", dataType: "tensor" }],
-              outputHandles: [{ id: "out", label: "out", dataType: "tensor" }],
-            };
-          }
-        }
-      }
-    } catch { /* ignore */ }
+    restoreCustomBlocks();
   }, []);
 
   // Check Python environment on startup
@@ -237,7 +219,7 @@ export default function App() {
       useGraphStore.getState().setProjectName("Imported Model");
       toast.success("Model imported successfully");
     } catch {
-      throw new Error("Import requires the Python sidecar. Start with `npx tauri dev` or run: python python/tensorlab_sidecar.py");
+      throw new Error("Import requires the Python sidecar. Start with `npx tauri dev` or run: python python/tensorbloom_sidecar.py");
     }
   }, []);
 

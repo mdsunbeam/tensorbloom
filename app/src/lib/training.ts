@@ -7,7 +7,8 @@ import { useGraphStore } from "../store/graph-store";
 import { useTrainingStore, type TrainingResults } from "../store/training-store";
 import { preflightCheck } from "./preflight-check";
 import { toast } from "../components/Toast";
-import { isDatasetNode, extractDatasetConfig, resolveDataNodeShape } from "./dataset-metadata";
+import { isDatasetNode, extractDatasetConfig } from "./dataset-metadata";
+import { buildSidecarGraph } from "./sidecar-graph";
 
 export async function startTraining() {
   const store = useGraphStore.getState();
@@ -65,88 +66,7 @@ export async function startTraining() {
     ? extractDatasetConfig(datasetNode.data.moduleType, datasetNode.data.params)
     : null;
 
-  // Filter Dataset nodes from the sidecar graph — they're frontend-only
-  const datasetNodeIds = new Set(
-    nodes.filter((n) => isDatasetNode(n.data.moduleType)).map((n) => n.id)
-  );
-
-  // Identify loss nodes — edges from Data→Loss must be preserved for target routing
-  const LOSS_TYPES = new Set([
-    "CrossEntropyLoss", "MSELoss", "BCEWithLogitsLoss", "BCELoss",
-    "L1Loss", "HuberLoss", "NLLLoss", "KLDivLoss",
-    "TripletMarginLoss", "CosineEmbeddingLoss", "CTCLoss", "SmoothL1Loss",
-  ]);
-  const lossNodeIds = new Set(nodes.filter((n) => LOSS_TYPES.has(n.data.moduleType)).map((n) => n.id));
-
-  // Auto-inject a virtual Input node when Data connects directly to model layers
-  // (so users don't need to manually add an Input node when using the Data block)
-  const hasExplicitInput = nodes.some((n) => n.data.moduleType === "Input");
-  const virtualNodes: { id: string; type: string; moduleType: string; label: string; params: Record<string, unknown> }[] = [];
-  const virtualEdges: { id: string; source: string; target: string; sourceHandle: string; targetHandle: string }[] = [];
-  const rerouted = new Set<string>(); // edge IDs rerouted through virtual Input
-
-  if (!hasExplicitInput && datasetNode) {
-    const dataEdgesToLayers = edges.filter((e) =>
-      datasetNodeIds.has(e.source) && !lossNodeIds.has(e.target) && !datasetNodeIds.has(e.target)
-    );
-    if (dataEdgesToLayers.length > 0) {
-      const resolved = resolveDataNodeShape(datasetNode.data.params);
-      const shape = resolved?.inputShape ?? [1, 10];
-      const virtualId = "_auto_input";
-      virtualNodes.push({
-        id: virtualId,
-        type: "placeholder",
-        moduleType: "Input",
-        label: "Input",
-        params: { shape: JSON.stringify(shape), dtype: "float32" },
-      });
-      for (const e of dataEdgesToLayers) {
-        rerouted.add(e.id);
-        virtualEdges.push({
-          id: `e_${virtualId}_${e.target}`,
-          source: virtualId,
-          target: e.target,
-          sourceHandle: "out",
-          targetHandle: e.targetHandle ?? "in",
-        });
-      }
-    }
-  }
-
-  const graphJson = {
-    nodes: [
-      ...virtualNodes,
-      ...nodes
-        .filter((n) => !datasetNodeIds.has(n.id))
-        .map((n) => ({
-          id: n.id,
-          type: n.data.moduleType === "Input" ? "placeholder"
-            : n.data.moduleType === "Output" ? "output"
-            : "call_module",
-          moduleType: n.data.moduleType,
-          label: n.data.label,
-          params: n.data.params,
-          ...(n.data.codeBlock ? { codeBlock: n.data.codeBlock } : {}),
-          ...(n.data.dataOutputs ? { dataOutputs: n.data.dataOutputs } : {}),
-        })),
-    ],
-    edges: [
-      ...virtualEdges,
-      ...edges
-        .filter((e) => {
-          if (rerouted.has(e.id)) return false;
-          if (datasetNodeIds.has(e.source) && lossNodeIds.has(e.target)) return true;
-          return !datasetNodeIds.has(e.source) && !datasetNodeIds.has(e.target);
-        })
-        .map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-          sourceHandle: e.sourceHandle ?? "out",
-          targetHandle: e.targetHandle ?? "in",
-        })),
-    ],
-  };
+  const graphJson = buildSidecarGraph(nodes, edges);
 
   // Set up log callback — streams stdout/stderr from training thread
   setTrainLogCallback((params) => {
@@ -215,6 +135,7 @@ export async function startTraining() {
       return;
     }
     if (p.status === "checkpoint") {
+      if (p.path) useTrainingStore.getState().setLastCheckpointPath(p.path);
       return;
     }
     if (p.status === "error" || p.error) {

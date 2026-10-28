@@ -149,42 +149,38 @@ pub fn setup_env(app_data: &Path) -> Result<PythonEnvStatus, String> {
         .args(["-m", "pip", "install", "--upgrade", "pip"])
         .output();
 
-    // 4. Install PyTorch + dependencies
-    // Detect CUDA availability for the right torch install
+    // 4. Install PyTorch. The CUDA index only hosts PyTorch packages, so torch is
+    // installed on its own first; mixing other packages into this command makes
+    // pip fail and silently fall back to CPU-only wheels (on Windows).
+    let torch_packages = ["torch", "torchvision", "torchaudio"];
     let torch_index = if cfg!(windows) || cfg!(target_os = "linux") {
         // CUDA 12.6 wheels
-        "--index-url=https://download.pytorch.org/whl/cu126"
+        Some("--index-url=https://download.pytorch.org/whl/cu126")
     } else {
-        // macOS — CPU only
-        ""
+        // macOS — CPU/MPS wheels from PyPI
+        None
     };
 
-    let mut pip_args = vec![
-        "install",
-        "torch",
-        "torchvision",
-        "torchaudio",
-        "onnx",
-        "onnxscript",
-        "datasets",
-        "soundfile",
-    ];
-
-    if !torch_index.is_empty() {
-        pip_args.push(torch_index);
+    let mut torch_args = vec!["install"];
+    torch_args.extend(torch_packages);
+    if let Some(index) = torch_index {
+        torch_args.push(index);
     }
 
     let output = Command::new(&pip)
-        .args(&pip_args)
+        .args(&torch_args)
         .output()
-        .map_err(|e| format!("Failed to install packages: {}", e))?;
+        .map_err(|e| format!("Failed to install PyTorch: {}", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        // If CUDA install fails, try CPU-only
-        if stderr.contains("No matching distribution") || stderr.contains("Could not find") {
+        // No CUDA build for this platform/Python version — fall back to PyPI wheels
+        if torch_index.is_some()
+            && (stderr.contains("No matching distribution") || stderr.contains("Could not find"))
+        {
             let output2 = Command::new(&pip)
-                .args(["install", "torch", "torchvision", "torchaudio", "onnx", "onnxscript", "datasets", "soundfile"])
+                .arg("install")
+                .args(torch_packages)
                 .output()
                 .map_err(|e| format!("Failed to install CPU packages: {}", e))?;
 
@@ -197,6 +193,19 @@ pub fn setup_env(app_data: &Path) -> Result<PythonEnvStatus, String> {
         } else {
             return Err(format!("Failed to install PyTorch: {}", stderr));
         }
+    }
+
+    // 5. Install the remaining dependencies from PyPI
+    let output = Command::new(&pip)
+        .args(["install", "onnx", "onnxscript", "datasets", "soundfile"])
+        .output()
+        .map_err(|e| format!("Failed to install packages: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to install dependencies: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
 
     Ok(check_env(app_data))

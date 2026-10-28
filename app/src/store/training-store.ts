@@ -81,6 +81,7 @@ interface TrainingState {
   lastAppliedTemplate: string | null;
   trainingResults: TrainingResults | null;
   cachedEnvironment: EnvironmentInfo | null;
+  lastCheckpointPath: string | null;
   updateConfig: (partial: Partial<TrainingConfig>) => void;
   updateOptimizer: (partial: Partial<TrainingConfig["optimizer"]>) => void;
   setStatus: (status: TrainingStatus) => void;
@@ -90,6 +91,7 @@ interface TrainingState {
   applyTemplateDefaults: (name: string, defaults: Partial<TrainingConfig>) => void;
   setTrainingResults: (results: TrainingResults | null) => void;
   setCachedEnvironment: (env: EnvironmentInfo | null) => void;
+  setLastCheckpointPath: (path: string | null) => void;
   clearLogs: () => void;
   reset: () => void;
 }
@@ -131,6 +133,7 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   lastAppliedTemplate: null,
   trainingResults: null,
   cachedEnvironment: null,
+  lastCheckpointPath: null,
 
   updateConfig: (partial) =>
     set({ config: { ...get().config, ...partial }, lastAppliedTemplate: null }),
@@ -165,6 +168,8 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   setTrainingResults: (results) => set({ trainingResults: results }),
 
   setCachedEnvironment: (env) => set({ cachedEnvironment: env }),
+
+  setLastCheckpointPath: (path) => set({ lastCheckpointPath: path }),
 
   clearLogs: () => set({ logs: [] }),
   reset: () => set({ metrics: [], logs: [], currentEpoch: 0, error: null, status: "idle", startedAt: null, trainingResults: null }),
