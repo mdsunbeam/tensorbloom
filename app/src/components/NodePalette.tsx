@@ -143,10 +143,10 @@ export default function NodePalette() {
         {filteredDataModules.length > 0 && (
           <>
             <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
-              <h2 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              <h2 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
                 Data Sources
               </h2>
-              <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
+              <span className="text-[11px] tabular-nums" style={{ color: "var(--text-muted)" }}>
                 {filteredDataModules.length}
               </span>
             </div>
@@ -179,10 +179,10 @@ export default function NodePalette() {
         {/* ── Layers section header ── */}
         {!noMatches && (
           <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
-            <h2 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+            <h2 className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
               Layers
             </h2>
-            <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
+            <span className="text-[11px] tabular-nums" style={{ color: "var(--text-muted)" }}>
               {layerCount}
             </span>
           </div>

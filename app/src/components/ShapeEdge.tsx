@@ -218,7 +218,7 @@ export default function ShapeEdge(props: EdgeProps) {
           <div className="flex items-center justify-center w-full h-full">
             <div
               className={`text-[11px] font-mono leading-none px-2 py-[5px] rounded-md whitespace-nowrap max-w-[240px] truncate ${
-                isInputMismatch ? "bg-danger text-white" : "bg-surface-elevated text-fg border border-line"
+                isInputMismatch ? "bg-danger text-[color:var(--on-danger)]" : "bg-surface-elevated text-fg border border-line"
               }`}
               style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.25)" }}
             >

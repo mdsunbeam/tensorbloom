@@ -165,7 +165,7 @@ export default function Select({ value, onChange, options, placeholder = "Select
             const isSelected = o.value === value;
             return (
               <div key={`${o.group ?? ""}:${o.value}`}>
-                {heading && <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">{heading}</div>}
+                {heading && <div className="px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">{heading}</div>}
                 <div
                   id={`${listId}-${i}`}
                   data-index={i}

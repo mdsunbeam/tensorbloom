@@ -125,14 +125,17 @@ function EmptyState({ onGoToTraining }: { onGoToTraining: () => void }) {
     <div className="flex flex-col h-full overflow-y-auto">
       {/* Summary header */}
       <div className="px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="text-[10px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-muted)" }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-muted)" }}>
           Model Summary
         </div>
         <div className="space-y-2">
           <SummaryRow label="Parameters" value={formatParamCount(summary.totalParams)} />
           <SummaryRow label="Model Size (FP32)" value={`${summary.estimatedSizeMB.toFixed(1)} MB`} />
           {summary.estimatedFlops > 0 && <SummaryRow label="FLOPs" value={formatFlops(summary.estimatedFlops)} />}
-          <SummaryRow label="Est. VRAM" value={`~${summary.estimatedVramMB.toFixed(0)} MB`} />
+          <SummaryRow label="Est. VRAM" value={`~${summary.estimatedVramMB.toFixed(0)} MB`}
+            note={summary.estimatedVramMB > 6144 ? "High: may not fit on GPUs with 8 GB or less"
+              : summary.estimatedVramMB > 3072 ? "May not fit on GPUs with 4 GB or less" : undefined}
+            noteTone={summary.estimatedVramMB > 6144 ? "danger" : "warning"} />
           {/* VRAM bar */}
           <div className="w-full h-[2px] rounded-full" style={{ background: "var(--bg-tertiary)" }}>
             <div
@@ -150,7 +153,7 @@ function EmptyState({ onGoToTraining }: { onGoToTraining: () => void }) {
 
       {/* Layer breakdown */}
       <div className="px-4 py-3 flex-1">
-        <div className="text-[10px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-muted)" }}>
+        <div className="text-[11px] font-semibold uppercase tracking-wider mb-2.5" style={{ color: "var(--text-muted)" }}>
           Layer Breakdown
         </div>
         <div className="space-y-1.5">
@@ -178,11 +181,20 @@ function EmptyState({ onGoToTraining }: { onGoToTraining: () => void }) {
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+function SummaryRow({ label, value, note, noteTone = "warning" }: { label: string; value: string; note?: string; noteTone?: "warning" | "danger" }) {
   return (
     <div className="flex items-center justify-between text-[11px]">
       <span style={{ color: "var(--text-secondary)" }}>{label}</span>
-      <span className="font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>{value}</span>
+      <span className="flex items-center gap-1 font-medium tabular-nums" style={{ color: "var(--text-primary)" }}>
+        {note && (
+          <span className={noteTone === "danger" ? "text-danger" : "text-warning"} title={note} role="img" aria-label={note}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          </span>
+        )}
+        {value}
+      </span>
     </div>
   );
 }
@@ -370,13 +382,13 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
     <div style={{ borderTop: "1px solid var(--border)" }}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
+        className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider"
         style={{ color: "var(--text-muted)" }}
       >
         <span className="flex items-center gap-1.5">
           Code
           {isCustom && (
-            <span className="text-[8px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
+            <span className="text-[11px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
               style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>edited</span>
           )}
         </span>
@@ -392,22 +404,22 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
           {editing ? (
             <div className="space-y-2">
               {!isDataset && (
-                <div className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>__init__</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>__init__</div>
               )}
               <textarea
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 rows={isDataset ? 3 : 1}
-                className="w-full rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed resize-y"
+                className="w-full rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed resize-y"
                 style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--accent)" }}
                 spellCheck={false}
               />
               {/* Show forward line as grayed-out read-only when editing a non-dataset node */}
               {!isDataset && snippet && (
                 <div>
-                  <div className="text-[9px] font-medium mt-1 mb-1" style={{ color: "var(--text-muted)" }}>forward (from graph)</div>
+                  <div className="text-[11px] font-medium mt-1 mb-1" style={{ color: "var(--text-muted)" }}>forward (from graph)</div>
                   <div
-                    className="rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed"
+                    className="rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed"
                     style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)", border: "1px dashed var(--border)" }}
                   >
                     <code style={{ whiteSpace: "pre-wrap" }}>{snippet.forwardCode}</code>
@@ -424,7 +436,7 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
             </div>
           ) : (
             <div
-              className="relative rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed overflow-x-auto"
+              className="relative rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed overflow-x-auto"
               style={{
                 background: "var(--bg-tertiary)",
                 color: "var(--text-primary)",
@@ -436,13 +448,13 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
                 {canEdit && (
                   <button
                     onClick={handleStartEdit}
-                    className="px-1.5 py-0.5 rounded text-[10px] font-sans transition-colors bg-surface-elevated text-fg-secondary border border-line hover:text-fg"
+                    className="px-1.5 py-0.5 rounded text-[11px] font-sans transition-colors bg-surface-elevated text-fg-secondary border border-line hover:text-fg"
                     title="Edit init code"
                   >Edit</button>
                 )}
                 <button
                   onClick={handleCopy}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-sans transition-colors border border-line ${
+                  className={`px-1.5 py-0.5 rounded text-[11px] font-sans transition-colors border border-line ${
                     copied ? "bg-success-subtle text-success" : "bg-surface-elevated text-fg-secondary hover:text-fg"
                   }`}
                   title="Copy to clipboard"
@@ -494,7 +506,7 @@ function DataPreview({ node }: { node: ReturnType<typeof useGraphStore.getState>
     <div style={{ borderTop: "1px solid var(--border)" }}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
+        className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider"
         style={{ color: "var(--text-muted)" }}
       >
         <span>Data Preview</span>
@@ -527,7 +539,7 @@ function DataPreview({ node }: { node: ReturnType<typeof useGraphStore.getState>
                 </div>
                 <div className="flex justify-between">
                   <span>Sample shape</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{JSON.stringify(preview.sample_shape)}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{JSON.stringify(preview.sample_shape)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Classes</span>
@@ -535,10 +547,10 @@ function DataPreview({ node }: { node: ReturnType<typeof useGraphStore.getState>
                 </div>
                 <div className="flex justify-between">
                   <span>Dtype</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{preview.sample_dtype}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{preview.sample_dtype}</span>
                 </div>
                 <div className="mt-1.5 pt-1.5" style={{ borderTop: "1px solid var(--border)" }}>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Stats</div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider mb-1" style={{ color: "var(--text-muted)" }}>Stats</div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                     <div className="flex justify-between"><span>Mean</span><span className="tabular-nums">{preview.feature_stats.mean.toFixed(4)}</span></div>
                     <div className="flex justify-between"><span>Std</span><span className="tabular-nums">{preview.feature_stats.std.toFixed(4)}</span></div>
@@ -726,7 +738,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             ]}
           />
           {isPreset && (
-            <div className="mt-1.5 text-[10px]" style={{ color: "var(--text-muted)" }}>
+            <div className="mt-1.5 text-[11px]" style={{ color: "var(--text-muted)" }}>
               {preset.sizeHint} {preset.requiresPip && `· requires pip install ${preset.requiresPip}`}
             </div>
           )}
@@ -762,7 +774,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               {introspecting ? "Inspecting…" : "Inspect data"}
             </Button>
             {introspectError && (
-              <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
+              <div className="mt-1.5 text-[11px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
                 {introspectError}
               </div>
             )}
@@ -772,14 +784,14 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
         {/* Introspection results */}
         {introspected && (
           <div className="px-4 pb-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mt-2 mb-2" style={{ color: "var(--text-muted)" }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mt-2 mb-2" style={{ color: "var(--text-muted)" }}>
               Introspection
             </div>
             <div className="space-y-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
               {introspected.columns.length > 0 && (
                 <div className="flex justify-between">
                   <span>Columns</span>
-                  <span className="font-mono text-[10px] truncate ml-2" style={{ color: "var(--text-primary)", maxWidth: "140px" }}>
+                  <span className="font-mono text-[11px] truncate ml-2" style={{ color: "var(--text-primary)", maxWidth: "140px" }}>
                     {introspected.columns.join(", ")}
                   </span>
                 </div>
@@ -793,7 +805,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               {introspected.label_values.length > 0 && introspected.label_values.length <= 10 && (
                 <div className="flex justify-between">
                   <span>Labels</span>
-                  <span className="font-mono text-[10px] truncate ml-2" style={{ color: "var(--text-primary)", maxWidth: "140px" }}>
+                  <span className="font-mono text-[11px] truncate ml-2" style={{ color: "var(--text-primary)", maxWidth: "140px" }}>
                     {introspected.label_values.join(", ")}
                   </span>
                 </div>
@@ -801,7 +813,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               {introspected.sample_shape.length > 0 && (
                 <div className="flex justify-between">
                   <span>Sample shape</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{JSON.stringify(introspected.sample_shape)}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{JSON.stringify(introspected.sample_shape)}</span>
                 </div>
               )}
               {introspected.total_samples > 0 && (
@@ -813,7 +825,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               {introspected.splits.length > 0 && (
                 <div className="flex justify-between">
                   <span>Splits</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{introspected.splits.join(", ")}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{introspected.splits.join(", ")}</span>
                 </div>
               )}
             </div>
@@ -824,7 +836,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               const complexCols = (ir.complex_columns as string[]) || [];
               const example = ir.example_preprocess ? String(ir.example_preprocess) : "";
               return (
-                <div className="mt-2 px-2.5 py-2 rounded-lg text-[10px] leading-relaxed"
+                <div className="mt-2 px-2.5 py-2 rounded-lg text-[11px] leading-relaxed"
                   style={{ background: "var(--warning-subtle)", border: "1px solid var(--warning)", color: "var(--warning)" }}>
                   <div className="font-semibold mb-1">Preprocessing required</div>
                   <div className="mb-1.5" style={{ opacity: 0.85 }}>
@@ -832,7 +844,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
                     Add a preprocessing script below to extract features and labels.
                   </div>
                   {example && (
-                    <pre className="font-mono text-[9px] p-1.5 rounded overflow-x-auto"
+                    <pre className="font-mono text-[11px] p-1.5 rounded overflow-x-auto"
                       style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>
                       {example}
                     </pre>
@@ -867,7 +879,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
         {/* Domain-specific params */}
         {source && (domain === "vision" || (isPreset && preset.domain === "vision")) && (
           <div className="px-4 pb-3 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Vision</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Vision</div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Image Size</label>
               <NumberField value={p.image_size} integer min={8} max={1024}
@@ -885,7 +897,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
 
         {source && (domain === "text" || (isPreset && preset.domain === "text")) && (
           <div className="px-4 pb-3 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Text</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Text</div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Max Length</label>
               <NumberField value={p.max_length} integer min={8} max={2048}
@@ -930,7 +942,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
 
         {source && (domain === "tabular") && !isPreset && (
           <div className="px-4 pb-3 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Tabular</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mt-2" style={{ color: "var(--text-muted)" }}>Tabular</div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Target Column</label>
               {columns.length > 0 ? (
@@ -992,7 +1004,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
         {/* Augmentation — vision only */}
         {source && (domain === "vision" || (isPreset && preset.domain === "vision")) && (
           <div className="px-4 pb-3 space-y-2" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mt-2 mb-1" style={{ color: "var(--text-muted)" }}>Augmentation</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mt-2 mb-1" style={{ color: "var(--text-muted)" }}>Augmentation</div>
             <label className="flex items-center gap-2.5 cursor-pointer text-xs" style={{ color: "var(--text-primary)" }}>
               <input type="checkbox" checked={!!p.horizontal_flip} onChange={(e) => updateNodeParam(node.id, "horizontal_flip", e.target.checked)} className="accent-[var(--accent)]" />
               Random H-Flip
@@ -1043,7 +1055,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               {probing ? "Probing…" : "Probe output shape"}
             </Button>
             {probeError && (
-              <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
+              <div className="mt-1.5 text-[11px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
                 {probeError}
               </div>
             )}
@@ -1051,11 +1063,11 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               <div className="mt-2 space-y-1 text-[11px]" style={{ color: "var(--text-secondary)" }}>
                 <div className="flex justify-between">
                   <span>Output shape</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>[1, {probed.sample_shape.join(", ")}]</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>[1, {probed.sample_shape.join(", ")}]</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Dtype</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{probed.sample_dtype}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{probed.sample_dtype}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Classes</span>
@@ -1063,7 +1075,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
                 </div>
                 <div className="flex justify-between">
                   <span>Label dtype</span>
-                  <span className="font-mono text-[10px]" style={{ color: "var(--text-primary)" }}>{probed.label_dtype}</span>
+                  <span className="font-mono text-[11px]" style={{ color: "var(--text-primary)" }}>{probed.label_dtype}</span>
                 </div>
               </div>
             )}
@@ -1140,16 +1152,16 @@ function TensorFilePathInput({ path, scanning, scanResult, scanError, onPathChan
         <Button size="sm" block onClick={() => onScan(path)}>Scan data</Button>
       )}
       {scanning && (
-        <div className="text-[10px] text-center py-1" style={{ color: "var(--text-muted)" }}>Scanning...</div>
+        <div className="text-[11px] text-center py-1" style={{ color: "var(--text-muted)" }}>Scanning...</div>
       )}
       {scanResult && (
-        <div className="flex items-center justify-between text-[10px]" style={{ color: "var(--text-muted)" }}>
+        <div className="flex items-center justify-between text-[11px]" style={{ color: "var(--text-muted)" }}>
           <span className="tabular-nums">{scanResult.total_samples.toLocaleString()} samples · {scanResult.tensors.length} tensors</span>
-          <button onClick={() => onScan(path)} className="text-[10px]" style={{ color: "var(--accent-text)" }}>rescan</button>
+          <button onClick={() => onScan(path)} className="text-[11px]" style={{ color: "var(--accent-text)" }}>rescan</button>
         </div>
       )}
       {scanError && (
-        <div className="text-[10px] px-2 py-1.5 rounded-md" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
+        <div className="text-[11px] px-2 py-1.5 rounded-md" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
           {scanError}
         </div>
       )}
@@ -1268,7 +1280,7 @@ function DataOutputsEditor({ node, source, updateDataOutput }: {
                     }}
                   />
                 </div>
-                <div className="mt-1 text-[10px] flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
+                <div className="mt-1 text-[11px] flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
                   <span className="font-mono">[{t.shape.join(", ")}] {t.dtype}</span>
                   {t.num_classes != null && (
                     <span>{t.num_classes} classes{t.class_values && t.class_values.length <= 10 ? `: ${t.class_values.join(", ")}` : ""}</span>
@@ -1282,17 +1294,17 @@ function DataOutputsEditor({ node, source, updateDataOutput }: {
           })}
           {/* Inline validation */}
           {sampleMismatch && (
-            <div className="text-[10px] px-2 py-1.5 rounded-md" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
+            <div className="text-[11px] px-2 py-1.5 rounded-md" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
               {sampleMismatch}
             </div>
           )}
           {!outputs.some((o) => o.column && o.id !== "y") && (
-            <div className="text-[10px] px-2 py-1.5 rounded-md" style={{ background: "var(--warning-subtle)", color: "var(--warning)" }}>
+            <div className="text-[11px] px-2 py-1.5 rounded-md" style={{ background: "var(--warning-subtle)", color: "var(--warning)" }}>
               No tensor assigned as Model Input
             </div>
           )}
           {!outputs.find((o) => o.id === "y")?.column && (
-            <div className="text-[10px] px-2 py-1.5 rounded-md" style={{ background: "var(--warning-subtle)", color: "var(--warning)" }}>
+            <div className="text-[11px] px-2 py-1.5 rounded-md" style={{ background: "var(--warning-subtle)", color: "var(--warning)" }}>
               No tensor assigned as Loss Target
             </div>
           )}
@@ -1309,7 +1321,7 @@ function DataOutputsEditor({ node, source, updateDataOutput }: {
           <div className="text-[11px] mb-1" style={{ color: "var(--text-secondary)" }}>
             Set a data path and scan to discover tensors
           </div>
-          <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
             Supports .pt, .npz, .npy, and .safetensors files
           </div>
         </div>
@@ -1374,13 +1386,13 @@ return torch.tensor(features), label`;
     <div style={{ borderTop: "1px solid var(--border)" }}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-2 text-[10px] font-semibold uppercase tracking-wider"
+        className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider"
         style={{ color: "var(--text-muted)" }}
       >
         <span className="flex items-center gap-1.5">
           Preprocessing
           {value && (
-            <span className="text-[8px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
+            <span className="text-[11px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
               style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>custom</span>
           )}
         </span>
@@ -1391,7 +1403,7 @@ return torch.tensor(features), label`;
       </button>
       {expanded && (
         <div className="px-4 pb-3">
-          <div className="text-[10px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
+          <div className="text-[11px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
             Python function body. Receives <code style={{ color: "var(--accent-text)" }}>item</code> (dict), must return <code style={{ color: "var(--accent-text)" }}>(tensor, label)</code>.
           </div>
           {editing ? (
@@ -1400,7 +1412,7 @@ return torch.tensor(features), label`;
                 value={editValue}
                 onChange={(e) => setEditValue(e.target.value)}
                 rows={8}
-                className="w-full rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed resize-y"
+                className="w-full rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed resize-y"
                 style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--accent)" }}
                 spellCheck={false}
                 placeholder={placeholder}
@@ -1417,7 +1429,7 @@ return torch.tensor(features), label`;
             <div>
               {value ? (
                 <div
-                  className="relative rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed overflow-x-auto cursor-pointer"
+                  className="relative rounded-lg px-3 py-2 text-[11px] font-mono leading-relaxed overflow-x-auto cursor-pointer"
                   style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--accent)" }}
                   onClick={() => { setEditValue(value); setEditing(true); }}
                 >
@@ -1608,7 +1620,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</span>
-            <span className="text-[8px] px-1 py-0.5 rounded font-mono flex-shrink-0"
+            <span className="text-[11px] px-1 py-0.5 rounded font-mono flex-shrink-0"
               style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>&lt;/&gt;</span>
           </div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -1622,7 +1634,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
       <div className="flex-1 overflow-y-auto">
         {/* Input Handles */}
         <div className="px-4 pt-3 pb-2">
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Input Handles</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Input Handles</div>
           <div className="space-y-1.5">
             {cb.inputHandles.map((h) => (
               <div key={h.id} className="flex items-center gap-2">
@@ -1647,7 +1659,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
 
         {/* Output Handles */}
         <div className="px-4 pt-2 pb-2" style={{ borderTop: "1px solid var(--border)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Output Handles</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>Output Handles</div>
           <div className="space-y-1.5">
             {cb.outputHandles.map((h) => (
               <div key={h.id} className="flex items-center gap-2">
@@ -1672,7 +1684,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
 
         {/* Init Body */}
         <div className="px-4 pt-2 pb-2" style={{ borderTop: "1px solid var(--border)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>__init__</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>__init__</div>
           <textarea
             value={cb.initBody}
             onChange={(e) => updateCodeBlock(node.id, { initBody: e.target.value })}
@@ -1685,8 +1697,8 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
 
         {/* Forward Body */}
         <div className="px-4 pt-2 pb-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>forward()</div>
-          <div className="text-[10px] font-mono mb-1 px-1" style={{ color: "var(--text-muted)" }}>{forwardSig}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>forward()</div>
+          <div className="text-[11px] font-mono mb-1 px-1" style={{ color: "var(--text-muted)" }}>{forwardSig}</div>
           <textarea
             value={cb.forwardBody}
             onChange={(e) => updateCodeBlock(node.id, { forwardBody: e.target.value })}
@@ -1703,7 +1715,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
             {probing ? "Probing…" : "Probe output shapes"}
           </Button>
           {probeError && (
-            <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
+            <div className="mt-1.5 text-[11px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
               {probeError}
             </div>
           )}
@@ -1746,7 +1758,7 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
     <div>
       <label htmlFor={id} className="block text-[11px] font-medium mb-1" style={{ color: highlight ? "var(--danger)" : "var(--text-secondary)" }}>
         {param.label ?? param.name}
-        {highlight && <span className="ml-1 text-[9px] font-normal" style={{ color: "var(--danger)" }}>(mismatch)</span>}
+        {highlight && <span className="ml-1 text-[11px] font-normal" style={{ color: "var(--danger)" }}>(mismatch)</span>}
       </label>
       {param.type === "bool" ? (
         <label className="flex items-center gap-2.5 cursor-pointer rounded-md px-2.5 py-2" style={{ border: "1px solid var(--border)" }}>

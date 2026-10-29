@@ -94,10 +94,10 @@ export default function CompareDialog({ open, onClose, modelA, modelB }: Compare
                   <td className="py-1.5" style={{ color: "var(--text-secondary)" }}>{r.label}</td>
                   <td className="text-right py-1.5 tabular-nums font-medium" style={{
                     color: r.better === "a" ? "var(--success)" : "var(--text-primary)",
-                  }}>{r.a}</td>
+                  }}>{r.better === "a" && <SmallerMark />}{r.a}</td>
                   <td className="text-right py-1.5 tabular-nums font-medium" style={{
                     color: r.better === "b" ? "var(--success)" : "var(--text-primary)",
-                  }}>{r.b}</td>
+                  }}>{r.better === "b" && <SmallerMark />}{r.b}</td>
                 </tr>
               ))}
             </tbody>
@@ -105,7 +105,7 @@ export default function CompareDialog({ open, onClose, modelA, modelB }: Compare
 
           {/* Layer diff */}
           <div className="mt-4 pt-3" style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
               Layer Types
             </div>
             <div className="space-y-0.5">
@@ -124,6 +124,18 @@ export default function CompareDialog({ open, onClose, modelA, modelB }: Compare
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+/** Marks the smaller (cheaper) value in a row with a shape as well as a color */
+function SmallerMark() {
+  return (
+    <>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className="inline-block mr-1 -mt-0.5" aria-hidden="true">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      <span className="sr-only">(smaller) </span>
     </>
   );
 }

@@ -49,27 +49,37 @@ export default function ToastContainer({ rightOffset = 304 }: { rightOffset?: nu
   );
 }
 
-function ToastItem({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () => void }) {
-  const colors = {
-    info: { bg: "var(--bg-secondary)", border: "var(--accent)", icon: "var(--accent)" },
-    success: { bg: "var(--bg-secondary)", border: "var(--success)", icon: "var(--success)" },
-    error: { bg: "var(--bg-secondary)", border: "var(--danger)", icon: "var(--danger)" },
-    warning: { bg: "var(--bg-secondary)", border: "var(--warning)", icon: "var(--warning)" },
-  };
-  const c = colors[t.type];
+const TOAST_COLORS: Record<ToastItem["type"], string> = {
+  info: "var(--accent)",
+  success: "var(--success)",
+  error: "var(--danger)",
+  warning: "var(--warning)",
+};
 
+/** A distinct shape per kind, so the kind doesn't rest on color alone */
+function ToastIcon({ type }: { type: ToastItem["type"] }) {
+  const common = { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, className: "flex-shrink-0" };
+  if (type === "success") return <svg {...common}><polyline points="20 6 9 17 4 12" /></svg>;
+  if (type === "error") return <svg {...common}><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>;
+  if (type === "warning") return <svg {...common}><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>;
+  return <svg {...common}><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>;
+}
+
+function ToastItem({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () => void }) {
+  const color = TOAST_COLORS[t.type];
   return (
     <div
+      role={t.type === "error" ? "alert" : "status"}
       className="flex items-center gap-2.5 px-4 py-2.5 rounded-lg shadow-lg pointer-events-auto animate-in"
       style={{
-        background: c.bg,
-        border: `1px solid ${c.border}`,
+        background: "var(--bg-secondary)",
+        border: `1px solid ${color}`,
         minWidth: 220,
         maxWidth: 360,
       }}
       onClick={onDismiss}
     >
-      <div className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: c.icon }} />
+      <span style={{ color }}><ToastIcon type={t.type} /></span>
       <span className="text-xs" style={{ color: "var(--text-primary)" }}>{t.message}</span>
     </div>
   );

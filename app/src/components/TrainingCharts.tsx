@@ -172,7 +172,7 @@ export default function TrainingCharts({ onSwitchToLogs, onExport }: { onSwitchT
           series={[
             { data: epochData.map((d) => ({ x: d.epoch, y: d.trainLoss })), color: "var(--chart-train)", label: "Train" },
             ...(hasValLoss
-              ? [{ data: epochData.filter((d) => d.valLoss != null).map((d) => ({ x: d.epoch, y: d.valLoss! })), color: "var(--chart-val)", label: "Val" }]
+              ? [{ data: epochData.filter((d) => d.valLoss != null).map((d) => ({ x: d.epoch, y: d.valLoss! })), color: "var(--chart-val)", label: "Val", dashed: true }]
               : []),
           ]}
           formatY={(v) => (v !== 0 && Math.abs(v) < 0.01 ? v.toExponential(1) : v.toFixed(3))}
@@ -185,7 +185,7 @@ export default function TrainingCharts({ onSwitchToLogs, onExport }: { onSwitchT
             series={[
               { data: epochData.filter((d) => d.trainAcc != null).map((d) => ({ x: d.epoch, y: d.trainAcc! })), color: "var(--chart-train)", label: "Train" },
               ...(hasValAcc
-                ? [{ data: epochData.filter((d) => d.valAcc != null).map((d) => ({ x: d.epoch, y: d.valAcc! })), color: "var(--chart-val)", label: "Val" }]
+                ? [{ data: epochData.filter((d) => d.valAcc != null).map((d) => ({ x: d.epoch, y: d.valAcc! })), color: "var(--chart-val)", label: "Val", dashed: true }]
                 : []),
             ]}
             formatY={(v) => `${(v * 100).toFixed(1)}%`}
@@ -323,7 +323,7 @@ function LineChart({
   maxY,
 }: {
   title: string;
-  series: Array<{ data: Array<{ x: number; y: number }>; color: string; label: string }>;
+  series: Array<{ data: Array<{ x: number; y: number }>; color: string; label: string; dashed?: boolean }>;
   formatY: (v: number) => string;
   formatTick?: (v: number) => string;
   zeroBased?: boolean;
@@ -357,7 +357,9 @@ function LineChart({
         const p = s.data.find((d) => d.x === shownX) ?? s.data[s.data.length - 1];
         return (
           <span key={s.label} className="flex items-center gap-1 truncate" style={{ color: "var(--text-muted)" }}>
-            <span className="inline-block w-2.5 h-0.5 rounded-full self-center" style={{ background: s.color }} />
+            <svg width="14" height="4" className="self-center flex-shrink-0" aria-hidden="true">
+              <line x1="1" y1="2" x2="13" y2="2" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeDasharray={s.dashed ? "3 3" : undefined} />
+            </svg>
             {s.label} <span style={{ color: "var(--text-primary)" }}>{p ? formatY(p.y) : "\u2013"}</span>
           </span>
         );
@@ -419,7 +421,7 @@ function LineChart({
           const hovered = hoverX != null ? s.data.find((p) => p.x === hoverX) : undefined;
           return (
             <g key={s.label}>
-              <path d={path} fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d={path} fill="none" stroke={s.color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray={s.dashed ? "5 4" : undefined} />
               {showDots && s.data.map((p) => (
                 <circle key={p.x} cx={xScale(p.x)} cy={yScale(Math.min(p.y, yMax))} r="2.5" fill={s.color} />
               ))}
