@@ -5,6 +5,7 @@ import { resolveHandlesWithRegistry } from "../lib/types";
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useTrainingStore } from "../store/training-store";
 import { formatShape } from "../lib/shape-inference";
+import { shapeErrorSummary } from "../lib/shape-fixes";
 import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
@@ -37,6 +38,10 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const shapeDisplayBatch = useGraphStore((s) => s.shapeDisplayBatch);
   const batchSize = useTrainingStore((s) => s.config.batchSize);
   const shapeInfo = shapeMap[id];
+  const shapeError = useGraphStore((s) => s.shapeErrors[id]);
+  // A layer that can't take its input; layers after it just don't know their shapes
+  const rootError = shapeError?.type === "root" ? shapeError : undefined;
+  const shapeUnknown = shapeError?.type === "cascaded";
   const renameNode = useGraphStore((s) => s.renameNode);
   const effectiveBatch = shapeDisplayBatch ? batchSize : undefined;
 
@@ -84,9 +89,9 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         width: nodeWidth,
         minHeight: nodeMinHeight,
         background: "var(--bg-secondary)",
-        border: `1.5px solid ${selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
+        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
         boxShadow: selected
-          ? `var(--node-shadow-hover), 0 0 0 3px ${tint(color, 20)}`
+          ? `var(--node-shadow-hover), 0 0 0 3px ${tint(rootError ? "var(--danger)" : color, 20)}`
           : hovered
             ? "var(--node-shadow-hover)"
             : "var(--node-shadow)",
@@ -131,6 +136,13 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
                 &lt;/&gt;
               </span>
             )}
+            {rootError && (
+              <span className="ml-auto flex-shrink-0 text-danger" title={rootError.message} role="img" aria-label="Shape problem">
+                <svg width={compact ? 28 : 15} height={compact ? 28 : 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </span>
+            )}
           </>
         )}
       </div>
@@ -151,8 +163,20 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         </div>
       )}
 
+      {/* What's wrong, in place of the output shape */}
+      {!compact && rootError && (
+        <div className="px-3 py-1.5 text-[11px] leading-snug bg-danger-subtle text-danger line-clamp-2" title={rootError.message}>
+          {shapeErrorSummary(rootError, (sh) => formatShape(sh, effectiveBatch))}
+        </div>
+      )}
+      {!compact && !rootError && shapeUnknown && !data.dataOutputs && (
+        <div className="px-3 pb-2.5 text-[11px] italic text-fg-muted" title="Fix the layer marked in red above this one">
+          shape unknown
+        </div>
+      )}
+
       {/* Output shape — only shown when non-trivial, hidden for Data nodes (handles show shapes) */}
-      {!compact && showShape && !data.dataOutputs && (
+      {!compact && showShape && !shapeError && !data.dataOutputs && (
         <div className="px-3 pb-2.5 flex items-center gap-1.5">
           <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
             {formatShape(shapeInfo.shape, effectiveBatch)}

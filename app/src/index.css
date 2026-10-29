@@ -263,13 +263,15 @@ button, input, select {
   animation: edge-error-flow 0.6s linear infinite !important;
 }
 
-/* Error edge — cascaded from upstream */
+/* Past a shape error: the shape here isn't known, which isn't a second error */
 .react-flow__edge-path.edge-error-cascaded {
-  stroke: var(--warning, #f59e0b) !important;
-  stroke-width: 2 !important;
-  stroke-dasharray: 6 4 !important;
-  opacity: 0.7 !important;
-  animation: edge-error-flow 0.8s linear infinite !important;
+  stroke: var(--text-muted) !important;
+  stroke-dasharray: 4 4 !important;
+  opacity: 0.6 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge-path.edge-error-root { animation: none !important; }
 }
 
 @keyframes edge-error-flow {

@@ -11,10 +11,11 @@ const LANE_GAP = 14;    // spacing between skip connections that run side by sid
 type Side = "right" | "left";
 
 export default function ShapeEdge(props: EdgeProps) {
-  const { id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, selected } = props;
+  const { id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, selected } = props;
   const [hovered, setHovered] = useState(false);
 
   const sourceError = useGraphStore((s) => s.shapeErrors[source]);
+  const targetError = useGraphStore((s) => s.shapeErrors[target]);
   const sourceShape = useGraphStore((s) => s.shapeMap[source]);
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
@@ -118,6 +119,7 @@ export default function ShapeEdge(props: EdgeProps) {
         + `L ${targetX + signX * r} ${y2} `
         + `Q ${targetX} ${y2} ${targetX} ${y2 + r} `
         + `L ${targetX} ${targetY}`;
+      labelX = channelX;
     } else if (adx < 2) {
       // Aligned — straight vertical line
       edgePath = `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
@@ -167,30 +169,30 @@ export default function ShapeEdge(props: EdgeProps) {
   }
 
   // ── Error state ──
-  const isRootError = sourceError?.type === "root";
-  const isCascadedError = sourceError?.type === "cascaded";
-  const hasError = isRootError || isCascadedError;
-  const errorClass = isRootError ? "edge-error-root" : isCascadedError ? "edge-error-cascaded" : "";
+  // The mismatch is on the edge INTO the layer that can't take its input. Past that layer
+  // shapes aren't known, so the edges further down are drawn as unknown, not as more errors.
+  const isInputMismatch = targetError?.type === "root" && !!targetError.receivedShape;
+  const isUnknown = !isInputMismatch && !!sourceError;
+  const errorClass = isInputMismatch ? "edge-error-root" : isUnknown ? "edge-error-cascaded" : "";
 
-  // Midpoint for hover label
+  // Midpoint for the label
   const midX = labelX ?? (sourceX + targetX) / 2;
   const midY = (sourceY + targetY) / 2;
 
   const onMouseEnter = useCallback(() => setHovered(true), []);
   const onMouseLeave = useCallback(() => setHovered(false), []);
 
-  // Build hover label content
-  let hoverLabel = "";
-  if (sourceShape) {
-    hoverLabel = formatShape(sourceShape.shape);
+  let label = "";
+  if (isInputMismatch && targetError?.receivedShape) {
+    // What arrives; the layer says what it expects
+    label = formatShape(targetError.receivedShape);
+  } else if (isUnknown) {
+    label = "shape unknown";
+  } else if (sourceShape) {
+    label = formatShape(sourceShape.shape);
   }
-  if (sourceError) {
-    if (sourceError.receivedShape && sourceError.expectedShape) {
-      hoverLabel = `${formatShape(sourceError.receivedShape)} \u2192 expects ${formatShape(sourceError.expectedShape)}`;
-    } else if (sourceError.message) {
-      hoverLabel = sourceError.message;
-    }
-  }
+  // A mismatch keeps its label up; other edges show their shape on hover
+  const showLabel = !!label && (isInputMismatch || hovered || selected);
 
   return (
     <g onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
@@ -204,41 +206,23 @@ export default function ShapeEdge(props: EdgeProps) {
       />
       <BaseEdge id={id} path={edgePath} style={style} className={`${selected ? "selected" : ""} ${errorClass || (isSkip ? "edge-skip" : "")}`} />
 
-      {/* Hover label at midpoint */}
-      {hovered && hoverLabel && (
+      {/* Shape label at the midpoint */}
+      {showLabel && (
         <foreignObject
-          x={midX - 100}
-          y={midY - 14}
-          width={200}
-          height={28}
+          x={midX - 120}
+          y={midY - 11}
+          width={240}
+          height={22}
           style={{ pointerEvents: "none", overflow: "visible" }}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              width: "100%",
-              height: "100%",
-            }}
-          >
+          <div className="flex items-center justify-center w-full h-full">
             <div
-              style={{
-                background: hasError ? (isRootError ? "var(--danger)" : "var(--warning)") : "var(--bg-elevated)",
-                color: hasError ? "#fff" : "var(--text-primary)",
-                fontSize: "9px",
-                fontFamily: "monospace",
-                padding: "2px 8px",
-                borderRadius: "4px",
-                whiteSpace: "nowrap",
-                border: hasError ? "none" : "1px solid var(--border)",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
-                maxWidth: "200px",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
+              className={`text-[11px] font-mono leading-none px-2 py-[5px] rounded-md whitespace-nowrap max-w-[240px] truncate ${
+                isInputMismatch ? "bg-danger text-white" : "bg-surface-elevated text-fg border border-line"
+              }`}
+              style={{ boxShadow: "0 2px 6px rgba(0,0,0,0.25)" }}
             >
-              {hoverLabel}
+              {label}
             </div>
           </div>
         </foreignObject>

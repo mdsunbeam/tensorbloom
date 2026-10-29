@@ -1,5 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useReactFlow } from "@xyflow/react";
+import { useState, useMemo, useCallback, useRef, useEffect, useId } from "react";
 import { useGraphStore } from "../store/graph-store";
 import { useTrainingStore, runFraction } from "../store/training-store";
 import { MODULE_REGISTRY, CATEGORY_COLORS } from "../lib/registry";
@@ -9,7 +8,9 @@ import TrainingPanel from "./TrainingPanel";
 import { startTraining, stopTraining } from "../lib/training";
 import type { ParamDef, DataOutputDef, ScanResult } from "../lib/types";
 import { safePythonId, DEFAULT_DATA_OUTPUTS } from "../lib/types";
-import type { ShapeError } from "../lib/shape-inference";
+import { formatShape, type ShapeError } from "../lib/shape-inference";
+import { shapeErrorFix } from "../lib/shape-fixes";
+import { focusNode } from "../lib/canvas-focus";
 import { isDatasetNode, DATASET_METADATA, extractDatasetConfig, DATA_PRESETS, type DataDomain, type IntrospectionResult, type ProbeResult } from "../lib/dataset-metadata";
 import { sidecarCall } from "../lib/sidecar";
 import NumberField from "./NumberField";
@@ -219,100 +220,50 @@ function TrainingProgress() {
 
 // --- Error Banner ---
 function ErrorBanner({ error, nodeId }: { error: ShapeError; nodeId: string }) {
-  const nodes = useGraphStore((s) => s.nodes);
-  const shapeMap = useGraphStore((s) => s.shapeMap);
+  const sourceLabel = useGraphStore((s) => s.nodes.find((n) => n.id === error.sourceNodeId)?.data.label ?? error.sourceNodeId);
+  const params = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId)?.data.params);
   const updateNodeParam = useGraphStore((s) => s.updateNodeParam);
-  const setSelectedNodeId = useGraphStore((s) => s.setSelectedNodeId);
-  const reactFlow = useReactFlow();
+  const fix = params ? shapeErrorFix(error, params) : null;
 
-  const isRoot = error.type === "root";
-  const bgColor = isRoot ? "var(--danger-subtle)" : "var(--warning-subtle)";
-  const borderColor = isRoot ? "var(--danger)" : "var(--warning)";
-  const textColor = isRoot ? "var(--danger)" : "var(--warning)";
-
-  const sourceLabel = !isRoot
-    ? nodes.find((n) => n.id === error.sourceNodeId)?.data.label ?? error.sourceNodeId
-    : "";
-
-  const handleAutoFix = useCallback(() => {
-    if (!error.paramHint || !error.receivedShape) return;
-    const node = nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
-    // Determine the correct value based on paramHint
-    let correctValue: number | undefined;
-    const incoming = useGraphStore.getState().edges.filter((e) => e.target === nodeId);
-    const sourceId = incoming[0]?.source;
-    const upstreamShape = sourceId ? shapeMap[sourceId]?.shape : undefined;
-
-    if (!upstreamShape) return;
-
-    switch (error.paramHint) {
-      case "in_features":
-        correctValue = upstreamShape[upstreamShape.length - 1];
-        break;
-      case "in_channels":
-        correctValue = upstreamShape.length >= 2 ? upstreamShape[1] : undefined;
-        break;
-      case "num_features":
-        correctValue = upstreamShape.length >= 2 ? upstreamShape[1] : undefined;
-        break;
-      case "input_size":
-        correctValue = upstreamShape[upstreamShape.length - 1];
-        break;
-      case "embed_dim":
-        correctValue = upstreamShape[upstreamShape.length - 1];
-        break;
-      case "d_model":
-        correctValue = upstreamShape[upstreamShape.length - 1];
-        break;
-      case "num_channels":
-        correctValue = upstreamShape.length >= 2 ? upstreamShape[1] : undefined;
-        break;
-    }
-
-    if (correctValue !== undefined) {
-      updateNodeParam(nodeId, error.paramHint, correctValue);
-    }
-  }, [error, nodeId, nodes, shapeMap, updateNodeParam]);
-
-  const handleGoToSource = useCallback(() => {
-    setSelectedNodeId(error.sourceNodeId);
-    const sourceNode = nodes.find((n) => n.id === error.sourceNodeId);
-    if (sourceNode) {
-      reactFlow.fitView({ nodes: [sourceNode], duration: 300, padding: 0.5 });
-    }
-  }, [error.sourceNodeId, setSelectedNodeId, nodes, reactFlow]);
-
-  return (
-    <div
-      className="mx-4 mt-3 px-3 py-2 rounded-lg text-[11px] leading-relaxed"
-      style={{ background: bgColor, border: `1px solid ${borderColor}`, color: textColor }}
-    >
-      {isRoot ? (
-        <>
-          <div className="font-semibold mb-1">{error.message}</div>
-          {error.receivedShape && error.expectedShape && (
-            <div className="font-mono text-[10px] mb-1.5" style={{ opacity: 0.8 }}>
-              Got {JSON.stringify(error.receivedShape)} {"\u2192"} Expected dim: {error.paramHint}={error.expectedShape[error.expectedShape.length - 1] ?? "?"}
-            </div>
-          )}
-          {error.paramHint && (
-            <Button size="sm" onClick={handleAutoFix} className="mt-1">
-              Set {error.paramHint} to match
-            </Button>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="font-semibold mb-1">Error from: {sourceLabel}</div>
-          <div className="text-[10px] mb-1.5" style={{ opacity: 0.8 }}>Fix the source node first to resolve this error</div>
-          <Button size="sm" onClick={handleGoToSource} className="mt-1">
-            Go to source
+  if (error.type === "root") {
+    return (
+      <div role="alert" className="mx-4 mt-3 px-3 py-2.5 rounded-lg text-[11px] leading-relaxed bg-danger-subtle border border-danger text-danger">
+        <div className="flex items-start gap-1.5 font-semibold">
+          <AlertIcon />
+          <span>{error.message}</span>
+        </div>
+        {error.receivedShape && error.expectedShape && (
+          <div className="font-mono mt-1 ml-[18px] opacity-90">
+            Gets {formatShape(error.receivedShape)}, expects {formatShape(error.expectedShape)}
+          </div>
+        )}
+        {fix && (
+          <Button size="sm" onClick={() => updateNodeParam(nodeId, fix.param, fix.to)} className="mt-2 ml-[18px]">
+            Set {fix.param} to {fix.to}
           </Button>
-        </>
-      )}
+        )}
+      </div>
+    );
+  }
+
+  // Further down from a problem: this layer's input shape isn't known until that one is fixed
+  return (
+    <div className="mx-4 mt-3 px-3 py-2.5 rounded-lg text-[11px] leading-relaxed bg-surface-sunken border border-line text-fg-secondary">
+      <div>
+        The input shape here isn't known until <span className="font-semibold text-fg">{sourceLabel}</span> is fixed.
+      </div>
+      <Button size="sm" onClick={() => focusNode(error.sourceNodeId)} className="mt-2">
+        Go to {sourceLabel}
+      </Button>
     </div>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-[2px]" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
   );
 }
 
@@ -1790,9 +1741,10 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
     boxShadow: highlight ? "0 0 0 2px var(--danger-subtle)" : undefined,
   };
   const c = "w-full px-2.5 py-2 text-xs rounded-md";
+  const id = useId();
   return (
     <div>
-      <label className="block text-[11px] font-medium mb-1" style={{ color: highlight ? "var(--danger)" : "var(--text-secondary)" }}>
+      <label htmlFor={id} className="block text-[11px] font-medium mb-1" style={{ color: highlight ? "var(--danger)" : "var(--text-secondary)" }}>
         {param.label ?? param.name}
         {highlight && <span className="ml-1 text-[9px] font-normal" style={{ color: "var(--danger)" }}>(mismatch)</span>}
       </label>
@@ -1805,11 +1757,11 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
         <Select value={String(value ?? param.default)} onChange={onChange} options={param.options ?? []}
           aria-label={param.label ?? param.name} className={c} style={s} />
       ) : param.type === "int" || param.type === "float" ? (
-        <NumberField value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
+        <NumberField id={id} value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
           onChange={onChange}
           className={c} style={s} />
       ) : (
-        <input type="text" value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} className={c} style={s} />
+        <input id={id} type="text" value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} className={c} style={s} />
       )}
     </div>
   );

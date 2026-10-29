@@ -8,6 +8,7 @@ import { computeModelSummary, formatParamCount } from "../lib/model-summary";
 import { newProject, openProject, saveProject } from "../lib/document-actions";
 import { useEscapeKey } from "../lib/use-escape-key";
 import RunControls from "./RunControls";
+import ProblemsButton from "./ProblemsButton";
 import { IconButton } from "./ui/Button";
 import { LogoMark, Wordmark } from "./ui/Logo";
 
@@ -149,6 +150,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
           {nodeCount} {nodeCount === 1 ? "node" : "nodes"} · {edgeCount} {edgeCount === 1 ? "edge" : "edges"}
           {summary.totalParams > 0 && <> · {formatParamCount(summary.totalParams)} params</>}
         </span>
+        <ProblemsButton />
       </div>
 
       {/* Right: hardware, the run, theme */}
