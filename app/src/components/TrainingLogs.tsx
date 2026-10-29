@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTrainingStore } from "../store/training-store";
 
 function formatTime(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
   const m = Math.floor(totalSec / 60);
   const s = totalSec % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
@@ -28,6 +28,8 @@ export default function TrainingLogs() {
   // Elapsed timer
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
+    // Catch up when the status changes, so a short run doesn't show a time from before it started
+    setNow(Date.now());
     if (status !== "running" && status !== "starting") return;
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);

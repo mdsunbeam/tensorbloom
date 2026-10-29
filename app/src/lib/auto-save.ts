@@ -5,6 +5,7 @@
 
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useDocumentStore } from "../store/document-store";
+import { useRunStore, type RunRecord } from "../store/run-store";
 import type { Node, Edge } from "@xyflow/react";
 
 const STORAGE_KEY = "tensorbloom-autosave";
@@ -17,6 +18,7 @@ export interface AutoSaveData {
   filePath?: string | null;
   nodes: Node<NodeData>[];
   edges: Edge[];
+  runs?: RunRecord[];
 }
 
 /** Writes the project now if it has unsaved work, and removes the old copy if it doesn't */
@@ -47,6 +49,7 @@ export function writeAutoSave() {
         targetHandle: e.targetHandle,
         type: e.type,
       })),
+      runs: useRunStore.getState().runs,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {

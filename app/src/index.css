@@ -40,6 +40,13 @@
   --chart-val: #fb923c;
   --chart-lr: #a78bfa;
   --chart-grid: #27272a;
+  /* One color per run when runs are compared, by run number */
+  --run-1: #818cf8;
+  --run-2: #fb923c;
+  --run-3: #34d399;
+  --run-4: #f472b6;
+  --run-5: #facc15;
+  --run-6: #22d3ee;
 
   /* Layer colors: 8 families, each category also has its own icon */
   --node-io: #14b8a6;
@@ -94,6 +101,12 @@
   --chart-val: #ea580c;
   --chart-lr: #7c3aed;
   --chart-grid: #e4e4e7;
+  --run-1: #4f46e5;
+  --run-2: #ea580c;
+  --run-3: #059669;
+  --run-4: #db2777;
+  --run-5: #a16207;
+  --run-6: #0891b2;
 
   /* Layer colors: 8 families, each category also has its own icon */
   --node-io: #0d9488;

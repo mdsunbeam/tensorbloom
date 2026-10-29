@@ -1,15 +1,6 @@
 import type { AutoSaveData } from "../lib/auto-save";
 import Button from "./ui/Button";
-
-function timeAgo(timestamp: number): string {
-  const min = Math.round((Date.now() - timestamp) / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min} min ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
-  const d = Math.round(h / 24);
-  return `${d} day${d === 1 ? "" : "s"} ago`;
-}
+import { timeAgo } from "../lib/format-time";
 
 /** Offers back unsaved work from the last session. Placed at the top of the canvas by App. */
 export default function RecoveryBanner({ data, onRestore, onDiscard }: {

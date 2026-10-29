@@ -7,6 +7,7 @@ import type { Node, Edge } from "@xyflow/react";
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
+import { useRunStore } from "../store/run-store";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
 import { clearAutoSave, type AutoSaveData } from "./auto-save";
 import { askToSaveChanges } from "../components/ConfirmDialog";
@@ -55,6 +56,7 @@ export async function newProject() {
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().clearGraph();
   useGraphStore.getState().setProjectName("Untitled");
+  useRunStore.getState().setRuns([]);
   useDocumentStore.getState().markSaved(null);
   clearAutoSave();
 }
@@ -75,6 +77,7 @@ export async function openProject() {
 /** Brings back unsaved work from the last session. It stays unsaved until the user saves it. */
 export function restoreAutoSave(data: AutoSaveData) {
   replaceGraph(data.nodes, data.edges, data.projectName);
+  useRunStore.getState().setRuns(data.runs ?? []);
   useDocumentStore.getState().markSaved(data.filePath ?? null);
   useDocumentStore.getState().markUnsaved();
 }

@@ -12,6 +12,8 @@ import { useHistoryStore } from "../store/history-store";
 import { isDatasetNode, extractDatasetConfig } from "./dataset-metadata";
 import { buildSidecarGraph } from "./sidecar-graph";
 import { requirePython } from "../store/python-store";
+import { useRunStore, epochSummary, architectureKey, graphSnapshot, type RunRecord } from "../store/run-store";
+import { computeModelSummary } from "./model-summary";
 
 export async function startTraining() {
   const store = useGraphStore.getState();
@@ -81,6 +83,19 @@ export async function startTraining() {
     : null;
 
   const graphJson = buildSidecarGraph(nodes, edges);
+
+  // What this run trains, recorded when it ends so runs can be compared later
+  const run: RunStart = {
+    modelName: useGraphStore.getState().projectName,
+    startedAt: new Date().toISOString(),
+    config: finalConfig,
+    model: {
+      params: computeModelSummary(nodes).totalParams,
+      layers: nodes.filter((n) => n.data.moduleType !== "Input" && n.data.moduleType !== "Output" && !isDatasetNode(n.data.moduleType)).length,
+      key: architectureKey(nodes, edges),
+    },
+    graph: graphSnapshot(nodes, edges),
+  };
 
   // Set up log callback — streams stdout/stderr from training thread
   setTrainLogCallback((params) => {
@@ -162,6 +177,7 @@ export async function startTraining() {
         };
         store.setTrainingResults(results);
       }
+      recordRun(run, useTrainingStore.getState().stopRequested ? "stopped" : "finished");
       useTrainingStore.getState().setStatus("finished");
       return;
     }
@@ -170,6 +186,7 @@ export async function startTraining() {
       return;
     }
     if (p.status === "error" || p.error) {
+      recordRun(run, "failed", p.error ?? "Training error");
       useTrainingStore.getState().setError(p.error ?? "Training error");
       return;
     }
@@ -242,6 +259,26 @@ export async function startTraining() {
       e instanceof Error ? e.message : "Failed to start training"
     );
   }
+}
+
+type RunStart = Pick<RunRecord, "modelName" | "startedAt" | "config" | "model" | "graph">;
+
+/** Adds the run that just ended to the project's run history. A run stopped before its first epoch has nothing to keep. */
+function recordRun(start: RunStart, status: RunRecord["status"], error?: string) {
+  const ts = useTrainingStore.getState();
+  const epochs = epochSummary(ts.metrics);
+  if (status !== "failed" && epochs.length === 0) return;
+  const { runs, addRun } = useRunStore.getState();
+  addRun({
+    ...start,
+    id: `run_${Date.now().toString(36)}`,
+    number: (runs[runs.length - 1]?.number ?? 0) + 1,
+    durationMs: ts.startedAt ? Date.now() - ts.startedAt : 0,
+    status,
+    error,
+    results: status === "failed" ? undefined : ts.trainingResults ?? undefined,
+    epochs,
+  });
 }
 
 export async function stopTraining() {

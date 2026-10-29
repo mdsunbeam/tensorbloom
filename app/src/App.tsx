@@ -6,6 +6,8 @@ import PropertyPanel from "./components/PropertyPanel";
 import CodePanel from "./components/CodePanel";
 import TrainingCharts from "./components/TrainingCharts";
 import TrainingLogs from "./components/TrainingLogs";
+import RunsPanel from "./components/RunsPanel";
+import { useRunStore } from "./store/run-store";
 import Toolbar from "./components/Toolbar";
 import ToastContainer, { toast } from "./components/Toast";
 import PythonSetupCard from "./components/PythonSetupCard";
@@ -45,14 +47,15 @@ import Tabs from "./components/ui/Tabs";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
-type BottomTab = "code" | "charts" | "logs";
+type BottomTab = "code" | "charts" | "runs" | "logs";
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
   const trainingStatus = useTrainingStore((s) => s.status);
   const canvasEmpty = useGraphStore((s) => s.nodes.length === 0);
   const logCount = useTrainingStore((s) => s.logs.length);
-  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, logs: 280 });
+  const runCount = useRunStore((s) => s.runs.length);
+  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280 });
   const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<BottomTab>("code");
   const [importOpen, setImportOpen] = useState(false);
@@ -424,6 +427,7 @@ export default function App() {
                 items={[
                   { id: "code", label: "Code" },
                   { id: "charts", label: "Charts", live: trainingStatus === "running" || trainingStatus === "starting" },
+                  { id: "runs", label: "Runs", badge: runCount > 0 ? runCount : undefined },
                   { id: "logs", label: "Logs", badge: logCount > 0 ? logCount : undefined },
                 ]}
               />
@@ -439,7 +443,8 @@ export default function App() {
           {bottomPanelOpen && (
             <div className="flex-shrink-0 overflow-hidden" style={{ height: tabHeights[bottomTab], background: "var(--bg-secondary)" }}>
               {bottomTab === "code" && <CodePanel />}
-              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onExport={() => setExportOpen(true)} />}
+              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} />}
+              {bottomTab === "runs" && <RunsPanel />}
               {bottomTab === "logs" && <TrainingLogs />}
             </div>
           )}
