@@ -23,6 +23,10 @@ import type { Node, Edge, Connection } from "@xyflow/react";
 import type { ConnectFromContext } from "./SpotlightDialog";
 
 const nodeTypes = { tensorLabNode: TensorBloomNode };
+
+// Loaded models open at a zoom where node text is readable, from the top, rather than shrunk to fit
+const READABLE_ZOOM = 0.75;
+const VIEW_PAD = 40;
 const edgeTypes = { smoothstep: ShapeEdge };
 
 function BatchToggleButton() {
@@ -64,8 +68,8 @@ const MINIMAP_COLORS: Record<string, Record<string, string>> = {
   },
 };
 
-const MINIMAP_W = 200;
-const MINIMAP_H = 140;
+const MINIMAP_W = 168;
+const MINIMAP_H = 112;
 const MINIMAP_PAD = 50;
 
 function CustomMinimap({ visible }: { visible: boolean }) {
@@ -158,6 +162,14 @@ function CustomMinimap({ visible }: { visible: boolean }) {
   // Viewport indicator
   const flowLeft = -viewport.x / viewport.zoom;
   const flowTop = -viewport.y / viewport.zoom;
+
+  // Nothing to navigate to when the whole model is already on screen
+  const allOnScreen =
+    flowLeft <= bounds.minX + MINIMAP_PAD &&
+    flowTop <= bounds.minY + MINIMAP_PAD &&
+    flowLeft + rfWidth / viewport.zoom >= bounds.minX + bounds.width - MINIMAP_PAD &&
+    flowTop + rfHeight / viewport.zoom >= bounds.minY + bounds.height - MINIMAP_PAD;
+  if (allOnScreen) return null;
   const vpX = (flowLeft - bounds.minX) * scale + offsetX;
   const vpY = (flowTop - bounds.minY) * scale + offsetY;
   const vpW = (rfWidth / viewport.zoom) * scale;
@@ -263,6 +275,7 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
   const theme = useThemeStore((s) => s.theme);
   const trainingStatus = useTrainingStore((s) => s.status);
   const reactFlowInstance = useRef<ReactFlowInstance<Node<NodeData>> | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
   const prevNodeCount = useRef(nodes.length);
   const pendingConnectRef = useRef<{ nodeId: string; handleId: string } | null>(null);
@@ -295,15 +308,33 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
     }
   }, [nodes.length]);
 
-  // Zoom to fit when nodes are bulk-loaded
+  // Show the whole model if it fits at a readable zoom; otherwise show its top at that zoom
+  const fitReadable = useCallback(() => {
+    const rf = reactFlowInstance.current;
+    const el = wrapperRef.current;
+    if (!rf || !el) return;
+    const ns = rf.getNodes();
+    if (ns.length === 0) return;
+    const b = rf.getNodesBounds(ns);
+    const { width: W, height: H } = el.getBoundingClientRect();
+    const fit = Math.min((W - VIEW_PAD * 2) / b.width, (H - VIEW_PAD * 2) / b.height);
+    if (fit >= READABLE_ZOOM) {
+      rf.fitView({ padding: 0.15, maxZoom: 1, duration: 300 });
+      return;
+    }
+    const z = READABLE_ZOOM;
+    const x = b.width * z <= W - VIEW_PAD * 2 ? W / 2 - (b.x + b.width / 2) * z : VIEW_PAD - b.x * z;
+    const y = b.height * z <= H - VIEW_PAD * 2 ? H / 2 - (b.y + b.height / 2) * z : VIEW_PAD - b.y * z;
+    rf.setViewport({ x, y, zoom: z }, { duration: 300 });
+  }, []);
+
+  // Re-frame when nodes are bulk-loaded
   useEffect(() => {
     const jumped = nodes.length > 0 && prevNodeCount.current === 0;
     const bulkLoad = Math.abs(nodes.length - prevNodeCount.current) > 3;
     prevNodeCount.current = nodes.length;
-    if ((jumped || bulkLoad) && reactFlowInstance.current) {
-      setTimeout(() => reactFlowInstance.current?.fitView({ padding: 0.15, duration: 300 }), 50);
-    }
-  }, [nodes.length]);
+    if (jumped || bulkLoad) setTimeout(fitReadable, 50);
+  }, [nodes.length, fitReadable]);
 
   // Handle drop from custom drag overlay
   const onMouseUp = useCallback((e: React.MouseEvent) => {
@@ -382,6 +413,7 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
 
   return (
     <div
+      ref={wrapperRef}
       className="w-full h-full relative"
       onMouseUp={onMouseUp}
     >
@@ -394,9 +426,14 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
         onConnectStart={onConnectStart}
         onConnectEnd={onConnectEnd}
         isValidConnection={validateConnection}
-        onInit={(instance) => { reactFlowInstance.current = instance as ReactFlowInstance<Node<NodeData>>; }}
+        onInit={(instance) => {
+          reactFlowInstance.current = instance as ReactFlowInstance<Node<NodeData>>;
+          // A graph restored from autosave is already in the store; frame it once its nodes are measured
+          setTimeout(fitReadable, 100);
+        }}
         nodeTypes={nodeTypes} edgeTypes={edgeTypes}
-        fitView snapToGrid snapGrid={[20, 20]}
+        snapToGrid snapGrid={[20, 20]}
+        minZoom={0.2}
         selectionKeyCode="Shift"
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
         panOnDrag

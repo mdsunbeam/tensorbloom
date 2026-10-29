@@ -1,31 +1,15 @@
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
+import { Handle, Position, useStore, type NodeProps, type Node } from "@xyflow/react";
 import { MODULE_REGISTRY, CATEGORY_COLORS } from "../lib/registry";
 import { resolveHandlesWithRegistry } from "../lib/types";
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useTrainingStore } from "../store/training-store";
 import { formatShape } from "../lib/shape-inference";
 import { formatParamCount } from "../lib/model-summary";
-import { DATASET_METADATA, isDatasetNode, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
+import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
+import { quickParamCount, getParamSummary } from "../lib/node-summary";
 
 type TLNodeProps = NodeProps<Node<NodeData>>;
-
-// Inline param count — avoids importing the full summary module for every node
-function quickParamCount(mt: string, p: Record<string, unknown>): number {
-  switch (mt) {
-    case "Linear": return Number(p.in_features ?? 0) * Number(p.out_features ?? 0) + (p.bias !== false ? Number(p.out_features ?? 0) : 0);
-    case "Conv1d": { const k = Number(p.kernel_size ?? 3); return Number(p.out_channels ?? 0) * (Number(p.in_channels ?? 0) / Number(p.groups ?? 1)) * k + (p.bias !== false ? Number(p.out_channels ?? 0) : 0); }
-    case "Conv2d": { const k = Number(p.kernel_size ?? 3); return Number(p.out_channels ?? 0) * (Number(p.in_channels ?? 0) / Number(p.groups ?? 1)) * k * k + (p.bias !== false ? Number(p.out_channels ?? 0) : 0); }
-    case "Conv3d": { const k = Number(p.kernel_size ?? 3); return Number(p.out_channels ?? 0) * (Number(p.in_channels ?? 0) / Number(p.groups ?? 1)) * k * k * k + (p.bias !== false ? Number(p.out_channels ?? 0) : 0); }
-    case "ConvTranspose1d": { const k = Number(p.kernel_size ?? 3); return Number(p.in_channels ?? 0) * Number(p.out_channels ?? 0) * k + (p.bias !== false ? Number(p.out_channels ?? 0) : 0); }
-    case "ConvTranspose2d": { const k = Number(p.kernel_size ?? 3); return Number(p.in_channels ?? 0) * Number(p.out_channels ?? 0) * k * k + (p.bias !== false ? Number(p.out_channels ?? 0) : 0); }
-    case "Embedding": return Number(p.num_embeddings ?? 0) * Number(p.embedding_dim ?? 0);
-    case "LSTM": { const h = Number(p.hidden_size ?? 0); const inp = Number(p.input_size ?? 0); const bi = p.bidirectional ? 2 : 1; return bi * 4 * h * (inp + h + 2); }
-    case "MultiheadAttention": { const d = Number(p.embed_dim ?? 0); return 4 * d * d + 4 * d; }
-    case "TransformerEncoderLayer": { const d = Number(p.d_model ?? 0); const ff = Number(p.dim_feedforward ?? 2048); return 4 * d * d + 4 * d + 2 * d * ff + ff + d + 4 * d; }
-    default: return 0;
-  }
-}
 
 // Shapes that are trivial pass-throughs and don't add useful info
 const TRIVIAL_SHAPES = new Set(["?", "unknown", ""]);
@@ -36,13 +20,17 @@ function isTrivialShape(shape: number[] | string | undefined): boolean {
   return false;
 }
 
+// Below this zoom the detail lines are unreadable, so nodes show just a larger title
+const COMPACT_ZOOM = 0.5;
+
 function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const color = CATEGORY_COLORS[data.category];
+  const compact = useStore((s) => s.transform[2] < COMPACT_ZOOM);
   const resolved = resolveHandlesWithRegistry(data, MODULE_REGISTRY);
   const inputHandles = resolved.inputHandles;
   const outputHandles = resolved.outputHandles;
   const isCodeBlock = !!data.codeBlock;
-  const showHandleLabels = isCodeBlock || data.category === "loss" || !!data.dataOutputs || inputHandles.length > 1 || outputHandles.length > 1;
+  const showHandleLabels = !compact && (isCodeBlock || data.category === "loss" || !!data.dataOutputs || inputHandles.length > 1 || outputHandles.length > 1);
   const paramSummary = getParamSummary(data);
   const shapeMap = useGraphStore((s) => s.shapeMap);
   const shapeDisplayBatch = useGraphStore((s) => s.shapeDisplayBatch);
@@ -83,7 +71,8 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const nodeWidth = isDataNode ? 240 : hasTargetHandle ? 220 : maxHandles > 2 ? 200 + (maxHandles - 2) * 40 : 200;
   // Data nodes need enough height for all right-side handles
   const rightHandleCount = isDataNode ? Math.max(outputHandles.length - 1, 0) : 0;
-  const nodeMinHeight = rightHandleCount > 2 ? 60 + rightHandleCount * 22 : undefined;
+  // and room under the summary line so the right-side labels don't run into it
+  const nodeMinHeight = rightHandleCount > 2 ? 66 + rightHandleCount * 22 : isDataNode && !compact ? 88 : undefined;
 
   return (
     <div
@@ -107,9 +96,9 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
       <div className="h-[3px]" style={{ background: color }} />
 
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 pt-2 pb-1.5 text-xs font-semibold">
+      <div className={`flex items-center gap-2 px-3 font-semibold ${compact ? "py-3 text-[26px]" : "pt-2 pb-1.5 text-[14px]"}`}>
         <div
-          className="w-4 h-4 rounded-[4px] flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0 opacity-90"
+          className={`${compact ? "hidden" : "flex"} w-[18px] h-[18px] rounded-[4px] items-center justify-center text-[8px] font-bold text-white flex-shrink-0 opacity-90`}
           style={{ background: color }}
         >
           {data.label.slice(0, 2).toUpperCase()}
@@ -124,7 +113,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               if (e.key === "Enter") commitRename();
               if (e.key === "Escape") { setEditValue(data.label); setEditing(false); }
             }}
-            className="flex-1 min-w-0 px-1 py-0 text-xs font-semibold rounded outline-none"
+            className="flex-1 min-w-0 px-1 py-0 text-[14px] font-semibold rounded outline-none"
             style={{ background: "var(--bg-tertiary)", color: "var(--text-primary)", border: "1px solid var(--accent)" }}
           />
         ) : (
@@ -139,7 +128,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             </span>
             {isCodeBlock && (
               <span
-                className="text-[8px] px-1 py-0.5 rounded font-mono flex-shrink-0"
+                className="text-[10px] px-1 py-0.5 rounded font-mono flex-shrink-0"
                 style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
                 title="Code block mode"
               >
@@ -151,15 +140,15 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
       </div>
 
       {/* Param summary + count */}
-      {(paramSummary || paramCount > 0) && (
+      {!compact && (paramSummary || paramCount > 0) && (
         <div className={`px-3 ${data.dataOutputs ? "pb-4" : "pb-1"}`}>
           {paramSummary && (
-            <div className={`text-[10px] font-mono leading-tight ${paramSummary.includes("\n") ? "whitespace-pre-wrap" : "truncate"}`} style={{ color: "var(--text-secondary)" }}>
+            <div className={`text-[12px] font-mono leading-snug ${paramSummary.includes("\n") ? "whitespace-pre-wrap" : "truncate"}`} style={{ color: "var(--text-secondary)" }}>
               {paramSummary}
             </div>
           )}
           {paramCount > 0 && (
-            <div className="text-[9px] tabular-nums mt-0.5" style={{ color: "var(--text-muted)" }}>
+            <div className="text-[11px] tabular-nums mt-0.5" style={{ color: "var(--text-muted)" }}>
               {formatParamCount(paramCount)} params
             </div>
           )}
@@ -167,13 +156,13 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
       )}
 
       {/* Output shape — only shown when non-trivial, hidden for Data nodes (handles show shapes) */}
-      {showShape && !data.dataOutputs && (
+      {!compact && showShape && !data.dataOutputs && (
         <div className="px-3 pb-2.5 flex items-center gap-1.5">
-          <span className="text-[9px] font-mono" style={{ color: "var(--accent)", opacity: 0.5 }}>
+          <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
             {formatShape(shapeInfo.shape, effectiveBatch)}
           </span>
           {shapeDisplayBatch && shapeInfo.shape.length >= 2 && (
-            <span className="text-[8px] font-mono" style={{ color: "var(--text-muted)", opacity: 0.4 }}>
+            <span className="text-[10px] font-mono" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
               N={batchSize}
             </span>
           )}
@@ -181,7 +170,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
       )}
 
       {/* Dataset compatibility badge — Input nodes only */}
-      {data.moduleType === "Input" && <DatasetBadge nodeParams={data.params} />}
+      {!compact && data.moduleType === "Input" && <DatasetBadge nodeParams={data.params} />}
 
       {/* Input handles */}
       {inputHandles.map((h) => {
@@ -194,7 +183,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
                 style={{ top: "50%" }} title={h.label} />
               {showHandleLabels && (
                 <span
-                  className="absolute text-[8px] font-mono pointer-events-none"
+                  className="absolute text-[10px] font-mono pointer-events-none"
                   style={{ right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
                 >
                   {h.label} →
@@ -213,7 +202,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               style={{ left: `${leftPct}%`, top: 0 }} title={h.label} />
             {showHandleLabels && (
               <span
-                className="absolute text-[7px] font-mono pointer-events-none"
+                className="absolute text-[10px] font-mono pointer-events-none"
                 style={{ left: `${leftPct}%`, top: 4, transform: "translateX(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
               >
                 {h.label}
@@ -233,14 +222,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         if (isDataNode && !isFirstHandle) {
           // Right-side handle for y/target outputs — distribute evenly in 50-90% range
           const rightHandleCount = outputHandles.length - 1;
-          const topPct = rightHandleCount === 1 ? 65 : 50 + (i - 1) * (40 / Math.max(rightHandleCount - 1, 1));
+          const topPct = rightHandleCount === 1 ? 72 : 55 + (i - 1) * (35 / Math.max(rightHandleCount - 1, 1));
           return (
             <span key={`out-${h.id}`}>
               <Handle type="source" position={Position.Right} id={h.id}
                 style={{ top: `${topPct}%` }} title={`${h.label}${shapeStr}`} />
               {showHandleLabels && (
                 <span
-                  className="absolute text-[8px] font-mono pointer-events-none"
+                  className="absolute text-[10px] font-mono pointer-events-none"
                   style={{ right: 10, top: `${topPct}%`, transform: "translateY(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
                 >
                   {h.label}{shapeStr} →
@@ -257,7 +246,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               style={{ left: `${leftPct}%` }} title={`${h.label}${shapeStr}`} />
             {showHandleLabels && (
               <span
-                className="absolute text-[7px] font-mono pointer-events-none"
+                className="absolute text-[10px] font-mono pointer-events-none"
                 style={{ left: `${leftPct}%`, bottom: 4, transform: "translateX(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
               >
                 {h.label}{shapeStr}
@@ -308,7 +297,7 @@ function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
   if (match === null && info.inputShape === null) {
     // Custom dataset with unknown shape — show name only
     return (
-      <div className="px-3 pb-1.5 text-[8px] font-medium" style={{ color: "var(--text-muted)" }}>
+      <div className="px-3 pb-1.5 text-[11px] font-medium" style={{ color: "var(--text-muted)" }}>
         {info.label}
       </div>
     );
@@ -317,61 +306,10 @@ function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
   if (match === null) return null;
 
   return (
-    <div className="px-3 pb-1.5 text-[8px] font-medium" style={{ color: match ? "rgb(34, 197, 94)" : "rgb(245, 158, 11)" }}>
+    <div className="px-3 pb-1.5 text-[11px] font-medium" style={{ color: match ? "rgb(34, 197, 94)" : "rgb(245, 158, 11)" }}>
       {match ? `${info.label} \u2713` : `${info.label} expects ${JSON.stringify(info.inputShape)}`}
     </div>
   );
-}
-
-function getParamSummary(data: NodeData): string {
-  const p = data.params;
-  // Universal Data node
-  if (data.moduleType === "Data") {
-    const source = String(p.source ?? "");
-    if (!source) return "Select a source";
-    const preset = DATA_PRESETS[source];
-    if (preset) {
-      return `${preset.label}: ${JSON.stringify(preset.meta.inputShape)} \u2192 ${preset.meta.numClasses} cls`;
-    }
-    // Show the user-specified identifier for custom sources
-    const identifier = source === "HuggingFace" ? String(p.dataset_name ?? "")
-      : ["ImageFolder", "CSV", "TensorFile"].includes(source) ? String(p.path ?? "")
-      : "";
-    // TensorFile with scan result: just show sample count
-    const scan = p._scan as { total_samples?: number } | undefined;
-    if (scan && scan.total_samples) {
-      return `${scan.total_samples.toLocaleString()} samples`;
-    }
-    const resolved = resolveDataNodeShape(p);
-    if (resolved) {
-      return `${identifier || source}: ${JSON.stringify(resolved.inputShape)}`;
-    }
-    return identifier || source;
-  }
-  // Legacy dataset nodes
-  if (isDatasetNode(data.moduleType)) {
-    const meta = DATASET_METADATA[data.moduleType];
-    if (meta) return `${JSON.stringify(meta.inputShape)} \u2192 ${meta.numClasses} cls`;
-    return String(p.root ?? "");
-  }
-  switch (data.moduleType) {
-    case "Linear": return `${p.in_features} \u2192 ${p.out_features}`;
-    case "Conv1d": case "Conv2d": case "Conv3d": return `${p.in_channels} \u2192 ${p.out_channels}, k=${p.kernel_size}`;
-    case "ConvTranspose1d": case "ConvTranspose2d": return `${p.in_channels} \u2192 ${p.out_channels}, k=${p.kernel_size}`;
-    case "MaxPool2d": case "AvgPool2d": return `k=${p.kernel_size}`;
-    case "BatchNorm1d": case "BatchNorm2d": return `features=${p.num_features}`;
-    case "LayerNorm": case "RMSNorm": return `shape=${p.normalized_shape}`;
-    case "Dropout": case "Dropout2d": return `p=${p.p}`;
-    case "Embedding": return `${p.num_embeddings} \u00d7 ${p.embedding_dim}`;
-    case "LSTM": case "GRU": return `${p.input_size} \u2192 ${p.hidden_size}, layers=${p.num_layers}`;
-    case "MultiheadAttention": return `d=${p.embed_dim}, heads=${p.num_heads}`;
-    case "TransformerEncoderLayer": case "TransformerDecoderLayer": return `d=${p.d_model}, heads=${p.nhead}`;
-    case "Flatten": return `dim ${p.start_dim} \u2192 ${p.end_dim}`;
-    case "Softmax": return `dim=${p.dim}`;
-    case "AdaptiveAvgPool2d": return `out=${JSON.stringify(p.output_size)}`;
-    case "Upsample": return `\u00d7${p.scale_factor} ${p.mode}`;
-    default: return "";
-  }
 }
 
 export default memo(TensorBloomNode);

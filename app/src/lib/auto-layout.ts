@@ -6,6 +6,7 @@
 
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
+import { getParamSummary, quickParamCount } from "./node-summary";
 
 const GRID = 20;
 const NODE_WIDTH = 220;
@@ -23,6 +24,15 @@ function nodeWidth(data: NodeData): number {
   if (data.dataOutputs) return 240;
   if (LOSS_WITH_TARGET.has(data.moduleType)) return 220;
   return 200;
+}
+
+/** Rough rendered height of a node (must track TensorBloomNode.tsx), so every layer gets the same gap below it */
+function nodeHeight(data: NodeData): number {
+  if (data.dataOutputs) return 90;
+  let h = 42; // color bar + title row
+  if (getParamSummary(data)) h += 18;
+  if (quickParamCount(data.moduleType, data.params) > 0) h += 18;
+  return h + 28; // output shape line
 }
 
 function snap(v: number): number {
@@ -107,9 +117,14 @@ export function autoLayout(
 
   const maxLayer = Math.max(...layers.keys(), 0);
 
+  let y = 40;
   for (let l = 0; l <= maxLayer; l++) {
     const ids = layers.get(l) ?? [];
-    const y = snap(40 + l * (80 + GAP_Y));
+    if (l > 0) {
+      const above = layers.get(l - 1) ?? [];
+      const tallest = Math.max(0, ...above.map((id) => nodeHeight(nodeMap.get(id)!.data)));
+      y += Math.ceil((tallest + GAP_Y) / GRID) * GRID;
+    }
 
     if (ids.length === 1) {
       // Single node — place so its center handle sits exactly on handleX

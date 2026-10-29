@@ -30,6 +30,10 @@
   --warning: #f59e0b;
   --warning-subtle: rgba(245, 158, 11, 0.1);
   --surface-glow: rgba(255, 255, 255, 0.02);
+  --chart-train: #818cf8;
+  --chart-val: #fb923c;
+  --chart-lr: #a78bfa;
+  --chart-grid: #27272a;
 
   --node-linear: #3b82f6;
   --node-conv: #8b5cf6;
@@ -74,6 +78,10 @@
   --warning: #d97706;
   --warning-subtle: rgba(217, 119, 6, 0.07);
   --surface-glow: rgba(255, 255, 255, 0.5);
+  --chart-train: #4f46e5;
+  --chart-val: #ea580c;
+  --chart-lr: #7c3aed;
+  --chart-grid: #e4e4e7;
 
   --node-linear: #2563eb;
   --node-conv: #7c3aed;
