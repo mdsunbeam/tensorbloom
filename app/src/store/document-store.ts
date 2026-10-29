@@ -49,7 +49,7 @@ export function startDirtyTracking(): () => void {
   };
   const schedule = () => { if (!timer) timer = setTimeout(check, 250); };
   const unsubGraph = useGraphStore.subscribe((s, p) => {
-    if (s.nodes !== p.nodes || s.edges !== p.edges || s.projectName !== p.projectName) schedule();
+    if (s.nodes !== p.nodes || s.edges !== p.edges || s.groups !== p.groups || s.projectName !== p.projectName) schedule();
   });
   const unsubTraining = useTrainingStore.subscribe((s, p) => { if (s.config !== p.config) schedule(); });
   const unsubRuns = useRunStore.subscribe((s, p) => { if (s.runs !== p.runs) schedule(); });

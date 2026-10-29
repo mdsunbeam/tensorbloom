@@ -132,3 +132,55 @@ describe("undo and redo", () => {
     expect(nodeCount()).toBe(0);
   });
 });
+
+describe("groups", () => {
+  function groupTwo() {
+    const a = addLinear(0);
+    const b = addLinear(300);
+    settle();
+    graph().onNodesChange([a, b].map((id) => ({ type: "select" as const, id, selected: true })));
+    history().pushSnapshot();
+    graph().groupSelected();
+    settle();
+    return { a, b };
+  }
+
+  it("undoes grouping, and redo brings the group back", () => {
+    groupTwo();
+    expect(graph().groups).toHaveLength(1);
+    history().undo();
+    expect(graph().groups).toHaveLength(0);
+    expect(nodeCount()).toBe(2);
+    history().redo();
+    expect(graph().groups).toHaveLength(1);
+  });
+
+  it("deleting a group's layers removes the group, and undo restores both", () => {
+    const { a, b } = groupTwo();
+    history().pushSnapshot();
+    graph().deleteMultiple([a, b]);
+    expect(graph().groups).toHaveLength(0);
+    settle();
+    history().undo();
+    expect(nodeCount()).toBe(2);
+    expect(graph().groups[0].nodeIds.sort()).toEqual([a, b].sort());
+  });
+
+  it("collapsing moves what's below up, and expanding puts it back", () => {
+    const a = addLinear(0);
+    const b = addLinear(0);
+    const c = addLinear(0);
+    graph().onNodesChange([
+      { type: "position", id: b, position: { x: 0, y: 120 } },
+      { type: "position", id: c, position: { x: 0, y: 400 } },
+    ]);
+    graph().onNodesChange([a, b].map((id) => ({ type: "select" as const, id, selected: true })));
+    const id = graph().groupSelected()!;
+    graph().setGroupCollapsed(id, true);
+    const yCollapsed = graph().nodes.find((n) => n.id === c)!.position.y;
+    expect(yCollapsed).toBeLessThan(400);
+    graph().setGroupCollapsed(id, false);
+    expect(graph().nodes.find((n) => n.id === c)!.position.y).toBe(400);
+  });
+});
+

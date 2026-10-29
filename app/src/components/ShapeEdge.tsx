@@ -1,7 +1,9 @@
-import { useState, useCallback, useMemo } from "react";
-import { BaseEdge, getBezierPath, Position, type EdgeProps } from "@xyflow/react";
-import { useGraphStore } from "../store/graph-store";
+import { useState, useCallback, useMemo, useContext } from "react";
+import { BaseEdge, getBezierPath, Position, type EdgeProps, type Node } from "@xyflow/react";
+import { useGraphStore, type NodeData } from "../store/graph-store";
 import { formatShape } from "../lib/shape-inference";
+import { GROUP_NODE_TYPE, type GroupNodeData, type ViewEdgeData } from "../lib/groups";
+import { CanvasViewContext } from "./canvas-view";
 
 const R = 14;           // corner radius for the turns around a block
 const PAD = 30;         // clearance outside the whole graph, for Data → Loss target edges
@@ -11,14 +13,24 @@ const LANE_GAP = 14;    // spacing between skip connections that run side by sid
 type Side = "right" | "left";
 
 export default function ShapeEdge(props: EdgeProps) {
-  const { id, source, target, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, selected } = props;
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, selected } = props;
+  // Into or out of a collapsed group, the edge is drawn to the group's card but still joins the same layers
+  const viewData = props.data as ViewEdgeData | undefined;
+  const source = viewData?.origSource ?? props.source;
+  const target = viewData?.origTarget ?? props.target;
   const [hovered, setHovered] = useState(false);
 
   const sourceError = useGraphStore((s) => s.shapeErrors[source]);
   const targetError = useGraphStore((s) => s.shapeErrors[target]);
   const sourceShape = useGraphStore((s) => s.shapeMap[source]);
-  const nodes = useGraphStore((s) => s.nodes);
-  const edges = useGraphStore((s) => s.edges);
+  const graphNodes = useGraphStore((s) => s.nodes);
+  const graphEdges = useGraphStore((s) => s.edges);
+  const view = useContext(CanvasViewContext);
+  // Route around what's on screen: no hidden layers, and no open group frames
+  const { nodes, edges } = useMemo(() => view ? {
+    nodes: view.nodes.filter((n) => !n.hidden && !(n.type === GROUP_NODE_TYPE && !(n.data as GroupNodeData).group.collapsed)) as Node<NodeData>[],
+    edges: view.edges.filter((e) => !e.hidden),
+  } : { nodes: graphNodes, edges: graphEdges }, [view, graphNodes, graphEdges]);
 
   // ── Which edges go around the graph, and where ──
   const { channelX, side, isSkip } = useMemo(() => {

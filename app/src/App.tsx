@@ -39,7 +39,7 @@ import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
 import { TEMPLATES, templateGraph } from "./lib/templates";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
-import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave } from "./lib/document-actions";
+import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
 import { MODULE_REGISTRY } from "./lib/registry";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
@@ -196,6 +196,8 @@ export default function App() {
       else if (ctrl && key === "l") { e.preventDefault(); handleAutoLayout(); }
       else if (ctrl && key === "k") { e.preventDefault(); setSpotlightOpen(true); }
       else if (ctrl && key === "e") { e.preventDefault(); setExportOpen(true); }
+      else if (ctrl && key === "g" && e.shiftKey) { e.preventDefault(); ungroupSelection(); }
+      else if (ctrl && key === "g") { e.preventDefault(); groupSelection(); }
       else if (ctrl && key === "d") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().duplicateSelected(); }
       else if (ctrl && key === "c") { useGraphStore.getState().copySelected(); }
       else if (ctrl && key === "v") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().paste(); }
@@ -218,7 +220,7 @@ export default function App() {
     const { nodes, edges } = useGraphStore.getState();
     if (nodes.length === 0) return;
     useHistoryStore.getState().pushSnapshot();
-    useGraphStore.getState().loadGraph(autoLayout(nodes, edges), edges);
+    useGraphStore.getState().loadGraph(autoLayout(nodes, edges), edges, useGraphStore.getState().groups);
   }, []);
 
   const handleImport = useCallback(async (code: string) => {

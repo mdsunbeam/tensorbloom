@@ -13,7 +13,7 @@ import { MODULE_REGISTRY } from "../lib/registry";
 import type { NodeCategory, CodeBlockDef, HandleDef, DataOutputDef } from "../lib/types";
 import { safePythonId, DEFAULT_DATA_OUTPUTS } from "../lib/types";
 import type { ShapeMap, ShapeError } from "../lib/shape-inference";
-import { createCompositeBlock, expandCompositeBlock, type CompositeBlock } from "../lib/composite-nodes";
+import { addGroup, nextGroupName, pruneGroups, layersBounds, CARD_HEIGHT, type LayerGroup } from "../lib/groups";
 import { isDatasetNode, DATASET_METADATA, LEGACY_DATASET_TYPES, resolveDataNodeShape, DATA_PRESETS } from "../lib/dataset-metadata";
 import { formatCtorArgs } from "../lib/decompiler";
 
@@ -44,7 +44,12 @@ interface GraphState {
   shapeErrors: Record<string, ShapeError>;
   shapeDisplayBatch: boolean;
   clipboard: Clipboard | null;
-  compositeBlocks: Record<string, CompositeBlock>;
+  /** Named frames around sets of layers. They organize the canvas and never change the model. */
+  groups: LayerGroup[];
+  /** The group shown in the Properties panel, if one is selected instead of a layer */
+  selectedGroupId: string | null;
+  /** The group whose name is being edited on the canvas */
+  renamingGroupId: string | null;
   onNodesChange: OnNodesChange<TLNode>;
   onEdgesChange: OnEdgesChange<TLEdge>;
   onConnect: OnConnect;
@@ -62,8 +67,16 @@ interface GraphState {
   setShapeErrors: (errors: Record<string, ShapeError>) => void;
   toggleShapeDisplayBatch: () => void;
   addNodeConnected: (moduleType: string, sourceNodeId: string, sourceHandleId: string) => void;
-  groupSelected: (name: string) => void;
-  ungroupNode: (nodeId: string) => void;
+  /** Groups the selected layers (two or more) and starts naming the group. Returns its id. */
+  groupSelected: () => string | null;
+  renameGroup: (groupId: string, name: string) => void;
+  setRenamingGroupId: (groupId: string | null) => void;
+  setGroupCollapsed: (groupId: string, collapsed: boolean) => void;
+  /** Removes the group; its layers stay where they are */
+  ungroup: (groupId: string) => void;
+  setSelectedGroupId: (groupId: string | null) => void;
+  /** Moves a group's layers, e.g. when its frame is dragged */
+  moveGroup: (groupId: string, dx: number, dy: number, dragging?: boolean) => void;
   setCustomCode: (nodeId: string, code: string | undefined) => void;
   convertToCodeBlock: (nodeId: string) => void;
   revertToStandard: (nodeId: string) => void;
@@ -75,7 +88,7 @@ interface GraphState {
   removeDataOutput: (nodeId: string, handleId: string) => void;
   updateDataOutput: (nodeId: string, handleId: string, patch: Partial<DataOutputDef>) => void;
   clearGraph: () => void;
-  loadGraph: (nodes: TLNode[], edges: TLEdge[]) => void;
+  loadGraph: (nodes: TLNode[], edges: TLEdge[], groups?: LayerGroup[]) => void;
   setProjectName: (name: string) => void;
 }
 
@@ -94,7 +107,9 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   shapeErrors: {},
   shapeDisplayBatch: false,
   clipboard: null,
-  compositeBlocks: {},
+  groups: [],
+  selectedGroupId: null,
+  renamingGroupId: null,
 
   onNodesChange: (changes) => {
     set({ nodes: applyNodeChanges(changes, get().nodes) });
@@ -183,7 +198,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
-  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+  setSelectedNodeId: (id) => set(id ? { selectedNodeId: id, selectedGroupId: null } : { selectedNodeId: null }),
 
   deleteSelected: () => {
     const { nodes, edges, selectedNodeId } = get();
@@ -362,30 +377,78 @@ export const useGraphStore = create<GraphState>((set, get) => ({
     });
   },
 
-  groupSelected: (name) => {
-    const { nodes, edges, compositeBlocks } = get();
-    const selectedIds = new Set(nodes.filter((n) => n.selected).map((n) => n.id));
-    const { selectedNodeId } = get();
-    if (selectedNodeId) selectedIds.add(selectedNodeId);
-    if (selectedIds.size < 2) return;
-
-    const { nodes: newNodes, edges: newEdges, block } = createCompositeBlock(nodes, edges, selectedIds, name);
+  groupSelected: () => {
+    const { nodes, selectedNodeId, groups } = get();
+    const ids = nodes.filter((n) => n.selected || n.id === selectedNodeId).map((n) => n.id);
+    if (ids.length < 2) return null;
+    const id = `group_${Date.now().toString(36)}`;
     set({
-      nodes: newNodes,
-      edges: newEdges,
-      compositeBlocks: { ...compositeBlocks, [block.id]: block },
-      selectedNodeId: block.id,
+      groups: addGroup(groups, ids, nextGroupName(groups), id),
+      selectedGroupId: id,
+      renamingGroupId: id,
+      selectedNodeId: null,
+      nodes: nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+    });
+    return id;
+  },
+
+  renameGroup: (groupId, name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    set({ groups: get().groups.map((g) => (g.id === groupId && g.name !== trimmed ? { ...g, name: trimmed } : g)) });
+  },
+
+  setRenamingGroupId: (groupId) => set({ renamingGroupId: groupId }),
+
+  setGroupCollapsed: (groupId, collapsed) => {
+    const { groups, nodes, selectedNodeId } = get();
+    const group = groups.find((g) => g.id === groupId);
+    const bounds = group && layersBounds(group, nodes);
+    if (!group || !bounds || group.collapsed === collapsed) return;
+    const inside = new Set(group.nodeIds);
+    // Fold the space the layers took: what sits below the group moves up when it collapses, and back down when it opens
+    const fold = Math.max(0, bounds.h - CARD_HEIGHT);
+    const edgeY = collapsed ? bounds.y + bounds.h : bounds.y + CARD_HEIGHT;
+    const shift = collapsed ? -fold : fold;
+    set({
+      groups: groups.map((g) => (g.id === groupId ? { ...g, collapsed } : g)),
+      nodes: nodes.map((n) => {
+        if (inside.has(n.id)) return collapsed && n.selected ? { ...n, selected: false } : n;
+        return n.position.y >= edgeY - 1 ? { ...n, position: { x: n.position.x, y: n.position.y + shift } } : n;
+      }),
+      // A hidden layer can't stay selected
+      selectedNodeId: collapsed && selectedNodeId && inside.has(selectedNodeId) ? null : selectedNodeId,
     });
   },
 
-  ungroupNode: (nodeId) => {
-    const { nodes, edges, compositeBlocks } = get();
-    const block = compositeBlocks[nodeId];
-    if (!block) return;
+  ungroup: (groupId) => {
+    const { groups, selectedGroupId, renamingGroupId } = get();
+    set({
+      groups: groups.filter((g) => g.id !== groupId),
+      selectedGroupId: selectedGroupId === groupId ? null : selectedGroupId,
+      renamingGroupId: renamingGroupId === groupId ? null : renamingGroupId,
+    });
+  },
 
-    const { nodes: newNodes, edges: newEdges } = expandCompositeBlock(nodes, edges, nodeId, block);
-    const { [nodeId]: _, ...rest } = compositeBlocks;
-    set({ nodes: newNodes, edges: newEdges, compositeBlocks: rest, selectedNodeId: null });
+  setSelectedGroupId: (groupId) => {
+    if (!groupId) { set({ selectedGroupId: null }); return; }
+    set({
+      selectedGroupId: groupId,
+      selectedNodeId: null,
+      nodes: get().nodes.map((n) => (n.selected ? { ...n, selected: false } : n)),
+    });
+  },
+
+  moveGroup: (groupId, dx, dy, dragging = false) => {
+    const group = get().groups.find((g) => g.id === groupId);
+    if (!group) return;
+    const inside = new Set(group.nodeIds);
+    const nodes = get().nodes;
+    // Mark the layers as dragging while the frame is, so the whole move is one undo step
+    if (dx === 0 && dy === 0 && nodes.every((n) => !inside.has(n.id) || !!n.dragging === dragging)) return;
+    set({
+      nodes: nodes.map((n) => (inside.has(n.id) ? { ...n, position: { x: n.position.x + dx, y: n.position.y + dy }, dragging } : n)),
+    });
   },
 
   convertToCodeBlock: (nodeId) => {
@@ -647,10 +710,16 @@ export const useGraphStore = create<GraphState>((set, get) => ({
 
   clearGraph: () => {
     nodeIdCounter = 0;
-    set({ nodes: [], edges: [], selectedNodeId: null, shapeMap: {}, shapeErrors: {} });
+    set({ nodes: [], edges: [], selectedNodeId: null, shapeMap: {}, shapeErrors: {}, groups: [], selectedGroupId: null, renamingGroupId: null });
   },
 
-  loadGraph: (nodes, edges) => {
+  loadGraph: (nodes, edges, groups = []) => {
+    // Old "Composite" group nodes kept their layers only in memory, so files that have one hold an empty shell
+    const shells = new Set(nodes.filter((n) => n.data.moduleType === "Composite").map((n) => n.id));
+    if (shells.size) {
+      nodes = nodes.filter((n) => !shells.has(n.id));
+      edges = edges.filter((e) => !shells.has(e.source) && !shells.has(e.target));
+    }
     // Migrate legacy dataset nodes to universal Data node
     const migrated = nodes.map((n) => {
       if (LEGACY_DATASET_TYPES.has(n.data.moduleType)) {
@@ -701,8 +770,20 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return match ? Math.max(max, parseInt(match[1], 10)) : max;
     }, 0);
     nodeIdCounter = Math.max(nodeIdCounter, maxId);
-    set({ nodes: migrated, edges, selectedNodeId: null });
+    set({ nodes: migrated, edges, selectedNodeId: null, groups: pruneGroups(groups, migrated), selectedGroupId: null, renamingGroupId: null });
   },
 
   setProjectName: (name) => set({ projectName: name }),
 }));
+
+// Deleting layers takes them out of their groups, and a group left empty goes away
+useGraphStore.subscribe((s, p) => {
+  if (s.nodes === p.nodes || s.groups.length === 0) return;
+  const groups = pruneGroups(s.groups, s.nodes);
+  if (groups === s.groups) return;
+  const ids = new Set(groups.map((g) => g.id));
+  useGraphStore.setState({
+    groups,
+    ...(s.selectedGroupId && !ids.has(s.selectedGroupId) ? { selectedGroupId: null } : {}),
+  });
+});

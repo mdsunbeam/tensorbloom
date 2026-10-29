@@ -135,7 +135,7 @@ Go to **Insert > From Template** to load any template.
 | `Ctrl+C` / `Ctrl+V` | Copy / Paste nodes |
 | `Ctrl+D` | Duplicate selected |
 | `Ctrl+A` | Select all |
-| `Ctrl+G` | Group selected into block |
+| `Ctrl+G` / `Ctrl+Shift+G` | Group selected layers / Ungroup |
 | `Ctrl+L` | Auto-layout graph |
 | `Ctrl+I` | Import PyTorch code |
 | `Ctrl+E` | Export model |

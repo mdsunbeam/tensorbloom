@@ -90,7 +90,7 @@ export async function startTraining() {
       layers: nodes.filter((n) => n.data.moduleType !== "Input" && n.data.moduleType !== "Output" && !isDatasetNode(n.data.moduleType)).length,
       key: architectureKey(nodes, edges),
     },
-    graph: graphSnapshot(nodes, edges),
+    graph: graphSnapshot(nodes, edges, useGraphStore.getState().groups),
   };
   // The run's latest checkpoint, so its model can be tried again after the app restarts
   let checkpoint: RunRecord["checkpoint"];

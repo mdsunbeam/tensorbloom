@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./graph-store";
 import type { TrainingConfig, TrainingMetrics, TrainingResults } from "./training-store";
+import type { LayerGroup } from "../lib/groups";
 
 /** One epoch's numbers, as the last report of that epoch gave them */
 export interface EpochPoint {
@@ -29,7 +30,7 @@ export interface RunRecord {
   epochs: EpochPoint[];
   model: { params: number; layers: number; /** Same key ⇔ same layers, settings and connections */ key: string };
   /** The graph the run trained, so it can be opened again */
-  graph: { nodes: Node<NodeData>[]; edges: Edge[] };
+  graph: { nodes: Node<NodeData>[]; edges: Edge[]; groups?: LayerGroup[] };
   /** The last checkpoint the run saved. Its epoch can be earlier than the run's last when it stopped early. */
   checkpoint?: { path: string; epoch: number };
 }
@@ -98,8 +99,9 @@ export function architectureKey(nodes: Node<NodeData>[], edges: Edge[]): string 
 }
 
 /** A copy of the graph without the canvas's selection and measurement state */
-export function graphSnapshot(nodes: Node<NodeData>[], edges: Edge[]): RunRecord["graph"] {
+export function graphSnapshot(nodes: Node<NodeData>[], edges: Edge[], groups: LayerGroup[] = []): RunRecord["graph"] {
   return {
+    ...(groups.length ? { groups } : {}),
     nodes: nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: n.data, ...(n.parentId ? { parentId: n.parentId } : {}) })),
     edges: edges.map((e) => ({ id: e.id, source: e.source, target: e.target, sourceHandle: e.sourceHandle, targetHandle: e.targetHandle, type: e.type })),
   };

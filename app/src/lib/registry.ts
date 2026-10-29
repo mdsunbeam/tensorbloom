@@ -4,17 +4,6 @@ const tensorIn = { id: "in", label: "in", dataType: "tensor" as const };
 const tensorOut = { id: "out", label: "out", dataType: "tensor" as const };
 
 export const MODULE_REGISTRY: Record<string, ModuleDef> = {
-  // --- Composite (virtual) ---
-  Composite: {
-    type: "Composite",
-    label: "Group",
-    category: "linear",
-    description: "Grouped sub-graph block (double-click or right-click to expand)",
-    params: [],
-    inputHandles: [{ id: "in", label: "in", dataType: "tensor" }],
-    outputHandles: [{ id: "out", label: "out", dataType: "tensor" }],
-  },
-
   // --- I/O ---
   Input: {
     type: "Input",

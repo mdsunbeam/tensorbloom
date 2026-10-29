@@ -123,7 +123,7 @@ The sidecar builds a runnable `nn.Module` from graph JSON using `torch.fx.Graph`
 70+ PyTorch modules defined in `registry.ts`, organized by category:
 
 **I/O:** Input, Output, Data
-**Linear:** Linear, Identity, Group
+**Linear:** Linear, Identity
 **Convolution:** Conv1d, Conv2d, Conv3d, ConvTranspose2d
 **Pooling:** MaxPool2d, AvgPool2d, AdaptiveAvgPool1d/2d
 **Normalization:** BatchNorm1d/2d, LayerNorm, RMSNorm, InstanceNorm

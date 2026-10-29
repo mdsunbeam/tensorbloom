@@ -21,6 +21,8 @@ const SHORTCUTS = [
   { key: "Ctrl+V", action: "Paste copied nodes" },
   { key: "Delete", action: "Delete selected nodes" },
   { key: "Ctrl+D", action: "Duplicate selected nodes" },
+  { key: "Ctrl+G", action: "Group selected layers" },
+  { key: "Ctrl+Shift+G", action: "Ungroup" },
   { key: "Double-click", action: "Rename node" },
   { key: "Right-click", action: "Context menu" },
 

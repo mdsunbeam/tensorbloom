@@ -18,12 +18,15 @@ import { setCanvasFocusHandler } from "../lib/canvas-focus";
 import { isValidConnection as checkValid } from "../lib/connection-validation";
 import { endDrag, getDragState } from "./DragOverlay";
 import TensorBloomNode from "../nodes/TensorBloomNode";
+import LayerGroupNode from "../nodes/LayerGroupNode";
+import { canvasView, groupRect, GROUP_NODE_TYPE } from "../lib/groups";
+import { CanvasViewContext } from "./canvas-view";
 import ShapeEdge from "./ShapeEdge";
 import ContextMenu from "./ContextMenu";
-import type { Node, Edge, Connection } from "@xyflow/react";
+import type { Node, Edge, Connection, NodeChange } from "@xyflow/react";
 import type { ConnectFromContext } from "./SpotlightDialog";
 
-const nodeTypes = { tensorLabNode: TensorBloomNode };
+const nodeTypes = { tensorLabNode: TensorBloomNode, [GROUP_NODE_TYPE]: LayerGroupNode };
 
 // Loaded models open at a zoom where node text is readable, from the top, rather than shrunk to fit
 const READABLE_ZOOM = 0.75;
@@ -246,7 +249,24 @@ interface GraphEditorProps {
 export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEditorProps) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
-  const onNodesChange = useGraphStore((s) => s.onNodesChange);
+  const groups = useGraphStore((s) => s.groups);
+  const onNodesChangeStore = useGraphStore((s) => s.onNodesChange);
+  // Group frames aren't graph nodes: dragging one moves its layers, and nothing else applies to it
+  const onNodesChange = useCallback((changes: NodeChange<Node<NodeData>>[]) => {
+    const { groups, nodes, moveGroup } = useGraphStore.getState();
+    if (groups.length === 0) { onNodesChangeStore(changes); return; }
+    const rest: NodeChange<Node<NodeData>>[] = [];
+    for (const c of changes) {
+      const group = "id" in c ? groups.find((g) => g.id === c.id) : undefined;
+      if (!group) { rest.push(c); continue; }
+      if (c.type === "position" && c.position) {
+        const r = groupRect(group, nodes);
+        // Whole grid steps, so the layers stay on the grid
+        if (r) moveGroup(group.id, Math.round((c.position.x - r.x) / 20) * 20, Math.round((c.position.y - r.y) / 20) * 20, c.dragging ?? false);
+      }
+    }
+    if (rest.length) onNodesChangeStore(rest);
+  }, [onNodesChangeStore]);
   const onEdgesChange = useGraphStore((s) => s.onEdgesChange);
   const onConnectStore = useGraphStore((s) => s.onConnect);
   const onConnect = useCallback((params: Parameters<typeof onConnectStore>[0]) => {
@@ -255,10 +275,11 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
   }, [onConnectStore]);
   const addNode = useGraphStore((s) => s.addNode);
   const setSelectedNodeId = useGraphStore((s) => s.setSelectedNodeId);
+  const setSelectedGroupId = useGraphStore((s) => s.setSelectedGroupId);
   const trainingStatus = useTrainingStore((s) => s.status);
   const reactFlowInstance = useRef<ReactFlowInstance<Node<NodeData>> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string | null } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string | null; groupId?: string } | null>(null);
   const prevNodeCount = useRef(nodes.length);
   const pendingConnectRef = useRef<{ nodeId: string; handleId: string } | null>(null);
   const connectSucceededRef = useRef(false);
@@ -268,6 +289,9 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     if (trainingStatus !== "running") return edges;
     return edges.map((e) => ({ ...e, animated: true }));
   }, [edges, trainingStatus]);
+
+  // What's drawn: the graph plus a frame or card per group
+  const view = useMemo(() => canvasView(nodes, displayEdges, groups), [nodes, displayEdges, groups]);
 
   // Debounced shape inference
   useEffect(() => {
@@ -312,6 +336,17 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
 
   // Bring a node into view and select it, for the problems list and "Go to" links
   useEffect(() => setCanvasFocusHandler((nodeId) => {
+    // A layer inside a collapsed group can't be seen until the group opens
+    const hiddenIn = useGraphStore.getState().groups.find((g) => g.collapsed && g.nodeIds.includes(nodeId));
+    if (hiddenIn) {
+      useGraphStore.getState().setGroupCollapsed(hiddenIn.id, false);
+      setTimeout(() => focusLayer(nodeId), 60);
+      return;
+    }
+    focusLayer(nodeId);
+  }), []); // eslint-disable-line react-hooks/exhaustive-deps -- focusLayer reads everything it needs when called
+
+  function focusLayer(nodeId: string) {
     const rf = reactFlowInstance.current;
     const node = rf?.getInternalNode(nodeId);
     if (!rf || !node) return;
@@ -322,7 +357,7 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     const h = node.measured?.height ?? 80;
     const { x, y } = node.internals.positionAbsolute;
     rf.setCenter(x + w / 2, y + h / 2, { zoom: Math.max(rf.getZoom(), READABLE_ZOOM), duration: 300 });
-  }), [setSelectedNodeId]);
+  }
 
   // Re-frame when nodes are bulk-loaded
   useEffect(() => {
@@ -343,14 +378,16 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     addNode(dropped.moduleType, position);
   }, [addNode]);
 
-  const onNodeClick = useCallback((_: React.MouseEvent, node: Node<NodeData>) => {
-    setSelectedNodeId(node.id);
-  }, [setSelectedNodeId]);
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type === GROUP_NODE_TYPE) setSelectedGroupId(node.id);
+    else setSelectedNodeId(node.id);
+  }, [setSelectedNodeId, setSelectedGroupId]);
 
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedGroupId(null);
     setCtxMenu(null);
-  }, [setSelectedNodeId]);
+  }, [setSelectedNodeId, setSelectedGroupId]);
 
   const validateConnection = useCallback((conn: Edge | Connection) => {
     const c: Connection = {
@@ -394,11 +431,18 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     });
   }, [onShowSpotlight]);
 
-  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node<NodeData>) => {
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, node: Node) => {
     e.preventDefault();
-    setSelectedNodeId(node.id);
+    if (node.type === GROUP_NODE_TYPE) {
+      setSelectedGroupId(node.id);
+      setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: null, groupId: node.id });
+      return;
+    }
+    // Keep a multiple selection that includes this layer, so the menu can act on all of it
+    if (!node.selected) setSelectedNodeId(node.id);
+    else useGraphStore.setState({ selectedNodeId: node.id, selectedGroupId: null });
     setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
-  }, [setSelectedNodeId]);
+  }, [setSelectedNodeId, setSelectedGroupId]);
 
   const onPaneContextMenu = useCallback((e: MouseEvent | React.MouseEvent) => {
     e.preventDefault();
@@ -413,8 +457,9 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
       className="w-full h-full relative"
       onMouseUp={onMouseUp}
     >
+      <CanvasViewContext.Provider value={view}>
       <ReactFlow
-        nodes={nodes} edges={displayEdges}
+        nodes={view.nodes as Node<NodeData>[]} edges={view.edges}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
         onNodeClick={onNodeClick} onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
@@ -445,6 +490,7 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="var(--bg-dot)" />
         <Controls showInteractive={false} />
       </ReactFlow>
+      </CanvasViewContext.Provider>
 
       {/* Custom minimap */}
       <CustomMinimap visible={minimapVisible} />
@@ -452,7 +498,7 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
       {/* Context menu */}
       {ctxMenu && (
         <ContextMenu
-          x={ctxMenu.x} y={ctxMenu.y} nodeId={ctxMenu.nodeId}
+          x={ctxMenu.x} y={ctxMenu.y} nodeId={ctxMenu.nodeId} groupId={ctxMenu.groupId}
           onClose={() => setCtxMenu(null)}
           onShowSpotlight={() => onShowSpotlight()}
         />

@@ -78,7 +78,7 @@ function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareI
   const liveRunId = useRunStore((s) => s.liveRunId);
 
   const restore = (run: RunRecord) => {
-    replaceGraph(run.graph.nodes, run.graph.edges, useGraphStore.getState().projectName);
+    replaceGraph(run.graph.nodes, run.graph.edges, useGraphStore.getState().projectName, run.graph.groups);
     // The device is this computer's, not the run's
     const { device } = useTrainingStore.getState().config;
     useTrainingStore.getState().updateConfig({ ...run.config, device });

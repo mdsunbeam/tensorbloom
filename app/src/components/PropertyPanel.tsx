@@ -5,6 +5,7 @@ import { MODULE_REGISTRY, CATEGORY_COLORS } from "../lib/registry";
 import { computeModelSummary, formatParamCount, formatFlops } from "../lib/model-summary";
 import { formatCtorArgs, generateNodeSnippet } from "../lib/decompiler";
 import TrainingPanel from "./TrainingPanel";
+import GroupPanel from "./GroupPanel";
 import { startTraining, stopTraining } from "../lib/training";
 import type { ParamDef, DataOutputDef, ScanResult } from "../lib/types";
 import { safePythonId, DEFAULT_DATA_OUTPUTS } from "../lib/types";
@@ -27,6 +28,7 @@ type Tab = "properties" | "training";
 export default function PropertyPanel() {
   const nodes = useGraphStore((s) => s.nodes);
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
+  const selectedGroup = useGraphStore((s) => (s.selectedGroupId ? s.groups.find((g) => g.id === s.selectedGroupId) : undefined));
   const [tab, setTab] = useState<Tab>("properties");
   const trainingStatus = useTrainingStore((s) => s.status);
   const stopRequested = useTrainingStore((s) => s.stopRequested);
@@ -41,6 +43,8 @@ export default function PropertyPanel() {
     }
     prevSelectedRef.current = selectedNodeId;
   }, [selectedNodeId]);
+  const selectedGroupId = selectedGroup?.id;
+  useEffect(() => { if (selectedGroupId) setTab("properties"); }, [selectedGroupId]);
 
   const activeTab = selectedNode ? tab : tab;
 
@@ -66,7 +70,9 @@ export default function PropertyPanel() {
 
       {/* Tab content */}
       {activeTab === "properties" ? (
-        selectedNode ? (
+        selectedGroup ? (
+          <GroupPanel group={selectedGroup} />
+        ) : selectedNode ? (
           <NodeEditor node={selectedNode} />
         ) : (
           <EmptyState onGoToTraining={() => setTab("training")} />

@@ -158,7 +158,7 @@ const TORCH_FUNCTIONS: Record<string, string> = {
 };
 
 /** TensorBloom's own nodes, which have no PyTorch counterpart */
-const NO_DOCS = new Set(["Composite", "Input", "Output", "Data"]);
+const NO_DOCS = new Set(["Input", "Output", "Data"]);
 
 /** What a layer is in PyTorch, e.g. "torch.nn.Linear" or "torch.cat"; null for TensorBloom's own nodes */
 export function torchName(moduleType: string): string | null {
