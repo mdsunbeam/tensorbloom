@@ -11,6 +11,7 @@ import { reviewPreflightFixes } from "../components/PreflightDialog";
 import { useHistoryStore } from "../store/history-store";
 import { isDatasetNode, extractDatasetConfig } from "./dataset-metadata";
 import { buildSidecarGraph } from "./sidecar-graph";
+import { requirePython } from "../store/python-store";
 
 export async function startTraining() {
   const store = useGraphStore.getState();
@@ -24,6 +25,8 @@ export async function startTraining() {
     useTrainingStore.getState().setError("The graph is empty. Add a Data node and some layers first.", "check");
     return;
   }
+
+  if (!requirePython("Training needs Python.")) return;
 
   useTrainingStore.getState().setStatus("starting");
 

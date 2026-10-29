@@ -239,11 +239,10 @@ function CustomMinimap({ visible }: { visible: boolean }) {
 
 interface GraphEditorProps {
   onShowSpotlight: (connectFrom?: ConnectFromContext) => void;
-  onShowTemplates: () => void;
   minimapVisible: boolean;
 }
 
-export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapVisible }: GraphEditorProps) {
+export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEditorProps) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
   const onNodesChange = useGraphStore((s) => s.onNodesChange);
@@ -447,42 +446,6 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
       {/* Batch size display toggle */}
       <BatchToggleButton />
 
-      {/* Empty state */}
-      {nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-3" style={{ background: "var(--bg-tertiary)" }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" /><circle cx="12" cy="18" r="3" />
-                <line x1="8.5" y1="7.5" x2="10" y2="16" /><line x1="15.5" y1="7.5" x2="14" y2="16" />
-              </svg>
-            </div>
-            <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
-              Build your neural network
-            </div>
-            <div className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>
-              Drag layers from the left panel, or start from a template
-            </div>
-            <button
-              onClick={onShowTemplates}
-              className="pointer-events-auto mb-4 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white"
-              style={{ background: "var(--accent)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
-            >
-              Start from a template
-            </button>
-            <div className="flex items-center justify-center gap-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
-              <span>
-                <kbd className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Ctrl+K</kbd> search layers
-              </span>
-              <span>
-                <kbd className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Ctrl+I</kbd> import code
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

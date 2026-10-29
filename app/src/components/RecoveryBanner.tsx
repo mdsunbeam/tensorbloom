@@ -11,14 +11,14 @@ function timeAgo(timestamp: number): string {
   return `${d} day${d === 1 ? "" : "s"} ago`;
 }
 
-/** Offers back unsaved work from the last session, at the top of the canvas */
+/** Offers back unsaved work from the last session. Placed at the top of the canvas by App. */
 export default function RecoveryBanner({ data, onRestore, onDiscard }: {
   data: AutoSaveData;
   onRestore: () => void;
   onDiscard: () => void;
 }) {
   return (
-    <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 pl-4 pr-2 py-2 rounded-xl text-xs"
+    <div className="pointer-events-auto flex items-center gap-3 pl-4 pr-2 py-2 rounded-xl text-xs"
       role="status"
       style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)", boxShadow: "var(--node-shadow-hover)" }}>
       <span className="whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>

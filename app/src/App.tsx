@@ -8,11 +8,12 @@ import TrainingCharts from "./components/TrainingCharts";
 import TrainingLogs from "./components/TrainingLogs";
 import Toolbar from "./components/Toolbar";
 import ToastContainer, { toast } from "./components/Toast";
-import PythonSetup from "./components/PythonSetup";
+import PythonSetupCard from "./components/PythonSetupCard";
+import WelcomeCard from "./components/WelcomeCard";
+import { usePythonStore } from "./store/python-store";
 import DragOverlay from "./components/DragOverlay";
 import ConfirmDialog from "./components/ConfirmDialog";
 import PreflightDialog from "./components/PreflightDialog";
-import { LogoMark } from "./components/ui/Logo";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
@@ -31,7 +32,7 @@ import { useHistoryStore, startHistoryTracking } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
 import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
-import { TEMPLATES, prependDatasetNode } from "./lib/templates";
+import { TEMPLATES, templateGraph } from "./lib/templates";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
 import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
@@ -47,6 +48,7 @@ type BottomTab = "code" | "charts" | "logs";
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
   const trainingStatus = useTrainingStore((s) => s.status);
+  const canvasEmpty = useGraphStore((s) => s.nodes.length === 0);
   const logCount = useTrainingStore((s) => s.logs.length);
   const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, logs: 280 });
   const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
@@ -62,9 +64,7 @@ export default function App() {
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [minimapVisible, setMinimapVisible] = useState(true);
-  const [pythonReady, setPythonReady] = useState(false);
   const [recovered, setRecovered] = useState<AutoSaveData | null>(null);
-  const [checkingPython, setCheckingPython] = useState(true);
   const [gpuInfo, setGpuInfo] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [compareModel, _setCompareModel] = useState<{ name: string; nodes: Node<NodeData>[] } | null>(null);
@@ -79,21 +79,9 @@ export default function App() {
     restoreCustomBlocks();
   }, []);
 
-  // Check Python environment on startup
+  // Check for Python in the background. The editor doesn't wait for it; training does.
   useEffect(() => {
-    (async () => {
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const status = await invoke<{ ready: boolean }>("check_python_env");
-        if (status.ready) {
-          setPythonReady(true);
-        }
-      } catch {
-        // Browser mode or Tauri not available — skip setup screen
-        setPythonReady(true);
-      }
-      setCheckingPython(false);
-    })();
+    void usePythonStore.getState().check();
   }, []);
 
   // Detect GPU via nvidia-smi (no sidecar dependency)
@@ -258,10 +246,8 @@ export default function App() {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
-    const raw = tpl.build();
-    const dsType = tpl.trainingDefaults?.dataset?.type;
-    const { nodes, edges } = dsType ? prependDatasetNode(raw, dsType, tpl.supervised !== false) : raw;
-    replaceGraph(autoLayout(nodes, edges), edges, tpl.name);
+    const { nodes, edges } = templateGraph(tpl);
+    replaceGraph(nodes, edges, tpl.name);
     if (tpl.trainingDefaults) {
       const d = tpl.trainingDefaults;
       useTrainingStore.getState().applyTemplateDefaults(tpl.name, {
@@ -274,6 +260,16 @@ export default function App() {
     }
     // A fresh template has nothing to lose until it's edited
     useDocumentStore.getState().markSaved(null);
+  }, []);
+
+  // From the welcome card: a Data node to build from, selected so its source can be picked
+  const addDataNode = useCallback(() => {
+    const graph = useGraphStore.getState();
+    graph.addNode("Data", { x: 300, y: 60 });
+    const added = useGraphStore.getState().nodes[useGraphStore.getState().nodes.length - 1];
+    if (!added) return;
+    graph.onNodesChange([{ type: "select", id: added.id, selected: true }]);
+    graph.setSelectedNodeId(added.id);
   }, []);
 
   const handleSpotlightSelect = useCallback((moduleType: string) => {
@@ -310,21 +306,6 @@ export default function App() {
     document.addEventListener("mouseup", onMouseUp);
   }, [bottomTab]);
 
-  // Show setup screen if Python not ready
-  if (!checkingPython && !pythonReady) {
-    return <PythonSetup onReady={() => setPythonReady(true)} />;
-  }
-
-  // Show loading while checking
-  if (checkingPython) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-4 h-screen w-screen" style={{ background: "var(--bg-primary)" }}>
-        <LogoMark size={48} className="text-accent-text animate-pulse" />
-        <div className="text-sm" style={{ color: "var(--text-muted)" }}>Starting TensorBloom...</div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: "var(--bg-primary)" }}>
       <Toolbar
@@ -359,18 +340,33 @@ export default function App() {
 
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
-            <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} onShowTemplates={() => setTemplatesOpen(true)} minimapVisible={minimapVisible} />
-            {recovered && (
-              <RecoveryBanner
-                data={recovered}
-                onRestore={async () => {
-                  if (!(await confirmDiscardChanges("restoring your earlier work"))) return;
-                  restoreAutoSave(recovered);
-                  setRecovered(null);
-                }}
-                onDiscard={() => { clearAutoSave(); setRecovered(null); }}
-              />
-            )}
+            <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
+            {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
+            <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
+              {recovered && (
+                <RecoveryBanner
+                  data={recovered}
+                  onRestore={async () => {
+                    if (!(await confirmDiscardChanges("restoring your earlier work"))) return;
+                    restoreAutoSave(recovered);
+                    setRecovered(null);
+                  }}
+                  onDiscard={() => { clearAutoSave(); setRecovered(null); }}
+                />
+              )}
+              {canvasEmpty && <PythonSetupCard placement="inline" />}
+              {canvasEmpty && (
+                <div className="my-auto w-full flex justify-center py-3">
+                  <WelcomeCard
+                    onSelectTemplate={handleTemplate}
+                    onShowTemplates={() => setTemplatesOpen(true)}
+                    onShowImport={() => setImportOpen(true)}
+                    onAddData={addDataNode}
+                  />
+                </div>
+              )}
+            </div>
+            {!canvasEmpty && <PythonSetupCard placement="floating" />}
           </div>
 
           {/* Bottom panel bar with tabs */}

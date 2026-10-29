@@ -8,6 +8,7 @@ import type { NodeData } from "../store/graph-store";
 import type { NodeCategory } from "./types";
 import { DEFAULT_DATA_OUTPUTS } from "./types";
 import { MODULE_REGISTRY } from "./registry";
+import { autoLayout } from "./auto-layout";
 
 export type TemplateCategory = "getting-started" | "vision" | "language" | "audio" | "generative" | "other";
 
@@ -141,6 +142,14 @@ export function prependDatasetNode(
 }
 
 // ─── Category display order & labels ────────────────────────────────────────
+
+/** A template's graph as it opens on the canvas: a Data node in front when it names a dataset, then laid out */
+export function templateGraph(tpl: Template): { nodes: Node<NodeData>[]; edges: Edge[] } {
+  const raw = tpl.build();
+  const dsType = tpl.trainingDefaults?.dataset?.type;
+  const { nodes, edges } = dsType ? prependDatasetNode(raw, dsType, tpl.supervised !== false) : raw;
+  return { nodes: autoLayout(nodes, edges), edges };
+}
 
 export const TEMPLATE_CATEGORY_ORDER: TemplateCategory[] = [
   "getting-started", "vision", "language", "audio", "generative", "other",

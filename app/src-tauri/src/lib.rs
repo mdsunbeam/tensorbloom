@@ -3,8 +3,9 @@ mod python_env;
 mod sidecar_manager;
 
 use std::process::Command;
+use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Check if the Python environment is ready.
 #[tauri::command]
@@ -14,12 +15,29 @@ async fn check_python_env(app: tauri::AppHandle) -> Result<python_env::PythonEnv
     Ok(python_env::check_env(&app_data))
 }
 
-/// Set up the Python venv and install PyTorch.
+static SETUP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Set up the Python venv and install PyTorch. Progress arrives as
+/// "python-setup" events while it runs.
 #[tauri::command]
 async fn setup_python_env(app: tauri::AppHandle) -> Result<python_env::PythonEnvStatus, String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&app_data).map_err(|e| e.to_string())?;
-    python_env::setup_env(&app_data)
+    if SETUP_RUNNING.swap(true, Ordering::SeqCst) {
+        return Err("Python setup is already running".to_string());
+    }
+    // Installing takes minutes; keep it off the async runtime
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let report = |update: python_env::SetupUpdate| {
+            let _ = app.emit("python-setup", update);
+        };
+        python_env::setup_env(&app_data, &report)
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|r| r);
+    SETUP_RUNNING.store(false, Ordering::SeqCst);
+    result
 }
 
 /// Get the venv Python path.

@@ -1,6 +1,7 @@
 import { useGraphStore } from "../store/graph-store";
 import { useTrainingStore, runFraction } from "../store/training-store";
 import { startTraining, stopTraining } from "../lib/training";
+import { usePythonStore } from "../store/python-store";
 import Button from "./ui/Button";
 
 /** Train/Stop button with the run's live status, for the toolbar */
@@ -14,9 +15,29 @@ export default function RunControls({ onShowRun }: { onShowRun: () => void }) {
   const errorKind = useTrainingStore((s) => s.errorKind);
   const hasNodes = useGraphStore((s) => s.nodes.length > 0);
   const stopping = useTrainingStore((s) => s.stopRequested && s.status === "running");
+  const pythonStatus = usePythonStore((s) => s.status);
+  const pythonStep = usePythonStore((s) => s.step);
+  const setupCardOpen = usePythonStore((s) => s.cardOpen);
 
   let chip: React.ReactNode = null;
-  if (status === "running" || status === "starting") {
+  let onChipClick = onShowRun;
+  if ((pythonStatus === "installing" || pythonStatus === "failed") && !setupCardOpen) {
+    // The setup card is hidden; keep its state visible here
+    onChipClick = () => usePythonStore.getState().openCard();
+    chip = pythonStatus === "installing" ? (
+      <>
+        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" aria-hidden="true" />
+        <span className="text-fg-secondary" aria-live="polite">
+          Setting up Python{pythonStep ? `, step ${pythonStep.step} of ${pythonStep.total}` : "…"}
+        </span>
+      </>
+    ) : (
+      <>
+        <AlertIcon className="text-danger" />
+        <span className="text-danger">Python setup didn't finish</span>
+      </>
+    );
+  } else if (status === "running" || status === "starting") {
     const label = status === "starting" ? "Checking the model…"
       : stopping ? "Stopping…"
       : downloading ? `Downloading ${downloading}…`
@@ -63,8 +84,8 @@ export default function RunControls({ onShowRun }: { onShowRun: () => void }) {
       {chip && (
         <button
           type="button"
-          onClick={onShowRun}
-          title="Show the run"
+          onClick={onChipClick}
+          title={onChipClick === onShowRun ? "Show the run" : "Show Python setup"}
           className="flex items-center gap-2 h-7 px-2.5 rounded-lg text-[11px] tabular-nums whitespace-nowrap hover:bg-surface-raised transition-colors"
         >
           {chip}

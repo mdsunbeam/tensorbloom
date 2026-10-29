@@ -6,6 +6,7 @@
 
 import type { JsonRpcResponse } from "./types";
 import type { EnvironmentInfo } from "../store/training-store";
+import { requirePython } from "../store/python-store";
 
 let requestId = 0;
 let sidecarStarted = false;
@@ -157,7 +158,19 @@ async function ensureSidecar(): Promise<boolean> {
   }
 }
 
+/** What to tell people when a call can't run because Python isn't set up */
+function needsPythonReason(method: string): string {
+  if (method === "compile") return "Turning code into a graph needs Python.";
+  if (method.startsWith("data.")) return "Reading datasets needs Python.";
+  if (method.startsWith("export.")) return "Exporting needs Python.";
+  if (method.startsWith("train.")) return "Training needs Python.";
+  return "This needs Python.";
+}
+
 export async function sidecarCall<T = unknown>(method: string, params: unknown = {}): Promise<T> {
+  if (!requirePython(needsPythonReason(method))) {
+    throw new Error("Python isn't set up yet. Set it up from the card at the top right of the canvas.");
+  }
   const ready = await ensureSidecar();
   if (!ready) {
     const detail = startupError || "Unknown error";
