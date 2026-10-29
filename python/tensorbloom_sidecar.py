@@ -1744,6 +1744,7 @@ def _train_loop(graph_json: dict, config: dict):
                 torch.cuda.set_rng_state_all(ckpt["cuda_rng_state"])
             send_notification("train.progress", {"status": "checkpoint", "path": resume_path, "epoch": start_epoch - 1})
 
+        steps_per_epoch = len(train_loader)
         for epoch in range(start_epoch, epochs + 1):
             if _train_stop_event.is_set():
                 break
@@ -1793,6 +1794,7 @@ def _train_loop(graph_json: dict, config: dict):
                     send_notification("train.progress", {
                         "epoch": epoch,
                         "step": batch_idx,
+                        "total_steps": steps_per_epoch,
                         "train_loss": loss.item(),
                         "lr": optimizer.param_groups[0]["lr"],
                     })

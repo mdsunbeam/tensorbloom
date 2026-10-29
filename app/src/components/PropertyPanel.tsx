@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useGraphStore } from "../store/graph-store";
-import { useTrainingStore } from "../store/training-store";
+import { useTrainingStore, runFraction } from "../store/training-store";
 import { MODULE_REGISTRY, CATEGORY_COLORS } from "../lib/registry";
 import { computeModelSummary, formatParamCount, formatFlops } from "../lib/model-summary";
 import { formatCtorArgs, generateNodeSnippet } from "../lib/decompiler";
@@ -24,6 +24,7 @@ export default function PropertyPanel() {
   const selectedNodeId = useGraphStore((s) => s.selectedNodeId);
   const [tab, setTab] = useState<Tab>("properties");
   const trainingStatus = useTrainingStore((s) => s.status);
+  const stopRequested = useTrainingStore((s) => s.stopRequested);
   const prevSelectedRef = useRef<string | null>(null);
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId);
@@ -72,9 +73,9 @@ export default function PropertyPanel() {
           <div className="px-4 py-3 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
             <TrainingProgress />
             {trainingStatus === "running" ? (
-              <Button variant="secondary" size="lg" block onClick={stopTraining}>
+              <Button variant="secondary" size="lg" block onClick={stopTraining} disabled={stopRequested}>
                 <span className="w-2.5 h-2.5 rounded-sm bg-danger" aria-hidden="true" />
-                Stop training
+                {stopRequested ? "Stopping…" : "Stop training"}
               </Button>
             ) : trainingStatus === "starting" ? (
               <Button variant="primary" size="lg" block disabled className="!opacity-80" style={{ animation: "pulse-subtle 1.5s ease-in-out infinite" }}>
@@ -189,27 +190,27 @@ function TrainingProgress() {
   const currentEpoch = useTrainingStore((s) => s.currentEpoch);
   const epochs = useTrainingStore((s) => s.config.epochs);
   const metrics = useTrainingStore((s) => s.metrics);
+  const fraction = useTrainingStore(runFraction);
+  const downloading = useTrainingStore((s) => s.downloading);
 
   if (status !== "running") return null;
 
   const lastLoss = metrics.length > 0 ? metrics[metrics.length - 1].trainLoss : null;
-  const progress = epochs > 0 ? (currentEpoch / epochs) * 100 : 0;
 
   return (
     <div className="mb-3 space-y-1.5">
       <div className="flex items-center justify-between text-[11px]">
-        <span style={{ color: "var(--text-secondary)" }}>Epoch {currentEpoch} / {epochs}</span>
+        <span className="text-fg-secondary">
+          {downloading ? `Downloading ${downloading}…` : currentEpoch === 0 ? "Preparing data…" : `Epoch ${currentEpoch} of ${epochs}`}
+        </span>
         {lastLoss !== null && (
-          <span className="font-mono tabular-nums text-[11px]" style={{ color: "var(--text-primary)" }}>
-            loss: {lastLoss.toFixed(4)}
+          <span className="font-mono tabular-nums text-[11px] text-fg">
+            loss {lastLoss.toFixed(4)}
           </span>
         )}
       </div>
-      <div className="w-full h-1 rounded-full" style={{ background: "var(--bg-tertiary)" }}>
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(100, progress)}%`, background: "var(--accent)" }}
-        />
+      <div className="w-full h-1 rounded-full bg-surface-raised overflow-hidden">
+        <div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${fraction * 100}%` }} />
       </div>
     </div>
   );

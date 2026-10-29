@@ -102,6 +102,8 @@ ckpts = [p["path"] for p in progress if p.get("status") == "checkpoint"]
 check("checkpoint written under the data dir", bool(ckpts) and ckpts[-1].startswith(tmp) and os.path.exists(ckpts[-1]), str(ckpts))
 lrs = [p["lr"] for p in progress if "lr" in p and p.get("lr") is not None]
 check("OneCycleLR changes the learning rate", len(set(round(lr, 8) for lr in lrs)) > 2, str(lrs))
+steps = [p for p in progress if p.get("total_steps")]
+check("batch progress says how many batches an epoch has", bool(steps) and all(p["total_steps"] >= 1 for p in steps), str(progress[:3]))
 check("trained weights are kept for export", sc._last_trained_state is not None)
 
 # --- Export uses trained weights ---

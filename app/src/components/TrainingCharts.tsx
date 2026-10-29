@@ -1,5 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from "react";
-import { useTrainingStore } from "../store/training-store";
+import { useTrainingStore, runFraction, type TrainingErrorKind, type TrainingResults } from "../store/training-store";
+import { startTraining } from "../lib/training";
+import { explainTrainingError } from "../lib/training-errors";
+import Button from "./ui/Button";
+import { formatLoss } from "./RunControls";
 
 function formatTime(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -8,13 +12,26 @@ function formatTime(ms: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () => void }) {
+/** Human-friendly run length: "45s", "3m 12s", "1h 4m" */
+export function formatDuration(ms: number): string {
+  const sec = Math.max(0, Math.round(ms / 1000));
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m}m ${sec % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+export default function TrainingCharts({ onSwitchToLogs, onExport }: { onSwitchToLogs: () => void; onExport: () => void }) {
   const metrics = useTrainingStore((s) => s.metrics);
   const status = useTrainingStore((s) => s.status);
   const currentEpoch = useTrainingStore((s) => s.currentEpoch);
   const config = useTrainingStore((s) => s.config);
   const error = useTrainingStore((s) => s.error);
+  const errorKind = useTrainingStore((s) => s.errorKind);
   const startedAt = useTrainingStore((s) => s.startedAt);
+  const fraction = useTrainingStore(runFraction);
+  const downloading = useTrainingStore((s) => s.downloading);
+  const results = useTrainingStore((s) => s.trainingResults);
 
   // Elapsed timer
   const [now, setNow] = useState(Date.now());
@@ -25,9 +42,7 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
   }, [status]);
 
   const elapsed = startedAt ? now - startedAt : 0;
-  const eta = currentEpoch > 0 && startedAt
-    ? (elapsed / currentEpoch) * (config.epochs - currentEpoch)
-    : 0;
+  const eta = fraction > 0.02 && startedAt ? (elapsed / fraction) * (1 - fraction) : 0;
 
   const epochData = useMemo(() => {
     const map = new Map<number, { losses: number[]; valLosses: number[]; accs: number[]; valAccs: number[]; lrs: number[] }>();
@@ -52,29 +67,44 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
       }));
   }, [metrics]);
 
-  if (metrics.length === 0 && (status === "idle" || status === "starting")) {
+  if (metrics.length === 0) {
+    if (status === "error" && error) {
+      return (
+        <div className="h-full overflow-y-auto p-3">
+          <ErrorPanel message={error} kind={errorKind} onShowLogs={onSwitchToLogs} />
+        </div>
+      );
+    }
+    const busy = status === "starting" || status === "running";
     return (
       <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2.5" style={{ background: "var(--bg-tertiary)" }}>
-            {status === "starting" ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin">
+        <div className="text-center max-w-xs">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2.5 bg-surface-raised text-fg-muted">
+            {busy ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="animate-spin" aria-hidden="true">
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
             ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
             )}
           </div>
-          <div className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
-            {status === "starting" ? "Initializing PyTorch..." : "Ready to train"}
+          <div className="text-xs font-medium mb-1 text-fg-secondary" aria-live="polite">
+            {status === "starting" ? "Checking the model…"
+              : status === "running" ? (downloading ? `Downloading ${downloading}…` : "Preparing data…")
+              : "Ready to train"}
           </div>
-          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-            {status === "starting"
-              ? "Loading model and preparing dataset"
-              : "Configure hyperparameters in the Training tab, then click Start Training"}
+          <div className="text-[11px] text-fg-muted">
+            {status === "starting" ? "Making sure the layers fit the data"
+              : status === "running" ? (downloading ? "This happens once. Later runs use the saved copy." : "Loading the dataset and building the model")
+              : "Settings are in the Training tab. Loss and accuracy appear here as the model trains."}
           </div>
+          {!busy && (
+            <Button variant="primary" className="mt-3" onClick={() => void startTraining()} title="Ctrl+Enter">
+              Start training
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -121,15 +151,18 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
             GPU {latestGpu.allocated_mb.toFixed(0)} MB <span style={{ opacity: 0.8 }}>(peak {latestGpu.max_allocated_mb.toFixed(0)})</span>
           </span>
         )}
-        {error && (
-          <>
-            <span className="truncate" style={{ color: "var(--danger)" }}>{error}</span>
-            <button onClick={onSwitchToLogs} className="ml-auto flex-shrink-0 underline" style={{ color: "var(--text-secondary)" }}>
-              Show logs
-            </button>
-          </>
-        )}
       </div>
+
+      {status === "error" && error && (
+        <div className="px-3 pt-3 flex-shrink-0">
+          <ErrorPanel message={error} kind={errorKind} onShowLogs={onSwitchToLogs} />
+        </div>
+      )}
+      {status === "finished" && results && (
+        <div className="px-3 pt-3 flex-shrink-0">
+          <RunSummary results={results} onExport={onExport} />
+        </div>
+      )}
 
       {/* Charts, one column each so they use the panel's full height */}
       <div className="flex-1 min-h-0 grid gap-3 p-3" style={{ gridTemplateColumns: `repeat(${chartCount}, minmax(0, 1fr))` }}>
@@ -168,6 +201,89 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
             formatTick={(v) => (v === 0 ? "0" : v.toExponential(0))}
           />
         )}
+      </div>
+    </div>
+  );
+}
+
+function RunSummary({ results, onExport }: { results: TrainingResults; onExport: () => void }) {
+  const planned = results.plannedEpochs ?? results.totalEpochs;
+  const title = results.stoppedByUser ? `Stopped at epoch ${results.totalEpochs} of ${planned}`
+    : results.earlyStopped ? `Stopped early at epoch ${results.totalEpochs} of ${planned}, when validation stopped improving`
+    : `Done in ${formatDuration(results.durationMs)}`;
+  const best = results.bestValAcc != null
+    ? <>Best val accuracy <Strong>{(results.bestValAcc * 100).toFixed(1)}%</Strong>{results.bestValAccEpoch != null && <> at epoch {results.bestValAccEpoch}</>}</>
+    : results.bestValLoss != null
+      ? <>Best val loss <Strong>{formatLoss(results.bestValLoss)}</Strong>{results.bestValEpoch != null && <> at epoch {results.bestValEpoch}</>}</>
+      : <>Final train loss <Strong>{formatLoss(results.finalTrainLoss)}</Strong></>;
+  const stoppedEarly = results.stoppedByUser || results.earlyStopped;
+
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-line bg-surface-raised" role="status">
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${stoppedEarly ? "bg-surface text-fg-secondary" : "bg-success-subtle text-success"}`}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs font-semibold text-fg">{title}</div>
+        <div className="text-[11px] text-fg-secondary">
+          {best}
+          {stoppedEarly && <> · ran for {formatDuration(results.durationMs)}</>}
+          {results.finalTrainAcc != null && <> · final train accuracy {(results.finalTrainAcc * 100).toFixed(1)}%</>}
+        </div>
+      </div>
+      <Button size="sm" onClick={onExport}>Export model</Button>
+      <Button size="sm" variant="primary" onClick={() => void startTraining()} title="Ctrl+Enter">Train again</Button>
+    </div>
+  );
+}
+
+function Strong({ children }: { children: React.ReactNode }) {
+  return <span className="font-semibold text-fg tabular-nums">{children}</span>;
+}
+
+/** Why the run didn't start or didn't finish, what to try, and the raw details */
+function ErrorPanel({ message, kind, onShowLogs }: { message: string; kind: TrainingErrorKind; onShowLogs: () => void }) {
+  const logs = useTrainingStore((s) => s.logs);
+  const [copied, setCopied] = useState(false);
+  const hint = kind === "run" ? explainTrainingError(message) : null;
+  const problems = kind === "check" ? message.split("\n").filter(Boolean) : [];
+  // The traceback the sidecar printed, for the copy and for people who want the details
+  const traceback = kind === "run" ? logs.filter((l) => l.stream === "stderr").slice(-30).map((l) => l.text).join("\n") : "";
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(traceback ? `${message}\n\n${traceback}` : message);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  return (
+    <div role="alert" className="rounded-lg border border-danger bg-danger-subtle px-3 py-2.5">
+      <div className="flex items-start gap-2.5">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 mt-px text-danger" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-semibold text-fg">
+            {kind === "check" ? (problems.length === 1 ? "Fix this before training" : "Fix these before training") : "Training stopped with an error"}
+          </div>
+          {hint && <p className="mt-1 text-xs leading-relaxed text-fg">{hint}</p>}
+          {kind === "check" ? (
+            <ul className="mt-1 list-disc pl-4 space-y-0.5 text-xs leading-relaxed text-fg-secondary">
+              {problems.map((p, i) => <li key={i}>{p}</li>)}
+            </ul>
+          ) : (
+            <pre className="mt-1.5 max-h-24 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-fg-secondary select-text">{message}</pre>
+          )}
+          <div className="mt-2 flex items-center gap-2">
+            <Button size="sm" variant="primary" onClick={() => void startTraining()}>Try again</Button>
+            {kind === "run" && <Button size="sm" onClick={onShowLogs}>Show logs</Button>}
+            <Button size="sm" variant="ghost" onClick={copy}>{copied ? "Copied" : "Copy error"}</Button>
+          </div>
+        </div>
       </div>
     </div>
   );

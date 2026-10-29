@@ -24,6 +24,9 @@ const SHORTCUTS = [
   { key: "Double-click", action: "Rename node" },
   { key: "Right-click", action: "Context menu" },
 
+  { section: "Training" },
+  { key: "Ctrl+Enter", action: "Start training" },
+
   { section: "Tools" },
   { key: "Ctrl+K", action: "Spotlight — quick add layer" },
   { key: "Ctrl+I", action: "Import PyTorch code" },
