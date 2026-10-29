@@ -11,8 +11,8 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import { useGraphStore, type NodeData } from "../store/graph-store";
-import { useThemeStore } from "../store/theme-store";
 import { useTrainingStore } from "../store/training-store";
+import { CATEGORY_COLORS } from "../lib/registry";
 import { inferShapesClient } from "../lib/shape-inference";
 import { isValidConnection as checkValid } from "../lib/connection-validation";
 import { endDrag, getDragState } from "./DragOverlay";
@@ -53,21 +53,6 @@ function BatchToggleButton() {
   );
 }
 
-const MINIMAP_COLORS: Record<string, Record<string, string>> = {
-  dark: {
-    io: "#6366f1", data: "#14b8a6", linear: "#3b82f6", conv: "#8b5cf6",
-    pool: "#ec4899", norm: "#10b981", activation: "#eab308", recurrent: "#06b6d4",
-    transformer: "#f97316", dropout: "#71717a", embedding: "#d946ef", loss: "#ef4444",
-    reshape: "#0ea5e9", math: "#f472b6", vision: "#84cc16",
-  },
-  light: {
-    io: "#4f46e5", data: "#0d9488", linear: "#2563eb", conv: "#7c3aed",
-    pool: "#db2777", norm: "#059669", activation: "#ca8a04", recurrent: "#0891b2",
-    transformer: "#ea580c", dropout: "#57534e", embedding: "#c026d3", loss: "#dc2626",
-    reshape: "#0284c7", math: "#ec4899", vision: "#65a30d",
-  },
-};
-
 const MINIMAP_W = 168;
 const MINIMAP_H = 112;
 const MINIMAP_PAD = 50;
@@ -76,12 +61,10 @@ function CustomMinimap({ visible }: { visible: boolean }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef(false);
   const nodes = useGraphStore((s) => s.nodes);
-  const theme = useThemeStore((s) => s.theme);
   const { setCenter, setViewport, getViewport } = useReactFlow();
   const viewport = useViewport();
   const rfWidth = useStore((s) => s.width);
   const rfHeight = useStore((s) => s.height);
-  const colorMap = MINIMAP_COLORS[theme] ?? MINIMAP_COLORS.dark;
   const [hovered, setHovered] = useState(false);
 
   const bounds = useMemo(() => {
@@ -209,7 +192,7 @@ function CustomMinimap({ visible }: { visible: boolean }) {
           const nh = Math.max(2, (node.measured?.height ?? 80) * scale);
           const nx = (node.position.x - bounds.minX) * scale + offsetX;
           const ny = (node.position.y - bounds.minY) * scale + offsetY;
-          const c = colorMap[(node.data as NodeData).category] ?? "#4a4a6a";
+          const c = CATEGORY_COLORS[(node.data as NodeData).category] ?? "var(--text-muted)";
           const sel = !!node.selected;
           return (
             <g key={node.id}>
@@ -218,14 +201,14 @@ function CustomMinimap({ visible }: { visible: boolean }) {
                   x={nx - 2} y={ny - 2}
                   width={nw + 4} height={nh + 4}
                   rx={4} ry={4}
-                  fill="none" stroke={c} strokeWidth={1.5} strokeOpacity={0.3}
+                  fill="none" style={{ stroke: c }} strokeWidth={1.5} strokeOpacity={0.3}
                 />
               )}
               <rect
                 x={nx} y={ny}
                 width={nw} height={nh}
                 rx={3} ry={3}
-                fill={c}
+                style={{ fill: c }}
                 fillOpacity={sel ? 0.85 : 0.55}
               />
             </g>

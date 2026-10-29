@@ -8,6 +8,7 @@ import { formatShape } from "../lib/shape-inference";
 import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
+import { CategoryBadge, tint } from "../lib/category-icons";
 
 type TLNodeProps = NodeProps<Node<NodeData>>;
 
@@ -85,7 +86,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         background: "var(--bg-secondary)",
         border: `1.5px solid ${selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
         boxShadow: selected
-          ? `var(--node-shadow-hover), 0 0 0 2px ${color}20`
+          ? `var(--node-shadow-hover), 0 0 0 3px ${tint(color, 20)}`
           : hovered
             ? "var(--node-shadow-hover)"
             : "var(--node-shadow)",
@@ -97,12 +98,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
 
       {/* Header */}
       <div className={`flex items-center gap-2 px-3 font-semibold ${compact ? "py-3 text-[26px]" : "pt-2 pb-1.5 text-[14px]"}`}>
-        <div
-          className={`${compact ? "hidden" : "flex"} w-[18px] h-[18px] rounded-[4px] items-center justify-center text-[8px] font-bold text-white flex-shrink-0 opacity-90`}
-          style={{ background: color }}
-        >
-          {data.label.slice(0, 2).toUpperCase()}
-        </div>
+        {!compact && <CategoryBadge category={data.category} color={color} size={20} />}
         {editing ? (
           <input
             ref={inputRef}
