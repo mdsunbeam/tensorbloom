@@ -10,6 +10,7 @@ const SHORTCUTS = [
   { key: "Ctrl+N", action: "New project" },
   { key: "Ctrl+O", action: "Open project" },
   { key: "Ctrl+S", action: "Save project" },
+  { key: "Ctrl+Shift+S", action: "Save as" },
   { key: "Ctrl+E", action: "Export model (ONNX/TorchScript)" },
 
   { section: "Edit" },

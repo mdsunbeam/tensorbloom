@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useThemeStore } from "../store/theme-store";
 import { useGraphStore } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
-import { downloadProject, loadProjectFile, deserializeProject } from "../lib/project";
+import { useDocumentStore } from "../store/document-store";
 import { autoLayout } from "../lib/auto-layout";
 import { computeModelSummary, formatParamCount } from "../lib/model-summary";
-import { toast } from "./Toast";
+import { newProject, openProject, saveProject } from "../lib/document-actions";
 import { useEscapeKey } from "../lib/use-escape-key";
 
 interface ToolbarProps {
@@ -43,37 +43,6 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
   const closeMenu = useCallback(() => setOpenMenu(null), []);
   useEscapeKey(closeMenu, { enabled: openMenu !== null });
 
-  const handleSave = useCallback(async () => {
-    const { nodes, edges, projectName } = useGraphStore.getState();
-    const result = await downloadProject(projectName, nodes, edges);
-    if (result && typeof result === "string") {
-      // Extract name from saved path: "/path/to/my_model.tbloom" → "my_model"
-      const filename = result.split(/[/\\]/).pop() ?? "";
-      const name = filename.replace(/\.(tbloom|json)$/i, "").replace(/_/g, " ");
-      if (name && name !== projectName) {
-        useGraphStore.getState().setProjectName(name);
-      }
-      toast.success("Project saved");
-    }
-  }, []);
-
-  const handleOpen = useCallback(async () => {
-    const project = await loadProjectFile();
-    if (!project) return;
-    const { nodes, edges, warnings } = deserializeProject(project);
-    useHistoryStore.getState().pushSnapshot();
-    useGraphStore.getState().loadGraph(nodes, edges);
-    useGraphStore.getState().setProjectName(project.name);
-    for (const w of warnings) toast.warning(w);
-    toast.success(`Opened "${project.name}"`);
-  }, []);
-
-  const handleNew = useCallback(() => {
-    useHistoryStore.getState().pushSnapshot();
-    useGraphStore.getState().clearGraph();
-    useGraphStore.getState().setProjectName("Untitled");
-  }, []);
-
   const handleAutoLayout = useCallback(() => {
     const { nodes, edges } = useGraphStore.getState();
     if (nodes.length === 0) return;
@@ -85,9 +54,10 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
   const menus: { label: string; id: string; items: MenuItem[] }[] = [
     {
       label: "File", id: "file", items: [
-        { label: "New Project", shortcut: "Ctrl+N", action: handleNew },
-        { label: "Open Project...", shortcut: "Ctrl+O", action: handleOpen },
-        { label: "Save Project", shortcut: "Ctrl+S", action: handleSave },
+        { label: "New Project", shortcut: "Ctrl+N", action: newProject },
+        { label: "Open Project...", shortcut: "Ctrl+O", action: openProject },
+        { label: "Save", shortcut: "Ctrl+S", action: () => saveProject() },
+        { label: "Save As...", shortcut: "Ctrl+Shift+S", action: () => saveProject({ saveAs: true }) },
         { type: "separator" },
         { label: "Import PyTorch Code...", shortcut: "Ctrl+I", action: onShowImport },
         { label: "Export Model...", shortcut: "Ctrl+E", action: onShowExport },
@@ -220,6 +190,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
 
 function ProjectNameInput() {
   const projectName = useGraphStore((s) => s.projectName);
+  const dirty = useDocumentStore((s) => s.dirty);
   const setProjectName = useGraphStore((s) => s.setProjectName);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(projectName);
@@ -253,9 +224,10 @@ function ProjectNameInput() {
       style={{ color: "var(--text-muted)" }}
       onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-tertiary)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
-      title="Click to rename project"
+      title={dirty ? "Unsaved changes. Click to rename the project." : "Click to rename the project"}
     >
       {projectName}
+      {dirty && <span className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle" style={{ background: "var(--text-secondary)" }} aria-label="Unsaved changes" />}
     </button>
   );
 }

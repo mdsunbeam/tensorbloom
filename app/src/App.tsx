@@ -10,6 +10,8 @@ import Toolbar from "./components/Toolbar";
 import ToastContainer, { toast } from "./components/Toast";
 import PythonSetup from "./components/PythonSetup";
 import DragOverlay from "./components/DragOverlay";
+import ConfirmDialog from "./components/ConfirmDialog";
+import RecoveryBanner from "./components/RecoveryBanner";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -22,12 +24,13 @@ const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
 import { useThemeStore } from "./store/theme-store";
 import { useGraphStore } from "./store/graph-store";
-import { useHistoryStore, isApplyingHistory } from "./store/history-store";
+import { useHistoryStore, startHistoryTracking } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
-import { downloadProject, loadProjectFile, deserializeProject } from "./lib/project";
+import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
 import { TEMPLATES, prependDatasetNode } from "./lib/templates";
-import { startAutoSave, restoreAutoSave } from "./lib/auto-save";
+import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
+import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
 import { MODULE_REGISTRY } from "./lib/registry";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
@@ -56,6 +59,7 @@ export default function App() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [pythonReady, setPythonReady] = useState(false);
+  const [recovered, setRecovered] = useState<AutoSaveData | null>(null);
   const [checkingPython, setCheckingPython] = useState(true);
   const [gpuInfo, setGpuInfo] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -106,22 +110,57 @@ export default function App() {
     })();
   }, []);
 
-  // Auto-save + restore
+  // Undo history, unsaved-changes tracking and auto-save. Unsaved work from the last session is offered back, not loaded silently.
   useEffect(() => {
-    const restored = restoreAutoSave();
-    if (restored) toast.info("Restored auto-saved project");
+    useDocumentStore.getState().markSaved(null);
+    setRecovered(readAutoSave());
+    const stopHistory = startHistoryTracking();
+    const stopDirty = startDirtyTracking();
     const stopAutoSave = startAutoSave();
-    return stopAutoSave;
+    return () => { stopHistory(); stopDirty(); stopAutoSave(); };
   }, []);
 
-  // Window title
+  // Window title, with a dot while there are unsaved changes
   useEffect(() => {
-    const name = useGraphStore.getState().projectName;
-    document.title = `${name} - TensorBloom`;
-    const unsub = useGraphStore.subscribe((s) => {
-      document.title = `${s.projectName} - TensorBloom`;
-    });
-    return unsub;
+    const update = () => {
+      const dirty = useDocumentStore.getState().dirty;
+      document.title = `${dirty ? "\u2022 " : ""}${useGraphStore.getState().projectName} - TensorBloom`;
+    };
+    update();
+    const unsubGraph = useGraphStore.subscribe((s, p) => { if (s.projectName !== p.projectName) update(); });
+    const unsubDoc = useDocumentStore.subscribe(update);
+    return () => { unsubGraph(); unsubDoc(); };
+  }, []);
+
+  // Ask before closing with unsaved changes. Auto-save first, in case the window goes anyway.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      writeAutoSave();
+      if (useDocumentStore.getState().dirty) e.preventDefault();
+    };
+    if ("__TAURI_INTERNALS__" in window) {
+      (async () => {
+        try {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          const win = getCurrentWindow();
+          unlisten = await win.onCloseRequested(async (event) => {
+            writeAutoSave();
+            if (!useDocumentStore.getState().dirty) return;
+            event.preventDefault();
+            if (await confirmDiscardChanges("closing TensorBloom")) {
+              clearAutoSave();
+              await win.destroy();
+            }
+          });
+        } catch {
+          // No Tauri window API; nothing to guard
+        }
+      })();
+    } else {
+      window.addEventListener("beforeunload", onBeforeUnload);
+    }
+    return () => { unlisten?.(); window.removeEventListener("beforeunload", onBeforeUnload); };
   }, []);
 
   // Auto-switch to training tab when training starts
@@ -146,11 +185,12 @@ export default function App() {
       else if (ctrl && key === "z" && e.shiftKey) { e.preventDefault(); useHistoryStore.getState().redo(); }
       else if (ctrl && key === "y") { e.preventDefault(); useHistoryStore.getState().redo(); }
       else if (ctrl && (key === "/" || key === "?")) { e.preventDefault(); setShortcutsOpen(true); }
+      else if (ctrl && key === "s" && e.shiftKey) { e.preventDefault(); saveProject({ saveAs: true }); }
       // Other Ctrl+Shift combos stay with the webview (e.g. Ctrl+Shift+I opens devtools)
       else if (e.shiftKey) return;
-      else if (ctrl && key === "s") { e.preventDefault(); const s = useGraphStore.getState(); downloadProject(s.projectName, s.nodes, s.edges).then((r) => { if (r !== null) toast.success("Project saved"); }); }
-      else if (ctrl && key === "o") { e.preventDefault(); handleOpenFile(); }
-      else if (ctrl && key === "n") { e.preventDefault(); useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().clearGraph(); useGraphStore.getState().setProjectName("Untitled"); }
+      else if (ctrl && key === "s") { e.preventDefault(); saveProject(); }
+      else if (ctrl && key === "o") { e.preventDefault(); openProject(); }
+      else if (ctrl && key === "n") { e.preventDefault(); newProject(); }
       else if (ctrl && key === "i") { e.preventDefault(); setImportOpen(true); }
       else if (ctrl && key === "l") { e.preventDefault(); handleAutoLayout(); }
       else if (ctrl && key === "k") { e.preventDefault(); setSpotlightOpen(true); }
@@ -167,31 +207,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Undo snapshots on structural changes
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const unsub = useGraphStore.subscribe((state, prev) => {
-      // An undo/redo isn't a new edit; snapshotting it would wipe the redo stack
-      if (isApplyingHistory()) return;
-      if (state.nodes.length !== prev.nodes.length || state.edges.length !== prev.edges.length) {
-        clearTimeout(timer);
-        timer = setTimeout(() => useHistoryStore.getState().pushSnapshot(), 300);
-      }
-    });
-    return () => { unsub(); clearTimeout(timer); };
-  }, []);
-
-  const handleOpenFile = useCallback(async () => {
-    const project = await loadProjectFile();
-    if (!project) return;
-    const { nodes, edges, warnings } = deserializeProject(project);
-    useHistoryStore.getState().pushSnapshot();
-    useGraphStore.getState().loadGraph(nodes, edges);
-    useGraphStore.getState().setProjectName(project.name);
-    for (const w of warnings) toast.warning(w);
-    toast.success(`Opened "${project.name}"`);
-  }, []);
-
   const handleAutoLayout = useCallback(() => {
     const { nodes, edges } = useGraphStore.getState();
     if (nodes.length === 0) return;
@@ -200,6 +215,7 @@ export default function App() {
   }, []);
 
   const handleImport = useCallback(async (code: string) => {
+    if (!(await confirmDiscardChanges("importing this code"))) return false;
     try {
       const result = await sidecarCall<{
         nodes: Array<{ id: string; type: string; moduleType?: string; label: string; position: { x: number; y: number }; params: Record<string, unknown> }>;
@@ -213,10 +229,10 @@ export default function App() {
           data: { moduleType: mt, label: n.label, category: (def?.category ?? "linear") as NodeCategory, params: n.params } };
       });
       const edges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
-      useHistoryStore.getState().pushSnapshot();
-      useGraphStore.getState().loadGraph(autoLayout(nodes, edges), edges);
-      useGraphStore.getState().setProjectName("Imported Model");
+      replaceGraph(autoLayout(nodes, edges), edges, "Imported Model");
+      useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
+      return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // Only blame setup when the sidecar is really down; otherwise show the actual error (e.g. a syntax error)
@@ -228,15 +244,14 @@ export default function App() {
     }
   }, []);
 
-  const handleTemplate = useCallback((index: number) => {
+  const handleTemplate = useCallback(async (index: number) => {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
+    if (!(await confirmDiscardChanges("opening a template"))) return;
     const raw = tpl.build();
     const dsType = tpl.trainingDefaults?.dataset?.type;
     const { nodes, edges } = dsType ? prependDatasetNode(raw, dsType, tpl.supervised !== false) : raw;
-    useHistoryStore.getState().pushSnapshot();
-    useGraphStore.getState().loadGraph(autoLayout(nodes, edges), edges);
-    useGraphStore.getState().setProjectName(tpl.name);
+    replaceGraph(autoLayout(nodes, edges), edges, tpl.name);
     if (tpl.trainingDefaults) {
       const d = tpl.trainingDefaults;
       useTrainingStore.getState().applyTemplateDefaults(tpl.name, {
@@ -247,6 +262,8 @@ export default function App() {
         ...(d.dataset && { dataset: d.dataset }),
       });
     }
+    // A fresh template has nothing to lose until it's edited
+    useDocumentStore.getState().markSaved(null);
   }, []);
 
   const handleSpotlightSelect = useCallback((moduleType: string) => {
@@ -343,6 +360,17 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
             <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} onShowTemplates={() => setTemplatesOpen(true)} minimapVisible={minimapVisible} />
+            {recovered && (
+              <RecoveryBanner
+                data={recovered}
+                onRestore={async () => {
+                  if (!(await confirmDiscardChanges("restoring your earlier work"))) return;
+                  restoreAutoSave(recovered);
+                  setRecovered(null);
+                }}
+                onDiscard={() => { clearAutoSave(); setRecovered(null); }}
+              />
+            )}
           </div>
 
           {/* Bottom panel bar with tabs */}
@@ -446,6 +474,7 @@ export default function App() {
       </Suspense>
       <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
       <DragOverlay />
+      <ConfirmDialog />
     </div>
   );
 }
