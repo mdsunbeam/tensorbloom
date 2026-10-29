@@ -2,18 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { usePythonStore } from "../store/python-store";
 import { useGraphStore } from "../store/graph-store";
 import { startTraining } from "../lib/training";
+import { openExternal } from "../lib/open-external";
 import Button, { IconButton } from "./ui/Button";
 
 const PYTHON_DOWNLOAD_URL = "https://www.python.org/downloads/";
 
-async function openPythonDownload() {
-  try {
-    const { open } = await import("@tauri-apps/plugin-shell");
-    await open(PYTHON_DOWNLOAD_URL);
-  } catch {
-    window.open(PYTHON_DOWNLOAD_URL, "_blank", "noopener");
-  }
-}
 
 function formatBytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
@@ -126,7 +119,7 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
     );
     actions = (
       <>
-        {needsPython && <Button size="sm" onClick={() => void openPythonDownload()}>Get Python</Button>}
+        {needsPython && <Button size="sm" onClick={() => void openExternal(PYTHON_DOWNLOAD_URL)}>Get Python</Button>}
         <Button size="sm" variant="primary" onClick={() => void install()}>Try again</Button>
       </>
     );

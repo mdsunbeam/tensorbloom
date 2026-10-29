@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useMemo, useRef, useEffect } from "react";
+import { createContext, useContext, useState, useMemo, useRef, useEffect, useId } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
@@ -6,6 +6,8 @@ import { toast } from "./Toast";
 import NumberField from "./NumberField";
 import ThemedSelect from "./ui/Select";
 import Button from "./ui/Button";
+import HelpTip from "./ui/HelpTip";
+import { trainingHelp } from "../lib/param-help";
 import {
   DATASET_METADATA,
   checkDatasetCompatibility,
@@ -224,14 +226,7 @@ export default function TrainingPanel() {
           </div>
         </Field>
         <Field label="Deterministic Mode">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={config.deterministicMode}
-              onChange={(e) => updateConfig({ deterministicMode: e.target.checked })}
-              className="accent-[var(--accent)]" />
-            <span className="text-xs" style={{ color: "var(--text-primary)" }}>
-              {config.deterministicMode ? "Enabled" : "Disabled"}
-            </span>
-          </label>
+          <FieldCheckbox checked={config.deterministicMode} onChange={(v) => updateConfig({ deterministicMode: v })} />
           {config.deterministicMode && (
             <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
               May reduce performance. Ensures identical results with same seed.
@@ -243,24 +238,10 @@ export default function TrainingPanel() {
             onChange={(v) => updateConfig({ weightInit: v })} />
         </Field>
         <Field label="Mixed Precision">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={config.mixedPrecision}
-              onChange={(e) => updateConfig({ mixedPrecision: e.target.checked })}
-              className="accent-[var(--accent)]" />
-            <span className="text-xs" style={{ color: "var(--text-primary)" }}>
-              {config.mixedPrecision ? "Enabled" : "Disabled"}
-            </span>
-          </label>
+          <FieldCheckbox checked={config.mixedPrecision} onChange={(v) => updateConfig({ mixedPrecision: v })} />
         </Field>
         <Field label="Gradient Clipping">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={config.gradientClipping.enabled}
-              onChange={(e) => updateConfig({ gradientClipping: { ...config.gradientClipping, enabled: e.target.checked } })}
-              className="accent-[var(--accent)]" />
-            <span className="text-xs" style={{ color: "var(--text-primary)" }}>
-              {config.gradientClipping.enabled ? "Enabled" : "Disabled"}
-            </span>
-          </label>
+          <FieldCheckbox checked={config.gradientClipping.enabled} onChange={(v) => updateConfig({ gradientClipping: { ...config.gradientClipping, enabled: v } })} />
         </Field>
         {config.gradientClipping.enabled && (
           <Field label="Max Norm">
@@ -269,14 +250,7 @@ export default function TrainingPanel() {
           </Field>
         )}
         <Field label="Early Stopping">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={config.earlyStopping.enabled}
-              onChange={(e) => updateConfig({ earlyStopping: { ...config.earlyStopping, enabled: e.target.checked } })}
-              className="accent-[var(--accent)]" />
-            <span className="text-xs" style={{ color: "var(--text-primary)" }}>
-              {config.earlyStopping.enabled ? "Enabled" : "Disabled"}
-            </span>
-          </label>
+          <FieldCheckbox checked={config.earlyStopping.enabled} onChange={(v) => updateConfig({ earlyStopping: { ...config.earlyStopping, enabled: v } })} />
         </Field>
         {config.earlyStopping.enabled && (
           <>
@@ -501,16 +475,19 @@ function DatasetHint({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Lets the inputs inside a Field use its label as their accessible name */
-const FieldLabel = createContext<string | undefined>(undefined);
+/** Lets the inputs inside a Field use its label as their accessible name, and its help as their description */
+const FieldLabel = createContext<{ label?: string; helpId?: string }>({});
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  const help = trainingHelp(label);
+  const helpId = `${useId()}-help`;
   return (
-    <FieldLabel.Provider value={label}>
+    <FieldLabel.Provider value={{ label, helpId: help ? helpId : undefined }}>
     <div>
-      <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-        {label}
-      </label>
+      <div className="flex items-center gap-1 mb-1">
+        <span className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>{label}</span>
+        {help && <HelpTip id={helpId} text={help} label={`About ${label}`} />}
+      </div>
       {children}
     </div>
     </FieldLabel.Provider>
@@ -525,20 +502,37 @@ const inputStyle = {
 };
 
 function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
-  return <ThemedSelect value={value} options={options} onChange={onChange} aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />;
+  const field = useContext(FieldLabel);
+  return <ThemedSelect value={value} options={options} onChange={onChange} aria-label={field.label} aria-describedby={field.helpId} className={inputClass} style={inputStyle} />;
 }
 
 function NumberInput({ value, step, min, max, onChange }: { value: number; step: number; min?: number; max?: number; onChange: (v: number) => void }) {
+  const field = useContext(FieldLabel);
   return (
     <NumberField value={value} step={step} min={min} max={max} onChange={onChange}
-      aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />
+      aria-label={field.label} aria-describedby={field.helpId} className={inputClass} style={inputStyle} />
   );
 }
 
 function TextInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const field = useContext(FieldLabel);
   return (
     <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-      aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />
+      aria-label={field.label} aria-describedby={field.helpId} className={inputClass} style={inputStyle} />
+  );
+}
+
+/** An on/off setting, named by its Field */
+function FieldCheckbox({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const field = useContext(FieldLabel);
+  return (
+    <label className="flex items-center gap-2 cursor-pointer">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)}
+        aria-label={field.label} aria-describedby={field.helpId} className="accent-[var(--accent)]" />
+      <span className="text-xs" style={{ color: "var(--text-primary)" }} aria-hidden="true">
+        {checked ? "Enabled" : "Disabled"}
+      </span>
+    </label>
   );
 }
 
