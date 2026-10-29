@@ -70,7 +70,7 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
           <div className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>
             {status === "starting" ? "Initializing PyTorch..." : "Ready to train"}
           </div>
-          <div className="text-[11px]" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
             {status === "starting"
               ? "Loading model and preparing dataset"
               : "Configure hyperparameters in the Training tab, then click Start Training"}
@@ -99,7 +99,7 @@ export default function TrainingCharts({ onSwitchToLogs }: { onSwitchToLogs: () 
       >
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{
-            background: status === "running" ? "#10b981" : status === "starting" ? "#f59e0b" : status === "finished" ? "var(--accent)" : status === "error" ? "var(--danger)" : "var(--text-muted)",
+            background: status === "running" ? "var(--success)" : status === "starting" ? "var(--warning)" : status === "finished" ? "var(--accent)" : status === "error" ? "var(--danger)" : "var(--text-muted)",
           }} />
           <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{STATUS_LABELS[status] ?? status}</span>
         </div>

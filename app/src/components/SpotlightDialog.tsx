@@ -84,7 +84,7 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
         {connectFrom && (
           <div
             className="px-4 py-2 text-[10px] font-medium"
-            style={{ background: "var(--accent-subtle)", color: "var(--accent)", borderBottom: "1px solid var(--border)" }}
+            style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", borderBottom: "1px solid var(--border)" }}
           >
             Adding connected layer after <strong>{connectFrom.sourceLabel}</strong>
           </div>

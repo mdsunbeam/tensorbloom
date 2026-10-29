@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useEscapeKey } from "../lib/use-escape-key";
+import Dialog from "./ui/Dialog";
+import Button from "./ui/Button";
 
 interface ImportDialogProps {
   open: boolean;
@@ -30,9 +31,6 @@ export default function ImportDialog({ open, onClose, onImport }: ImportDialogPr
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  useEscapeKey(onClose, { enabled: open, ignoreInTextarea: code.trim() !== "" });
-
-  if (!open) return null;
 
   const handleImport = async () => {
     const trimmed = code.trim();
@@ -54,111 +52,35 @@ export default function ImportDialog({ open, onClose, onImport }: ImportDialogPr
   };
 
   return (
-    <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-50"
-        style={{ background: "rgba(0,0,0,0.5)" }}
-        onClick={onClose}
-      />
-
-      {/* Modal */}
-      <div
-        className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] max-h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        style={{
-          background: "var(--bg-secondary)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-3"
-          style={{ borderBottom: "1px solid var(--border)" }}
-        >
-          <div>
-            <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              Import PyTorch Code
-            </div>
-            <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-              Paste a model definition — it will be traced via torch.fx
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 flex items-center justify-center rounded-md transition-colors"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        {/* Code input */}
-        <div className="flex-1 p-4 min-h-0">
-          <textarea
-            value={code}
-            onChange={(e) => { setCode(e.target.value); setError(""); }}
-            placeholder={PLACEHOLDER}
-            spellCheck={false}
-            className="w-full h-[300px] p-3 text-xs font-mono leading-relaxed rounded-lg resize-none"
-            style={{
-              background: "var(--bg-tertiary)",
-              border: "1px solid var(--border)",
-              color: "var(--text-primary)",
-              outline: "none",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-          />
-        </div>
-
-        {/* Error */}
+    <Dialog
+      open={open}
+      onClose={onClose}
+      width={600}
+      title="Import PyTorch code"
+      description="Paste a model definition. It's traced with torch.fx and turned into a graph."
+      ignoreEscapeInTextarea={code.trim() !== ""}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleImport} disabled={loading}>{loading ? "Importing…" : "Import"}</Button>
+        </>
+      }
+    >
+      <div className="p-4">
+        <textarea
+          value={code}
+          onChange={(e) => { setCode(e.target.value); setError(""); }}
+          placeholder={PLACEHOLDER}
+          spellCheck={false}
+          aria-label="PyTorch code"
+          className="w-full h-[300px] p-3 text-xs font-mono leading-relaxed rounded-lg resize-none outline-none bg-surface-raised border border-line text-fg focus:border-accent"
+        />
         {error && (
-          <div
-            className="mx-4 mb-2 px-3 py-2 rounded-lg text-xs"
-            style={{
-              background: "var(--danger-subtle)",
-              color: "var(--danger)",
-            }}
-          >
+          <div role="alert" className="mt-2 px-3 py-2 rounded-lg text-xs bg-danger-subtle text-danger">
             {error}
           </div>
         )}
-
-        {/* Footer */}
-        <div
-          className="flex items-center justify-end gap-2 px-5 py-3"
-          style={{ borderTop: "1px solid var(--border)" }}
-        >
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 text-xs font-medium rounded-lg transition-colors"
-            style={{
-              background: "var(--bg-tertiary)",
-              color: "var(--text-secondary)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleImport}
-            disabled={loading}
-            className="px-4 py-1.5 text-xs font-medium rounded-lg text-white transition-colors"
-            style={{
-              background: loading ? "var(--text-muted)" : "var(--accent)",
-              border: "1px solid transparent",
-              opacity: loading ? 0.7 : 1,
-            }}
-          >
-            {loading ? "Importing..." : "Import"}
-          </button>
-        </div>
       </div>
-    </>
+    </Dialog>
   );
 }

@@ -10,6 +10,7 @@ import { toast } from "./Toast";
 import type { NodeCategory } from "../lib/types";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
+import Button from "./ui/Button";
 
 type Mode = "preview" | "edit";
 
@@ -93,7 +94,7 @@ export default function CodePanel() {
             </svg>
           </div>
           <div className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>No code yet</div>
-          <div className="text-[11px]" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
             Add layers to the graph and PyTorch code will be generated here in real time
           </div>
         </div>
@@ -110,7 +111,7 @@ export default function CodePanel() {
             {mode === "edit" ? "Edit Code" : "Generated PyTorch"}
           </span>
           {mode === "edit" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>
+            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
               editing
             </span>
           )}
@@ -166,30 +167,9 @@ function PanelButton({ onClick, children, accent, disabled }: {
   onClick: () => void; children: React.ReactNode; accent?: boolean; disabled?: boolean;
 }) {
   return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      className="px-2 py-0.5 text-[10px] font-medium rounded transition-colors"
-      style={{
-        background: accent ? "var(--accent)" : "var(--bg-tertiary)",
-        color: accent ? "#fff" : "var(--text-secondary)",
-        border: `1px solid ${accent ? "var(--accent)" : "var(--border)"}`,
-        opacity: disabled ? 0.6 : 1,
-      }}
-      onMouseEnter={(e) => {
-        if (!accent && !disabled) {
-          e.currentTarget.style.borderColor = "var(--accent)";
-          e.currentTarget.style.color = "var(--accent)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!accent) {
-          e.currentTarget.style.borderColor = "var(--border)";
-          e.currentTarget.style.color = "var(--text-secondary)";
-        }
-      }}
-    >
+    <Button size="sm" variant={accent ? "primary" : "secondary"} onClick={onClick} disabled={disabled} className="!h-6 !px-2">
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -216,7 +196,7 @@ function highlightPython(code: string): React.ReactNode[] {
     let cursor = 0;
     for (const t of filtered) {
       if (t.start > cursor) parts.push(<span key={key++}>{rest.slice(cursor, t.start)}</span>);
-      const color = t.type === "kw" ? "var(--accent)" : t.type === "str" ? "#10b981" : "#f59e0b";
+      const color = t.type === "kw" ? "var(--accent-text)" : t.type === "str" ? "#10b981" : "#f59e0b";
       parts.push(<span key={key++} style={{ color }}>{rest.slice(t.start, t.end)}</span>);
       cursor = t.end;
     }

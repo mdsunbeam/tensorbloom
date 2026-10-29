@@ -4,7 +4,9 @@ import { MODULE_REGISTRY } from "../lib/registry";
 import type { ModuleDef, NodeCategory } from "../lib/types";
 import { customBlockDef, saveCustomBlock } from "../lib/custom-blocks";
 import { toast } from "./Toast";
-import { useEscapeKey } from "../lib/use-escape-key";
+import Dialog from "./ui/Dialog";
+import Button from "./ui/Button";
+import Select from "./ui/Select";
 
 interface CustomBlockDialogProps {
   open: boolean;
@@ -33,9 +35,6 @@ export default function CustomBlockDialog({ open, onClose }: CustomBlockDialogPr
   const [name, setName] = useState("ConvBlock");
   const [category, setCategory] = useState<NodeCategory>("conv");
   const [params, setParams] = useState("in_channels:int=64, out_channels:int=64, kernel_size:int=3");
-  useEscapeKey(onClose, { enabled: open, ignoreInTextarea: code !== TEMPLATE });
-
-  if (!open) return null;
 
   const handleCreate = () => {
     if (!name.trim()) { toast.error("Enter a block name"); return; }
@@ -65,88 +64,52 @@ export default function CustomBlockDialog({ open, onClose }: CustomBlockDialogPr
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-50" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose} />
-      <div
-        className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[620px] max-h-[80vh] rounded-xl shadow-2xl flex flex-col overflow-hidden"
-        style={{ background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
-      >
-        <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Create Custom Block</div>
-            <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-              Write a PyTorch nn.Module that becomes a reusable node
-            </div>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      width={620}
+      title="Create custom block"
+      description="Write a PyTorch nn.Module that becomes a reusable layer in the palette"
+      ignoreEscapeInTextarea={code !== TEMPLATE}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleCreate}>Create block</Button>
+        </>
+      }
+    >
+      <div className="p-5 space-y-4">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label htmlFor="custom-block-name" className="block text-[11px] font-medium mb-1 text-fg-secondary">Block name</label>
+            <input id="custom-block-name" type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full px-2.5 h-8 text-xs rounded-lg bg-surface-raised border border-line text-fg outline-none focus:border-accent" />
           </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-md"
-            style={{ color: "var(--text-secondary)" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
-          {/* Name + Category */}
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Block Name</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)}
-                className="w-full px-2.5 py-[6px] text-xs rounded-lg"
-                style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-            </div>
-            <div className="w-36">
-              <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value as NodeCategory)}
-                className="w-full px-2.5 py-[6px] text-xs rounded-lg"
-                style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                {["conv", "linear", "norm", "activation", "pool", "transformer", "recurrent", "dropout", "reshape", "math", "vision"].map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Parameters */}
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              Parameters (name:type=default, comma-separated)
-            </label>
-            <input type="text" value={params} onChange={(e) => setParams(e.target.value)}
-              className="w-full px-2.5 py-[6px] text-xs font-mono rounded-lg"
-              style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--text-primary)" }}
-              placeholder="in_channels:int=64, out_channels:int=64" />
-          </div>
-
-          {/* Code */}
-          <div>
-            <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
-              PyTorch Code
-            </label>
-            <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-              className="w-full h-[240px] p-3 text-[11px] font-mono leading-relaxed rounded-lg resize-none"
-              style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
-            />
+          <div className="w-36">
+            <div className="block text-[11px] font-medium mb-1 text-fg-secondary">Category</div>
+            <Select value={category} onChange={(v) => setCategory(v as NodeCategory)} aria-label="Category"
+              options={["conv", "linear", "norm", "activation", "pool", "transformer", "recurrent", "dropout", "reshape", "math", "vision"]}
+              className="w-full px-2.5 h-8 text-xs rounded-lg bg-surface-raised border border-line text-fg outline-none focus:border-accent" />
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <button onClick={onClose} className="px-4 py-1.5 text-xs font-medium rounded-lg"
-            style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-            Cancel
-          </button>
-          <button onClick={handleCreate}
-            className="px-4 py-1.5 text-xs font-medium rounded-lg text-white"
-            style={{ background: "var(--accent)" }}>
-            Create Block
-          </button>
+        <div>
+          <label htmlFor="custom-block-params" className="block text-[11px] font-medium mb-1 text-fg-secondary">Parameters (name:type=default, comma-separated)</label>
+          <input id="custom-block-params" type="text" value={params} onChange={(e) => setParams(e.target.value)}
+            className="w-full px-2.5 h-8 text-xs rounded-lg bg-surface-raised border border-line text-fg outline-none focus:border-accent font-mono"
+            placeholder="in_channels:int=64, out_channels:int=64" />
+        </div>
+
+        <div>
+          <label htmlFor="custom-block-code" className="block text-[11px] font-medium mb-1 text-fg-secondary">PyTorch code</label>
+          <textarea
+            id="custom-block-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            spellCheck={false}
+            className="w-full h-[240px] p-3 text-[11px] font-mono leading-relaxed rounded-lg resize-none outline-none bg-surface-raised border border-line text-fg focus:border-accent"
+          />
         </div>
       </div>
-    </>
+    </Dialog>
   );
 }
