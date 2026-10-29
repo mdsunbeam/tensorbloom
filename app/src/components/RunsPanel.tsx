@@ -3,7 +3,7 @@ import LineChart from "./LineChart";
 import Button from "./ui/Button";
 import Segmented from "./ui/Segmented";
 import { toast } from "./Toast";
-import { useRunStore, runHeadline, type RunRecord } from "../store/run-store";
+import { useRunStore, runHeadline, runWeights, type RunRecord } from "../store/run-store";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
 import { replaceGraph } from "../lib/document-actions";
@@ -20,7 +20,7 @@ export function runColor(run: RunRecord): string {
 const STATUS_TEXT: Record<RunRecord["status"], string> = { finished: "Done", stopped: "Stopped", failed: "Failed" };
 
 /** The project's past runs: pick some to compare their curves and settings, or bring a run's model back */
-export default function RunsPanel() {
+export default function RunsPanel({ onTryModel }: { onTryModel: (runId: string) => void }) {
   const runs = useRunStore((s) => s.runs);
   const compareIds = useRunStore((s) => s.compareIds);
   const [view, setView] = useState<"curves" | "settings">("curves");
@@ -46,7 +46,7 @@ export default function RunsPanel() {
 
   return (
     <div className="h-full flex min-h-0">
-      <RunList runs={runs} compareIds={compareIds} />
+      <RunList runs={runs} compareIds={compareIds} onTryModel={onTryModel} />
       <section aria-label="Compare runs" className="flex-1 min-w-0 flex flex-col">
         <div className="flex items-center gap-3 px-3 py-1.5 flex-shrink-0 border-b border-line">
           <Segmented
@@ -71,10 +71,11 @@ export default function RunsPanel() {
   );
 }
 
-function RunList({ runs, compareIds }: { runs: RunRecord[]; compareIds: string[] }) {
+function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareIds: string[]; onTryModel: (runId: string) => void }) {
   const toggleCompare = useRunStore((s) => s.toggleCompare);
   const removeRun = useRunStore((s) => s.removeRun);
   const training = useTrainingStore((s) => s.status === "running" || s.status === "starting");
+  const liveRunId = useRunStore((s) => s.liveRunId);
 
   const restore = (run: RunRecord) => {
     replaceGraph(run.graph.nodes, run.graph.edges, useGraphStore.getState().projectName);
@@ -130,6 +131,12 @@ function RunList({ runs, compareIds }: { runs: RunRecord[]; compareIds: string[]
               </label>
               {/* Shown on hover or keyboard focus, in place of the headline */}
               <span className="absolute right-2 top-1 flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+                {run.status !== "failed" && (
+                  <Button size="sm" disabled={training || !runWeights(run, liveRunId)} onClick={() => onTryModel(run.id)}
+                    title={training ? "Wait for training to finish" : runWeights(run, liveRunId) ? "See what this run's model predicts" : "This run's weights weren't kept"}>
+                    Try
+                  </Button>
+                )}
                 <Button size="sm" disabled={training} onClick={() => restore(run)} title={training ? "Wait for training to finish" : "Open this run's model and training settings"}>
                   Restore
                 </Button>

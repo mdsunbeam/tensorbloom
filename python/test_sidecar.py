@@ -138,6 +138,74 @@ try:
 except ImportError:
     print("  SKIP  ONNX export (onnx not installed)")
 
+# --- Trying the trained model ---
+print("Trying the model")
+# Record the validation split each dataset load makes, to check predictions use the one training held out
+splits = []
+_real_load = sc._load_dataset
+def _recording_load(*args, **kwargs):
+    train_loader, test_loader = _real_load(*args, **kwargs)
+    splits.append(list(test_loader.dataset.indices) if test_loader is not None else None)
+    return train_loader, test_loader
+sc._load_dataset = _recording_load
+
+sc._train_stop_event.clear()
+sc._train_loop(graph(), config)
+res = sc.model_predict({"graph": graph(), "config": config, "count": 5, "sample_seed": 1})
+check("samples come from the validation split", res["split"] == "validation" and res["dataset_size"] == 16, str(res["split"]))
+check("the validation split is the one training held out", len(splits) == 2 and splits[0] == splits[1], str(splits))
+check("asked-for number of samples", len(res["samples"]) == 5, str(len(res["samples"])))
+s0 = res["samples"][0]
+check("classifier gives its top classes with probabilities",
+      s0["output"]["kind"] == "classes" and len(s0["output"]["top"]) == 3
+      and s0["output"]["top"][0]["prob"] >= s0["output"]["top"][1]["prob"], str(s0["output"]))
+check("each sample says whether the model got it right",
+      all(isinstance(x["correct"], bool) and x["target"]["kind"] == "class" for x in res["samples"]))
+check("tabular inputs are shown as values", s0["input"]["kind"] == "values" and s0["input"]["total"] == 8, str(s0["input"]))
+check("a model without images doesn't offer image files", res["accepts_images"] is False)
+mistakes = sc.model_predict({"graph": graph(), "config": config, "count": 4, "mistakes_only": True})
+check("mistakes only returns only wrong answers",
+      all(x["correct"] is False for x in mistakes["samples"]) and mistakes["scanned"] >= len(mistakes["samples"]),
+      str([x["correct"] for x in mistakes["samples"]]))
+same = sc.model_predict({"graph": graph(), "config": config, "count": 5, "sample_seed": 1})
+check("same seed, same samples", [x["index"] for x in same["samples"]] == [x["index"] for x in res["samples"]])
+
+# Image inputs: shown as PNGs, and an image file can be tried
+img_path = os.path.join(tmp, "images.pt")
+torch.save({"x": torch.rand(40, 1, 8, 8), "y": torch.randint(0, 3, (40,))}, img_path)
+img_graph = graph()
+img_graph["nodes"][0]["params"] = {"shape": "[1, 1, 8, 8]"}
+img_graph["nodes"].insert(1, {"id": "flat", "type": "call_module", "moduleType": "Flatten", "label": "flat", "params": {}})
+img_graph["nodes"][2]["params"] = {"in_features": 64, "out_features": 3}
+img_graph["edges"][0] = {"id": "e0", "source": "inp", "target": "flat", "sourceHandle": "out", "targetHandle": "in"}
+img_graph["edges"].append({"id": "e3", "source": "flat", "target": "fc", "sourceHandle": "out", "targetHandle": "in"})
+img_config = dict(config, epochs=1, dataset={"type": "TensorFile", "root": img_path, "features_key": "x", "labels_key": "y", "val_split": 0.25})
+sc._train_stop_event.clear()
+sc._train_loop(img_graph, img_config)
+res = sc.model_predict({"graph": img_graph, "config": img_config, "count": 3})
+s0 = res["samples"][0]
+check("image inputs come back as PNGs", s0["input"]["kind"] == "image" and s0["input"]["png"] and s0["input"]["width"] == 8, str(s0["input"])[:120])
+check("an image model offers image files", res["accepts_images"] is True)
+from PIL import Image
+png_path = os.path.join(tmp, "mine.png")
+Image.new("RGB", (40, 30), (200, 30, 30)).save(png_path)
+own = sc.model_predict({"graph": img_graph, "config": img_config, "image_path": png_path})
+check("an image file is resized and predicted", len(own["samples"]) == 1 and own["samples"][0]["output"]["kind"] == "classes"
+      and own["samples"][0]["target"] is None, str(own["samples"])[:200])
+try:
+    sc.model_predict({"graph": graph(), "config": config, "image_path": png_path, "weights": "checkpoint", "checkpoint_path": ckpts[-1]})
+    check("an image file is refused for a model without images", False)
+except ValueError as e:
+    check("an image file is refused for a model without images", "doesn't take images" in str(e), str(e))
+
+sc._last_trained_state = None
+try:
+    sc.model_predict({"graph": graph(), "config": config})
+    check("trying with no trained weights is refused", False)
+except ValueError as e:
+    check("trying with no trained weights is refused", "No trained weights" in str(e), str(e))
+sc._load_dataset = _real_load
+
 print()
 if failures:
     print(f"{len(failures)} failed: {', '.join(failures)}")

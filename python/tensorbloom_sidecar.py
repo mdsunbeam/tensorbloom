@@ -8,6 +8,7 @@ Handles:
 - infer_shapes: propagate tensor shapes through graph
 - train.start / train.stop: training lifecycle
 - validate: check graph for errors
+- model.predict: run a trained model on validation samples or an image file
 """
 
 import sys
@@ -2084,6 +2085,184 @@ def export_torchscript(params: dict) -> dict:
     return {"path": output_path, "success": True, "weights": weights}
 
 
+# ---------------------------------------------------------------------------
+# Trying a trained model on samples
+# ---------------------------------------------------------------------------
+
+def _dataset_attr(ds, name: str):
+    """An attribute of the dataset under any random_split wrappers, e.g. its classes or transform."""
+    while ds is not None:
+        if hasattr(ds, name):
+            return getattr(ds, name)
+        ds = getattr(ds, "dataset", None)
+    return None
+
+
+def _find_normalize(ds):
+    """The Normalize step the dataset applies, so images can be shown as they looked before it."""
+    import torchvision.transforms as T
+    transform = _dataset_attr(ds, "transform")
+    steps = getattr(transform, "transforms", [transform] if transform is not None else [])
+    return next((s for s in steps if isinstance(s, T.Normalize)), None)
+
+
+def _is_image(x: torch.Tensor) -> bool:
+    return x.dim() == 3 and x.shape[0] in (1, 3) and x.shape[1] >= 4 and x.shape[2] >= 4
+
+
+def _image_payload(x: torch.Tensor, norm) -> dict:
+    """A [C, H, W] tensor as a small PNG, undoing the dataset's normalization."""
+    import base64
+    from PIL import Image
+    img = x.detach().float().cpu()
+    if norm is not None:
+        img = img * torch.tensor(norm.std).view(-1, 1, 1) + torch.tensor(norm.mean).view(-1, 1, 1)
+    elif img.min() < 0 or img.max() > 1:
+        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
+    arr = (img.clamp(0, 1) * 255).round().to(torch.uint8)
+    pil = Image.fromarray(arr[0].numpy() if arr.shape[0] == 1 else arr.permute(1, 2, 0).numpy())
+    pil.thumbnail((160, 160))
+    buf = io.BytesIO()
+    pil.save(buf, format="PNG")
+    return {"kind": "image", "png": base64.b64encode(buf.getvalue()).decode("ascii"),
+            "width": pil.width, "height": pil.height}
+
+
+def _values_payload(t: torch.Tensor, limit: int = 12) -> dict:
+    flat = t.detach().float().cpu().reshape(-1)
+    return {"kind": "values", "values": [round(v, 4) for v in flat[:limit].tolist()],
+            "shape": list(t.shape), "total": flat.numel()}
+
+
+def _sample_payload(x: torch.Tensor, norm) -> dict:
+    return _image_payload(x, norm) if _is_image(x) else _values_payload(x)
+
+
+def _label_of(y) -> int | None:
+    """The class index a target holds, or None when it isn't a single class."""
+    if isinstance(y, int):
+        return y
+    if isinstance(y, torch.Tensor) and y.numel() == 1 and not y.is_floating_point():
+        return int(y.item())
+    return None
+
+
+def model_predict(params: dict) -> dict:
+    """Runs a trained model on samples it didn't train on, or on an image file, and returns what it predicts.
+
+    params: graph and config as for train.start; weights "trained" or "checkpoint" (with checkpoint_path);
+    count; mistakes_only; sample_seed (which samples to pick); image_path (try an image file instead).
+    """
+    import contextlib
+    import random
+
+    if _train_thread is not None and _train_thread.is_alive():
+        raise ValueError("Wait for training to finish before trying the model.")
+
+    graph_json = params["graph"]
+    config = params.get("config", {})
+    count = max(1, min(int(params.get("count", 12)), 48))
+
+    # Dataset code may print (downloads, warnings); stdout carries the JSON-RPC replies
+    with contextlib.redirect_stdout(sys.stderr):
+        # Rebuild the way training did, so a random validation split comes out the same and
+        # the samples shown are ones the model didn't train on
+        seed = config.get("seed")
+        if seed is not None:
+            random.seed(seed)
+            torch.manual_seed(seed)
+        _apply_weight_init(_build_model_from_graph(graph_json), config.get("weight_init", "default"))
+        rng_after_init = torch.random.get_rng_state()
+        model, weights = _build_export_model({
+            "graph": graph_json,
+            "weights": params.get("weights", "trained"),
+            "checkpoint_path": params.get("checkpoint_path"),
+        })
+        if weights == "random":
+            raise ValueError("Pick trained weights or a checkpoint to try the model.")
+        device = _get_device(config.get("device", "auto"))
+        model = model.to(device).eval()
+
+        _, _, target_batch_idx = _extract_loss_from_graph(graph_json)
+        is_reconstruction = target_batch_idx <= 0
+        num_inputs = max(1, sum(1 for n in graph_json["nodes"]
+                                if n.get("type") == "placeholder" or n.get("moduleType") == "Input"))
+
+        torch.random.set_rng_state(rng_after_init)
+        train_loader, test_loader = _load_dataset(dict(config.get("dataset", {})), 64, None,
+                                                  config.get("dataloader_seed"), is_reconstruction=is_reconstruction)
+        split = "validation" if test_loader else "training"
+        ds = (test_loader or train_loader).dataset
+        norm = _find_normalize(ds)
+        classes = _dataset_attr(ds, "classes")
+        class_names = [str(c) for c in classes] if classes else None
+        first_x = ds[0][0]
+        accepts_images = isinstance(first_x, torch.Tensor) and _is_image(first_x)
+
+        def run(xb: torch.Tensor) -> torch.Tensor:
+            with torch.no_grad():
+                return model(*((xb.to(device),) * num_inputs)).float().cpu()
+
+        def describe(x: torch.Tensor, out: torch.Tensor, y) -> dict:
+            label = _label_of(y) if y is not None else None
+            sample = {"input": _sample_payload(x, norm), "target": None, "output": None, "correct": None}
+            if not is_reconstruction and out.dim() == 1 and out.numel() > 1:
+                probs = torch.softmax(out, dim=0)
+                top = probs.topk(min(3, probs.numel()))
+                sample["output"] = {"kind": "classes",
+                                    "top": [{"index": int(i), "prob": round(float(p), 4)} for p, i in zip(top.values, top.indices)]}
+                if label is not None:
+                    sample["target"] = {"kind": "class", "index": label}
+                    sample["correct"] = int(top.indices[0]) == label
+            elif is_reconstruction and out.numel() == x.numel():
+                sample["output"] = _sample_payload(out.reshape(x.shape), norm)
+            else:
+                sample["output"] = _values_payload(out)
+                if y is not None:
+                    sample["target"] = {"kind": "class", "index": label} if label is not None else _values_payload(torch.as_tensor(y))
+            return sample
+
+        result = {"split": split, "dataset_size": len(ds), "class_names": class_names, "weights": weights,
+                  "accepts_images": accepts_images, "task": "reconstruction" if is_reconstruction else "prediction"}
+
+        image_path = params.get("image_path")
+        if image_path:
+            if not accepts_images:
+                raise ValueError("This model doesn't take images, so it can't be tried on an image file.")
+            import torchvision.transforms as T
+            from PIL import Image
+            c, h, w = first_x.shape
+            steps = [T.Resize(min(h, w)), T.CenterCrop((h, w)), T.ToTensor()] + ([norm] if norm is not None else [])
+            x = T.Compose(steps)(Image.open(image_path).convert("L" if c == 1 else "RGB"))
+            result["samples"] = [{"index": None, **describe(x, run(x.unsqueeze(0))[0], None)}]
+            return result
+
+        # Shuffled sample order; with mistakes_only, keep looking until enough wrong answers turn up
+        order = list(range(len(ds)))
+        random.Random(params.get("sample_seed", 0)).shuffle(order)
+        mistakes_only = bool(params.get("mistakes_only"))
+        scan_limit = min(len(order), 5000 if mistakes_only else count)
+        loader = torch.utils.data.DataLoader(torch.utils.data.Subset(ds, order[:scan_limit]), batch_size=64, shuffle=False)
+        samples, scanned, right = [], 0, 0
+        for xb, yb in loader:
+            outs = run(xb)
+            for j in range(xb.shape[0]):
+                idx = order[scanned]
+                scanned += 1
+                y = yb[j] if isinstance(yb, torch.Tensor) else yb
+                sample = describe(xb[j], outs[j], y)
+                if sample["correct"]:
+                    right += 1
+                if not mistakes_only or sample["correct"] is False:
+                    samples.append({"index": idx, **sample})
+                if len(samples) >= count:
+                    break
+            if len(samples) >= count:
+                break
+        result.update(samples=samples, scanned=scanned, scanned_correct=right)
+        return result
+
+
 def _tensor_info(name: str, tensor: torch.Tensor) -> dict:
     """Build metadata + basic stats for a tensor."""
     info: dict = {
@@ -2656,6 +2835,7 @@ METHODS = {
     "data.introspect": data_introspect,
     "export.onnx": export_onnx,
     "export.torchscript": export_torchscript,
+    "model.predict": model_predict,
     "node.probe": lambda params: node_probe(params),
     "system.gpu_info": system_gpu_info,
     "system.environment": lambda params: _system_environment(params),

@@ -164,6 +164,7 @@ function needsPythonReason(method: string): string {
   if (method.startsWith("data.")) return "Reading datasets needs Python.";
   if (method.startsWith("export.")) return "Exporting needs Python.";
   if (method.startsWith("train.")) return "Training needs Python.";
+  if (method.startsWith("model.")) return "Trying the model needs Python.";
   return "This needs Python.";
 }
 
