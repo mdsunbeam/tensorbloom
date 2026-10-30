@@ -1,8 +1,11 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { createContext, useContext, useState, useMemo, useRef, useEffect } from "react";
+import { useReactFlow } from "@xyflow/react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
 import { toast } from "./Toast";
 import NumberField from "./NumberField";
+import ThemedSelect from "./ui/Select";
+import Button from "./ui/Button";
 import {
   DATASET_METADATA,
   checkDatasetCompatibility,
@@ -29,7 +32,14 @@ export default function TrainingPanel() {
   const updateConfig = useTrainingStore((s) => s.updateConfig);
   const updateOptimizer = useTrainingStore((s) => s.updateOptimizer);
   const lastAppliedTemplate = useTrainingStore((s) => s.lastAppliedTemplate);
-  const hasDatasetNode = useGraphStore((s) => s.nodes.some((n) => isDatasetNode(n.data.moduleType)));
+  const datasetNodeId = useGraphStore((s) => s.nodes.find((n) => isDatasetNode(n.data.moduleType))?.id ?? null);
+  const hasDatasetNode = datasetNodeId !== null;
+  const reactFlow = useReactFlow();
+  const editDataset = () => {
+    if (!datasetNodeId) return;
+    useGraphStore.getState().setSelectedNodeId(datasetNodeId);
+    reactFlow.fitView({ nodes: [{ id: datasetNodeId }], duration: 300, padding: 0.5, maxZoom: 1 });
+  };
 
   const locked = status === "running" || status === "starting";
   const updateNodeParam = useGraphStore((s) => s.updateNodeParam);
@@ -71,16 +81,24 @@ export default function TrainingPanel() {
     <div className="flex-1 overflow-y-auto" style={locked ? { pointerEvents: "none", opacity: 0.5 } : undefined}>
       {/* Template info banner */}
       {lastAppliedTemplate && (
-        <div className="mx-4 mt-3 mb-1 px-3 py-2 rounded-lg text-[11px]" style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>
+        <div className="mx-4 mt-3 mb-1 px-3 py-2 rounded-lg text-[11px]" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
           Config auto-filled for <span className="font-semibold">{lastAppliedTemplate}</span>. Adjust as needed.
         </div>
       )}
 
       {/* ── Data section: hidden when a Dataset node is in the graph ── */}
       {hasDatasetNode ? (
-        <div className="mx-4 mt-3 mb-1 px-3 py-2 rounded-lg text-[11px]"
-          style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}>
-          Dataset configured via node in graph. Select the Dataset node to edit its properties.
+        <div className="mx-4 mt-3 mb-1 flex items-start gap-2 text-[11px] leading-relaxed text-fg-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            className="flex-shrink-0 mt-px text-fg-muted" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          <span>
+            The data comes from the Data node in your graph.{" "}
+            <button type="button" onClick={editDataset} className="font-medium text-accent-text hover:underline focus-visible:underline">
+              Edit dataset
+            </button>
+          </span>
         </div>
       ) : (
         <Section title="Data">
@@ -180,7 +198,7 @@ export default function TrainingPanel() {
       {/* ── Collapsible: Advanced ── */}
       <CollapsibleSection title={<>Advanced {config.seed != null && config.deterministicMode && (
         <span className="text-[8px] px-1.5 py-0.5 rounded-full"
-          style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>Reproducible</span>
+          style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>Reproducible</span>
       )}</>} defaultOpen={false}>
         <Field label="Random Seed">
           <div className="flex gap-1.5">
@@ -197,9 +215,9 @@ export default function TrainingPanel() {
             />
             <button
               onClick={() => updateConfig({ seed: Math.floor(Math.random() * 2147483647) })}
-              className="px-2 py-[6px] text-xs rounded-lg shrink-0"
-              style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+              className="px-2 py-[6px] text-xs rounded-lg shrink-0 border border-line text-fg-secondary hover:bg-surface-raised"
               title="Randomize seed"
+              aria-label="Randomize seed"
             >
               🎲
             </button>
@@ -329,9 +347,9 @@ function DatasetCompatibilityBanner({ datasetType }: { datasetType: string }) {
   }
 
   const colors = {
-    match: { bg: "rgba(34, 197, 94, 0.08)", border: "rgba(34, 197, 94, 0.25)", text: "rgb(34, 197, 94)" },
-    fixable: { bg: "rgba(245, 158, 11, 0.08)", border: "rgba(245, 158, 11, 0.25)", text: "rgb(245, 158, 11)" },
-    mismatch: { bg: "rgba(239, 68, 68, 0.08)", border: "rgba(239, 68, 68, 0.25)", text: "rgb(239, 68, 68)" },
+    match: { bg: "var(--success-subtle)", border: "var(--success)", text: "var(--success)" },
+    fixable: { bg: "var(--warning-subtle)", border: "var(--warning)", text: "var(--warning)" },
+    mismatch: { bg: "var(--danger-subtle)", border: "var(--danger)", text: "var(--danger)" },
   };
   const c = colors[result.status];
 
@@ -342,22 +360,14 @@ function DatasetCompatibilityBanner({ datasetType }: { datasetType: string }) {
       <div className="flex-1 min-w-0">
         <span>{result.message}</span>
         {result.status === "fixable" && result.suggestedInputShape && result.inputNodeId && (
-          <button
-            className="ml-2 px-2 py-1 rounded text-[10px] font-medium"
-            style={{ background: "var(--accent)", color: "#fff" }}
-            onClick={() => updateNodeParam(result.inputNodeId!, "shape", JSON.stringify(result.suggestedInputShape))}
-          >
-            Fix Input Shape
-          </button>
+          <Button size="sm" className="ml-2" onClick={() => updateNodeParam(result.inputNodeId!, "shape", JSON.stringify(result.suggestedInputShape))}>
+            Fix input shape
+          </Button>
         )}
         {result.suggestedOutputFeatures && result.finalLinearId && (
-          <button
-            className="ml-2 px-2 py-1 rounded text-[10px] font-medium"
-            style={{ background: "var(--accent)", color: "#fff" }}
-            onClick={() => updateNodeParam(result.finalLinearId!, "out_features", result.suggestedOutputFeatures!)}
-          >
-            Fix Output ({result.suggestedOutputFeatures} classes)
-          </button>
+          <Button size="sm" className="ml-2" onClick={() => updateNodeParam(result.finalLinearId!, "out_features", result.suggestedOutputFeatures!)}>
+            Fix output ({result.suggestedOutputFeatures} classes)
+          </Button>
         )}
       </div>
     </div>
@@ -430,8 +440,7 @@ function DomainRecommendations({ currentDataset, updateConfig, config }: {
       {recommendations.map((ds) => (
         <button
           key={ds}
-          className="px-1.5 py-0.5 rounded text-[9px] font-medium"
-          style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)" }}
+          className="px-1.5 py-0.5 rounded text-[11px] font-medium border border-line text-fg-secondary hover:text-fg hover:bg-surface-raised"
           onClick={() => updateConfig({ dataset: { ...config.dataset, type: ds } })}
         >
           {ds}
@@ -492,14 +501,19 @@ function DatasetHint({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Lets the inputs inside a Field use its label as their accessible name */
+const FieldLabel = createContext<string | undefined>(undefined);
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
+    <FieldLabel.Provider value={label}>
     <div>
       <label className="block text-[11px] font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
         {label}
       </label>
       {children}
     </div>
+    </FieldLabel.Provider>
   );
 }
 
@@ -511,24 +525,20 @@ const inputStyle = {
 };
 
 function Select({ value, options, onChange }: { value: string; options: string[]; onChange: (v: string) => void }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} style={inputStyle}>
-      {options.map((o) => <option key={o} value={o}>{o}</option>)}
-    </select>
-  );
+  return <ThemedSelect value={value} options={options} onChange={onChange} aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />;
 }
 
 function NumberInput({ value, step, min, max, onChange }: { value: number; step: number; min?: number; max?: number; onChange: (v: number) => void }) {
   return (
     <NumberField value={value} step={step} min={min} max={max} onChange={onChange}
-      className={inputClass} style={inputStyle} />
+      aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />
   );
 }
 
 function TextInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-      className={inputClass} style={inputStyle} />
+      aria-label={useContext(FieldLabel)} className={inputClass} style={inputStyle} />
   );
 }
 

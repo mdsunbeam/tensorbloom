@@ -52,7 +52,7 @@ export default function TrainingLogs() {
       >
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full" style={{
-            background: status === "running" ? "#10b981" : status === "starting" ? "#f59e0b" : status === "finished" ? "var(--accent)" : status === "error" ? "var(--danger)" : "var(--text-muted)",
+            background: status === "running" ? "var(--success)" : status === "starting" ? "var(--warning)" : status === "finished" ? "var(--accent)" : status === "error" ? "var(--danger)" : "var(--text-muted)",
           }} />
           <span className="font-semibold uppercase" style={{ color: "var(--text-secondary)" }}>{status}</span>
         </div>
@@ -83,7 +83,7 @@ export default function TrainingLogs() {
                 </svg>
               </div>
               <div className="text-xs font-medium mb-1" style={{ color: "var(--text-muted)" }}>No logs yet</div>
-              <div className="text-[11px]" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
+              <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
                 Training output and debug messages will appear here when a run starts
               </div>
             </div>
@@ -91,7 +91,7 @@ export default function TrainingLogs() {
         ) : (
           logs.map((l, i) => (
             <div key={i} className="flex gap-2" style={{ color: l.stream === "stderr" ? "var(--warning)" : "var(--text-muted)" }}>
-              <span className="flex-shrink-0 select-none" style={{ color: "var(--text-muted)", opacity: 0.5 }}>{formatTimestamp(l.timestamp)}</span>
+              <span className="flex-shrink-0 select-none" style={{ color: "var(--text-muted)" }}>{formatTimestamp(l.timestamp)}</span>
               <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{l.text}</span>
             </div>
           ))

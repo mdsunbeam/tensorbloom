@@ -84,7 +84,7 @@ export default function CompareDialog({ open, onClose, modelA, modelB }: Compare
             <thead>
               <tr style={{ color: "var(--text-muted)" }}>
                 <th className="text-left font-semibold pb-2 w-1/3">Metric</th>
-                <th className="text-right font-semibold pb-2 w-1/3" style={{ color: "var(--accent)" }}>{modelA.name}</th>
+                <th className="text-right font-semibold pb-2 w-1/3" style={{ color: "var(--accent-text)" }}>{modelA.name}</th>
                 <th className="text-right font-semibold pb-2 w-1/3" style={{ color: "#f97316" }}>{modelB.name}</th>
               </tr>
             </thead>
@@ -93,10 +93,10 @@ export default function CompareDialog({ open, onClose, modelA, modelB }: Compare
                 <tr key={r.label} style={{ borderTop: "1px solid var(--border)" }}>
                   <td className="py-1.5" style={{ color: "var(--text-secondary)" }}>{r.label}</td>
                   <td className="text-right py-1.5 tabular-nums font-medium" style={{
-                    color: r.better === "a" ? "#10b981" : "var(--text-primary)",
+                    color: r.better === "a" ? "var(--success)" : "var(--text-primary)",
                   }}>{r.a}</td>
                   <td className="text-right py-1.5 tabular-nums font-medium" style={{
-                    color: r.better === "b" ? "#10b981" : "var(--text-primary)",
+                    color: r.better === "b" ? "var(--success)" : "var(--text-primary)",
                   }}>{r.b}</td>
                 </tr>
               ))}

@@ -225,7 +225,7 @@ export default function ShapeEdge(props: EdgeProps) {
           >
             <div
               style={{
-                background: hasError ? (isRootError ? "var(--danger)" : "#f59e0b") : "var(--bg-elevated)",
+                background: hasError ? (isRootError ? "var(--danger)" : "var(--warning)") : "var(--bg-elevated)",
                 color: hasError ? "#fff" : "var(--text-primary)",
                 fontSize: "9px",
                 fontFamily: "monospace",

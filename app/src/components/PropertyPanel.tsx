@@ -13,6 +13,9 @@ import type { ShapeError } from "../lib/shape-inference";
 import { isDatasetNode, DATASET_METADATA, extractDatasetConfig, DATA_PRESETS, type DataDomain, type IntrospectionResult, type ProbeResult } from "../lib/dataset-metadata";
 import { sidecarCall } from "../lib/sidecar";
 import NumberField from "./NumberField";
+import Select from "./ui/Select";
+import Button from "./ui/Button";
+import Tabs from "./ui/Tabs";
 
 type Tab = "properties" | "training";
 
@@ -43,10 +46,17 @@ export default function PropertyPanel() {
       }}
     >
       {/* Tab bar */}
-      <div className="flex items-center h-9 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
-        <TabButton label="Properties" active={activeTab === "properties"} onClick={() => setTab("properties")} />
-        <TabButton label="Training" active={activeTab === "training"} onClick={() => setTab("training")} />
-      </div>
+      <Tabs
+        label="Side panel"
+        stretch
+        value={activeTab}
+        onChange={setTab}
+        className="h-9 flex-shrink-0 border-b border-line"
+        items={[
+          { id: "properties", label: "Properties" },
+          { id: "training", label: "Training", live: trainingStatus === "running" },
+        ]}
+      />
 
       {/* Tab content */}
       {activeTab === "properties" ? (
@@ -62,62 +72,23 @@ export default function PropertyPanel() {
           <div className="px-4 py-3 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
             <TrainingProgress />
             {trainingStatus === "running" ? (
-              <button
-                onClick={stopTraining}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white"
-                style={{ background: "var(--danger)" }}
-              >
-                Stop Training
-              </button>
+              <Button variant="secondary" size="lg" block onClick={stopTraining}>
+                <span className="w-2.5 h-2.5 rounded-sm bg-danger" aria-hidden="true" />
+                Stop training
+              </Button>
             ) : trainingStatus === "starting" ? (
-              <button
-                disabled
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white cursor-not-allowed"
-                style={{ background: "var(--accent)", animation: "pulse-subtle 1.5s ease-in-out infinite" }}
-              >
-                Starting...
-              </button>
+              <Button variant="primary" size="lg" block disabled className="!opacity-80" style={{ animation: "pulse-subtle 1.5s ease-in-out infinite" }}>
+                Starting…
+              </Button>
             ) : (
-              <button
-                onClick={startTraining}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white"
-                style={{ background: "var(--accent)" }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
-              >
-                Start Training
-              </button>
+              <Button variant="primary" size="lg" block onClick={startTraining}>
+                Start training
+              </Button>
             )}
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex-1 h-full text-[11px] font-semibold uppercase tracking-wider relative"
-      style={{
-        color: active ? "var(--text-primary)" : "var(--text-muted)",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.color = "var(--text-secondary)";
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.color = "var(--text-muted)";
-      }}
-    >
-      {label}
-      {active && (
-        <span
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] rounded-full"
-          style={{ width: "40%", background: "var(--accent)" }}
-        />
-      )}
-    </button>
   );
 }
 
@@ -198,13 +169,7 @@ function EmptyState({ onGoToTraining }: { onGoToTraining: () => void }) {
 
       {/* Action */}
       <div className="px-4 pb-4">
-        <button
-          onClick={onGoToTraining}
-          className="w-full py-2 text-xs font-medium rounded-lg transition-colors"
-          style={{ color: "var(--accent)", background: "var(--accent-subtle)" }}
-        >
-          Configure Training
-        </button>
+        <Button variant="primary" block onClick={onGoToTraining}>Configure training</Button>
       </div>
     </div>
   );
@@ -331,26 +296,18 @@ function ErrorBanner({ error, nodeId }: { error: ShapeError; nodeId: string }) {
             </div>
           )}
           {error.paramHint && (
-            <button
-              onClick={handleAutoFix}
-              className="mt-1 px-2.5 py-1 rounded text-[10px] font-semibold text-white transition-colors"
-              style={{ background: "var(--danger)" }}
-            >
-              Auto-fix {error.paramHint}
-            </button>
+            <Button size="sm" onClick={handleAutoFix} className="mt-1">
+              Set {error.paramHint} to match
+            </Button>
           )}
         </>
       ) : (
         <>
           <div className="font-semibold mb-1">Error from: {sourceLabel}</div>
           <div className="text-[10px] mb-1.5" style={{ opacity: 0.8 }}>Fix the source node first to resolve this error</div>
-          <button
-            onClick={handleGoToSource}
-            className="mt-1 px-2.5 py-1 rounded text-[10px] font-semibold text-white transition-colors"
-            style={{ background: "var(--warning)" }}
-          >
+          <Button size="sm" onClick={handleGoToSource} className="mt-1">
             Go to source
-          </button>
+          </Button>
         </>
       )}
     </div>
@@ -467,7 +424,7 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
           Code
           {isCustom && (
             <span className="text-[8px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>edited</span>
+              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>edited</span>
           )}
         </span>
         <svg
@@ -498,29 +455,17 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
                   <div className="text-[9px] font-medium mt-1 mb-1" style={{ color: "var(--text-muted)" }}>forward (from graph)</div>
                   <div
                     className="rounded-lg px-3 py-2 text-[10px] font-mono leading-relaxed"
-                    style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)", border: "1px solid var(--border)", opacity: 0.6 }}
+                    style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)", border: "1px dashed var(--border)" }}
                   >
                     <code style={{ whiteSpace: "pre-wrap" }}>{snippet.forwardCode}</code>
                   </div>
                 </div>
               )}
               <div className="flex gap-1.5">
-                <button
-                  onClick={handleSave}
-                  className="px-2.5 py-1 rounded text-[10px] font-medium text-white"
-                  style={{ background: "var(--accent)" }}
-                >Save</button>
-                <button
-                  onClick={() => setEditing(false)}
-                  className="px-2.5 py-1 rounded text-[10px] font-medium"
-                  style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}
-                >Cancel</button>
+                <Button variant="primary" size="sm" onClick={handleSave}>Save</Button>
+                <Button size="sm" onClick={() => setEditing(false)}>Cancel</Button>
                 {isCustom && (
-                  <button
-                    onClick={handleReset}
-                    className="px-2.5 py-1 rounded text-[10px] font-medium ml-auto"
-                    style={{ color: "var(--danger)" }}
-                  >Reset to Default</button>
+                  <Button variant="ghost" size="sm" onClick={handleReset} className="ml-auto">Reset to default</Button>
                 )}
               </div>
             </div>
@@ -538,19 +483,15 @@ function CodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
                 {canEdit && (
                   <button
                     onClick={handleStartEdit}
-                    className="px-1.5 py-0.5 rounded text-[9px] transition-colors"
-                    style={{ background: "var(--bg-elevated)", color: "var(--text-muted)", border: "1px solid var(--border)" }}
+                    className="px-1.5 py-0.5 rounded text-[10px] font-sans transition-colors bg-surface-elevated text-fg-secondary border border-line hover:text-fg"
                     title="Edit init code"
                   >Edit</button>
                 )}
                 <button
                   onClick={handleCopy}
-                  className="px-1.5 py-0.5 rounded text-[9px] transition-colors"
-                  style={{
-                    background: copied ? "var(--accent)" : "var(--bg-elevated)",
-                    color: copied ? "#fff" : "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                  }}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-sans transition-colors border border-line ${
+                    copied ? "bg-success-subtle text-success" : "bg-surface-elevated text-fg-secondary hover:text-fg"
+                  }`}
                   title="Copy to clipboard"
                 >{copied ? "Copied" : "Copy"}</button>
               </div>
@@ -613,18 +554,9 @@ function DataPreview({ node }: { node: ReturnType<typeof useGraphStore.getState>
       </button>
       {expanded && (
         <div className="px-4 pb-3">
-          <button
-            onClick={handlePreview}
-            disabled={loading}
-            className="w-full py-1.5 rounded-lg text-[11px] font-medium transition-colors mb-2"
-            style={{
-              background: "var(--accent-subtle)",
-              color: "var(--accent)",
-              opacity: loading ? 0.6 : 1,
-            }}
-          >
-            {loading ? "Loading..." : "Preview Data"}
-          </button>
+          <Button size="sm" block onClick={handlePreview} disabled={loading} className="mb-2">
+            {loading ? "Loading…" : "Preview data"}
+          </Button>
           {preview && (
             preview.error ? (
               <div className="text-[11px] px-2 py-1.5 rounded-lg" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
@@ -830,26 +762,18 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
       <div className="flex-1 overflow-y-auto">
         {/* Source selector */}
         <div className="px-4 pt-3 pb-3">
-          <select
+          <Select
             value={source}
-            onChange={(e) => handleSourceChange(e.target.value)}
+            onChange={handleSourceChange}
+            placeholder="Select a source…"
+            aria-label="Data source"
             className={inputCls}
             style={inputStyle}
-          >
-            <option value="" disabled={false}>Select a source...</option>
-            <optgroup label="Presets">
-              {PRESET_SOURCES.map((s) => (
-                <option key={s} value={s}>{DATA_PRESETS[s]?.label ?? s}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Custom">
-              {CUSTOM_SOURCES.map((s) => (
-                <option key={s} value={s}>
-                  {CUSTOM_SOURCE_LABELS[s] ?? s}
-                </option>
-              ))}
-            </optgroup>
-          </select>
+            options={[
+              ...PRESET_SOURCES.map((s) => ({ value: s, label: DATA_PRESETS[s]?.label ?? s, group: "Presets" })),
+              ...CUSTOM_SOURCES.map((s) => ({ value: s, label: CUSTOM_SOURCE_LABELS[s] ?? s, group: "Custom" })),
+            ]}
+          />
           {isPreset && (
             <div className="mt-1.5 text-[10px]" style={{ color: "var(--text-muted)" }}>
               {preset.sizeHint} {preset.requiresPip && `· requires pip install ${preset.requiresPip}`}
@@ -883,14 +807,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
         {/* Introspect button for custom sources (non-TensorFile) */}
         {source && !isPreset && source !== "TensorFile" && (
           <div className="px-4 pb-3">
-            <button
-              onClick={handleIntrospect}
-              disabled={introspecting}
-              className="w-full py-1.5 rounded-lg text-[11px] font-medium transition-colors"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)", opacity: introspecting ? 0.6 : 1 }}
-            >
-              {introspecting ? "Inspecting..." : "Inspect Data"}
-            </button>
+            <Button size="sm" block onClick={handleIntrospect} disabled={introspecting}>
+              {introspecting ? "Inspecting…" : "Inspect data"}
+            </Button>
             {introspectError && (
               <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
                 {introspectError}
@@ -977,18 +896,20 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
         {source && !isPreset && source !== "TensorFile" && (
           <div className="px-4 pb-3">
             <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Domain</label>
-            <select
+            <Select
               value={String(p.domain ?? "auto")}
-              onChange={(e) => updateNodeParam(node.id, "domain", e.target.value)}
+              onChange={(v) => updateNodeParam(node.id, "domain", v)}
+              aria-label="Domain"
               className={inputCls}
               style={inputStyle}
-            >
-              <option value="auto">Auto-detect</option>
-              <option value="vision">Vision</option>
-              <option value="text">Text</option>
-              <option value="tabular">Tabular</option>
-              <option value="audio">Audio</option>
-            </select>
+              options={[
+                { value: "auto", label: "Auto-detect" },
+                { value: "vision", label: "Vision" },
+                { value: "text", label: "Text" },
+                { value: "tabular", label: "Tabular" },
+                { value: "audio", label: "Audio" },
+              ]}
+            />
           </div>
         )}
 
@@ -1004,11 +925,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             </div>
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Channels</label>
-              <select value={String(p.channels ?? "rgb")} onChange={(e) => updateNodeParam(node.id, "channels", e.target.value)}
-                className={inputCls} style={inputStyle}>
-                <option value="rgb">RGB</option>
-                <option value="grayscale">Grayscale</option>
-              </select>
+              <Select value={String(p.channels ?? "rgb")} onChange={(v) => updateNodeParam(node.id, "channels", v)}
+                aria-label="Channels" className={inputCls} style={inputStyle}
+                options={[{ value: "rgb", label: "RGB" }, { value: "grayscale", label: "Grayscale" }]} />
             </div>
           </div>
         )}
@@ -1034,11 +953,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
                 <div>
                   <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Text Column</label>
                   {columns.length > 0 ? (
-                    <select value={String(p.text_column ?? "")} onChange={(e) => updateNodeParam(node.id, "text_column", e.target.value)}
-                      className={inputCls} style={inputStyle}>
-                      <option value="">Auto-detect</option>
-                      {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <Select value={String(p.text_column ?? "")} onChange={(v) => updateNodeParam(node.id, "text_column", v)}
+                      aria-label="Text column" className={inputCls} style={inputStyle}
+                      options={[{ value: "", label: "Auto-detect" }, ...columns]} />
                   ) : (
                     <input type="text" value={String(p.text_column ?? "")} onChange={(e) => updateNodeParam(node.id, "text_column", e.target.value)}
                       placeholder="auto-detect" className={inputCls} style={inputStyle} />
@@ -1047,11 +964,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
                 <div>
                   <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Label Column</label>
                   {columns.length > 0 ? (
-                    <select value={String(p.label_column ?? "")} onChange={(e) => updateNodeParam(node.id, "label_column", e.target.value)}
-                      className={inputCls} style={inputStyle}>
-                      <option value="">Auto-detect</option>
-                      {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <Select value={String(p.label_column ?? "")} onChange={(v) => updateNodeParam(node.id, "label_column", v)}
+                      aria-label="Label column" className={inputCls} style={inputStyle}
+                      options={[{ value: "", label: "Auto-detect" }, ...columns]} />
                   ) : (
                     <input type="text" value={String(p.label_column ?? "")} onChange={(e) => updateNodeParam(node.id, "label_column", e.target.value)}
                       placeholder="auto-detect" className={inputCls} style={inputStyle} />
@@ -1068,11 +983,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Target Column</label>
               {columns.length > 0 ? (
-                <select value={String(p.target_column ?? "")} onChange={(e) => updateNodeParam(node.id, "target_column", e.target.value)}
-                  className={inputCls} style={inputStyle}>
-                  <option value="">Auto (last column)</option>
-                  {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <Select value={String(p.target_column ?? "")} onChange={(v) => updateNodeParam(node.id, "target_column", v)}
+                  aria-label="Target column" className={inputCls} style={inputStyle}
+                  options={[{ value: "", label: "Auto (last column)" }, ...columns]} />
               ) : (
                 <input type="text" value={String(p.target_column ?? "")} onChange={(e) => updateNodeParam(node.id, "target_column", e.target.value)}
                   placeholder="auto (last column)" className={inputCls} style={inputStyle} />
@@ -1087,13 +1000,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
               <>
                 <div>
                   <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Delimiter</label>
-                  <select value={String(p.delimiter ?? ",")} onChange={(e) => updateNodeParam(node.id, "delimiter", e.target.value)}
-                    className={inputCls} style={inputStyle}>
-                    <option value=",">Comma (,)</option>
-                    <option value=";">Semicolon (;)</option>
-                    <option value="|">Pipe (|)</option>
-                    <option value="\t">Tab</option>
-                  </select>
+                  <Select value={String(p.delimiter ?? ",")} onChange={(v) => updateNodeParam(node.id, "delimiter", v)}
+                    aria-label="Delimiter" className={inputCls} style={inputStyle}
+                    options={[{ value: ",", label: "Comma (,)" }, { value: ";", label: "Semicolon (;)" }, { value: "|", label: "Pipe (|)" }, { value: "\t", label: "Tab" }]} />
                 </div>
                 <div>
                   <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Has Header</label>
@@ -1106,12 +1015,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
             )}
             <div>
               <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Normalization</label>
-              <select value={String(p.normalization ?? "none")} onChange={(e) => updateNodeParam(node.id, "normalization", e.target.value)}
-                className={inputCls} style={inputStyle}>
-                <option value="none">None</option>
-                <option value="standard">Standard (z-score)</option>
-                <option value="minmax">Min-Max</option>
-              </select>
+              <Select value={String(p.normalization ?? "none")} onChange={(v) => updateNodeParam(node.id, "normalization", v)}
+                aria-label="Normalization" className={inputCls} style={inputStyle}
+                options={[{ value: "none", label: "None" }, { value: "standard", label: "Standard (z-score)" }, { value: "minmax", label: "Min-Max" }]} />
             </div>
           </div>
         )}
@@ -1121,11 +1027,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
           <div className="px-4 pb-3">
             <label className="block text-[11px] font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>Image Column</label>
             {columns.length > 0 ? (
-              <select value={String(p.image_column ?? "")} onChange={(e) => updateNodeParam(node.id, "image_column", e.target.value)}
-                className={inputCls} style={inputStyle}>
-                <option value="">Auto-detect</option>
-                {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <Select value={String(p.image_column ?? "")} onChange={(v) => updateNodeParam(node.id, "image_column", v)}
+                aria-label="Image column" className={inputCls} style={inputStyle}
+                options={[{ value: "", label: "Auto-detect" }, ...columns]} />
             ) : (
               <input type="text" value={String(p.image_column ?? "")} onChange={(e) => updateNodeParam(node.id, "image_column", e.target.value)}
                 placeholder="auto-detect" className={inputCls} style={inputStyle} />
@@ -1184,14 +1088,9 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
       {source && !isPreset && source !== "TensorFile" && (
         <div style={{ borderTop: "1px solid var(--border)" }}>
           <div className="px-4 py-3">
-            <button
-              onClick={handleProbe}
-              disabled={probing}
-              className="w-full py-1.5 rounded-lg text-[11px] font-medium transition-colors"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)", opacity: probing ? 0.6 : 1 }}
-            >
-              {probing ? "Probing..." : "Probe Output Shape"}
-            </button>
+            <Button size="sm" block onClick={handleProbe} disabled={probing}>
+              {probing ? "Probing…" : "Probe output shape"}
+            </Button>
             {probeError && (
               <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
                 {probeError}
@@ -1226,11 +1125,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
 
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <div className="px-4 py-3">
-          <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
-            style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
-          >Delete Node</button>
+          <Button variant="danger" block onClick={deleteSelected}>Delete layer</Button>
         </div>
       </div>
     </>
@@ -1291,12 +1186,7 @@ function TensorFilePathInput({ path, scanning, scanResult, scanError, onPathChan
       </div>
       {/* Scan button — explicit, no auto-scan on type */}
       {path && !scanResult && !scanning && (
-        <button onClick={() => onScan(path)}
-          className="w-full py-1.5 rounded-md text-[11px] font-medium"
-          style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-        >
-          Scan Data
-        </button>
+        <Button size="sm" block onClick={() => onScan(path)}>Scan data</Button>
       )}
       {scanning && (
         <div className="text-[10px] text-center py-1" style={{ color: "var(--text-muted)" }}>Scanning...</div>
@@ -1304,7 +1194,7 @@ function TensorFilePathInput({ path, scanning, scanResult, scanError, onPathChan
       {scanResult && (
         <div className="flex items-center justify-between text-[10px]" style={{ color: "var(--text-muted)" }}>
           <span className="tabular-nums">{scanResult.total_samples.toLocaleString()} samples · {scanResult.tensors.length} tensors</span>
-          <button onClick={() => onScan(path)} className="text-[10px]" style={{ color: "var(--accent)" }}>rescan</button>
+          <button onClick={() => onScan(path)} className="text-[10px]" style={{ color: "var(--accent-text)" }}>rescan</button>
         </div>
       )}
       {scanError && (
@@ -1414,18 +1304,18 @@ function DataOutputsEditor({ node, source, updateDataOutput }: {
                   <span className="text-[11px] font-mono font-medium" style={{ color: "var(--text-primary)" }}>
                     {t.name}
                   </span>
-                  <select
+                  <Select
                     value={role}
-                    onChange={(e) => handleRoleChange(t.name, e.target.value as Role, t)}
-                    className="text-[10px] px-1.5 py-0.5 rounded"
+                    onChange={(v) => handleRoleChange(t.name, v as Role, t)}
+                    options={[...ROLES]}
+                    aria-label={`Use of ${t.name}`}
+                    className="text-[11px] px-1.5 py-0.5 rounded"
                     style={{
                       background: "transparent",
                       border: `1px solid ${isActive ? "var(--accent)" : "var(--border)"}`,
-                      color: isActive ? "var(--accent)" : "var(--text-muted)",
+                      color: isActive ? "var(--accent-text)" : "var(--text-muted)",
                     }}
-                  >
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
+                  />
                 </div>
                 <div className="mt-1 text-[10px] flex items-center gap-2" style={{ color: "var(--text-muted)" }}>
                   <span className="font-mono">[{t.shape.join(", ")}] {t.dtype}</span>
@@ -1492,12 +1382,11 @@ function DataOutputsEditor({ node, source, updateDataOutput }: {
             </label>
             <div className="flex items-center gap-1.5">
               {columns.length > 0 ? (
-                <select value={o.column} onChange={(e) => updateDataOutput(node.id, o.id, { column: e.target.value })}
-                  className="flex-1 px-2 py-1.5 text-[11px] rounded-md"
-                  style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)" }}>
-                  <option value="">auto</option>
-                  {columns.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <Select value={o.column} onChange={(v) => updateDataOutput(node.id, o.id, { column: v })}
+                  options={[{ value: "", label: "auto" }, ...columns]}
+                  aria-label={i === 0 ? "Model input column" : i === 1 ? "Loss target column" : `${o.id} column`}
+                  className="flex-1 min-w-0 px-2 py-1.5 text-[11px] rounded-md"
+                  style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
               ) : (
                 <input type="text" value={o.column || ""}
                   onChange={(e) => updateDataOutput(node.id, o.id, { column: e.target.value })}
@@ -1541,7 +1430,7 @@ return torch.tensor(features), label`;
           Preprocessing
           {value && (
             <span className="text-[8px] px-1 py-0.5 rounded normal-case tracking-normal font-medium"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>custom</span>
+              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>custom</span>
           )}
         </span>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
@@ -1552,7 +1441,7 @@ return torch.tensor(features), label`;
       {expanded && (
         <div className="px-4 pb-3">
           <div className="text-[10px] mb-2 leading-relaxed" style={{ color: "var(--text-muted)" }}>
-            Python function body. Receives <code style={{ color: "var(--accent)" }}>item</code> (dict), must return <code style={{ color: "var(--accent)" }}>(tensor, label)</code>.
+            Python function body. Receives <code style={{ color: "var(--accent-text)" }}>item</code> (dict), must return <code style={{ color: "var(--accent-text)" }}>(tensor, label)</code>.
           </div>
           {editing ? (
             <div className="space-y-2">
@@ -1566,11 +1455,10 @@ return torch.tensor(features), label`;
                 placeholder={placeholder}
               />
               <div className="flex gap-1.5">
-                <button onClick={handleSave} className="px-2.5 py-1 rounded text-[10px] font-medium text-white" style={{ background: "var(--accent)" }}>Save</button>
-                <button onClick={() => { setEditValue(value); setEditing(false); }} className="px-2.5 py-1 rounded text-[10px] font-medium"
-                  style={{ background: "var(--bg-tertiary)", color: "var(--text-secondary)", border: "1px solid var(--border)" }}>Cancel</button>
+                <Button variant="primary" size="sm" onClick={handleSave}>Save</Button>
+                <Button size="sm" onClick={() => { setEditValue(value); setEditing(false); }}>Cancel</Button>
                 {value && (
-                  <button onClick={() => { onChange(""); setEditValue(""); setEditing(false); }} className="px-2.5 py-1 rounded text-[10px] font-medium ml-auto" style={{ color: "var(--danger)" }}>Clear</button>
+                  <Button variant="ghost" size="sm" onClick={() => { onChange(""); setEditValue(""); setEditing(false); }} className="ml-auto">Clear</Button>
                 )}
               </div>
             </div>
@@ -1675,21 +1563,11 @@ function NodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
       <div style={{ borderTop: "1px solid var(--border)" }}>
         {canConvert && (
           <div className="px-4 pt-3">
-            <button
-              onClick={() => convertToCodeBlock(node.id)}
-              className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)", border: "1px solid transparent" }}
-              onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-              onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
-            >Convert to Code Block</button>
+            <Button block onClick={() => convertToCodeBlock(node.id)}>Convert to Code Block</Button>
           </div>
         )}
         <div className="px-4 py-3">
-          <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
-            style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
-          >Delete Node</button>
+          <Button variant="danger" block onClick={deleteSelected}>Delete layer</Button>
         </div>
       </div>
     </>
@@ -1784,7 +1662,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</span>
             <span className="text-[8px] px-1 py-0.5 rounded font-mono flex-shrink-0"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}>&lt;/&gt;</span>
+              style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>&lt;/&gt;</span>
           </div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
             Code Block (was {cb.originalModuleType})
@@ -1802,11 +1680,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
             {cb.inputHandles.map((h) => (
               <div key={h.id} className="flex items-center gap-2">
                 <span className="flex-1 text-[11px] font-mono" style={{ color: "var(--text-primary)" }}>{h.id}</span>
-                <button
-                  onClick={() => removeCodeBlockHandle(node.id, "input", h.id)}
-                  className="text-[9px] px-1.5 py-0.5 rounded transition-colors"
-                  style={{ color: "var(--danger)", background: "var(--danger-subtle)" }}
-                >Remove</button>
+                <Button variant="danger" size="sm" className="!h-6" onClick={() => removeCodeBlockHandle(node.id, "input", h.id)}>Remove</Button>
               </div>
             ))}
           </div>
@@ -1820,11 +1694,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
               className="flex-1 px-2 py-1 text-[11px] rounded-lg"
               style={inputStyle}
             />
-            <button
-              onClick={handleAddInput}
-              className="text-[10px] px-2 py-1 rounded-lg font-medium transition-colors"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-            >+ Add</button>
+            <Button size="sm" onClick={handleAddInput}>Add</Button>
           </div>
         </div>
 
@@ -1835,11 +1705,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
             {cb.outputHandles.map((h) => (
               <div key={h.id} className="flex items-center gap-2">
                 <span className="flex-1 text-[11px] font-mono" style={{ color: "var(--text-primary)" }}>{h.id}</span>
-                <button
-                  onClick={() => removeCodeBlockHandle(node.id, "output", h.id)}
-                  className="text-[9px] px-1.5 py-0.5 rounded transition-colors"
-                  style={{ color: "var(--danger)", background: "var(--danger-subtle)" }}
-                >Remove</button>
+                <Button variant="danger" size="sm" className="!h-6" onClick={() => removeCodeBlockHandle(node.id, "output", h.id)}>Remove</Button>
               </div>
             ))}
           </div>
@@ -1853,11 +1719,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
               className="flex-1 px-2 py-1 text-[11px] rounded-lg"
               style={inputStyle}
             />
-            <button
-              onClick={handleAddOutput}
-              className="text-[10px] px-2 py-1 rounded-lg font-medium transition-colors"
-              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-            >+ Add</button>
+            <Button size="sm" onClick={handleAddOutput}>Add</Button>
           </div>
         </div>
 
@@ -1890,14 +1752,9 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
 
         {/* Probe Output Shapes */}
         <div className="px-4 pb-3" style={{ borderTop: "1px solid var(--border)" }}>
-          <button
-            onClick={handleProbe}
-            disabled={probing}
-            className="w-full py-1.5 mt-2 rounded-lg text-[11px] font-medium transition-colors"
-            style={{ background: "var(--accent-subtle)", color: "var(--accent)", opacity: probing ? 0.6 : 1 }}
-          >
-            {probing ? "Probing..." : "Probe Output Shapes"}
-          </button>
+          <Button size="sm" block onClick={handleProbe} disabled={probing} className="mt-2">
+            {probing ? "Probing…" : "Probe output shapes"}
+          </Button>
           {probeError && (
             <div className="mt-1.5 text-[10px] px-2 py-1 rounded" style={{ background: "var(--danger-subtle)", color: "var(--danger)" }}>
               {probeError}
@@ -1908,7 +1765,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
               {Object.entries(probeResult).map(([handle, shape]) => (
                 <div key={handle} className="flex justify-between text-[11px]">
                   <span className="font-mono" style={{ color: "var(--text-secondary)" }}>{handle}</span>
-                  <span className="font-mono" style={{ color: "var(--accent)" }}>{JSON.stringify(shape)}</span>
+                  <span className="font-mono" style={{ color: "var(--accent-text)" }}>{JSON.stringify(shape)}</span>
                 </div>
               ))}
             </div>
@@ -1919,20 +1776,10 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
       {/* Actions */}
       <div style={{ borderTop: "1px solid var(--border)" }}>
         <div className="px-4 pt-3 space-y-2">
-          <button
-            onClick={() => revertToStandard(node.id)}
-            className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
-            style={{ background: "var(--accent-subtle)", color: "var(--accent)", border: "1px solid transparent" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
-          >Revert to Standard</button>
+          <Button block onClick={() => revertToStandard(node.id)}>Revert to Standard</Button>
         </div>
         <div className="px-4 py-3">
-          <button onClick={deleteSelected} className="w-full py-2 rounded-lg text-xs font-medium transition-colors"
-            style={{ background: "var(--danger-subtle)", color: "var(--danger)", border: "1px solid transparent" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--danger)")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "transparent")}
-          >Delete Node</button>
+          <Button variant="danger" block onClick={deleteSelected}>Delete layer</Button>
         </div>
       </div>
     </>
@@ -1959,9 +1806,8 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
           <span className="text-xs" style={{ color: "var(--text-primary)" }}>{value ? "True" : "False"}</span>
         </label>
       ) : param.type === "select" ? (
-        <select value={String(value ?? param.default)} onChange={(e) => onChange(e.target.value)} className={c} style={s}>
-          {param.options?.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <Select value={String(value ?? param.default)} onChange={onChange} options={param.options ?? []}
+          aria-label={param.label ?? param.name} className={c} style={s} />
       ) : param.type === "int" || param.type === "float" ? (
         <NumberField value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
           onChange={onChange}

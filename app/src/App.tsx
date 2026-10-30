@@ -35,6 +35,7 @@ import { sidecarCall } from "./lib/sidecar";
 import { MODULE_REGISTRY } from "./lib/registry";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
 import type { NodeCategory } from "./lib/types";
+import Tabs from "./components/ui/Tabs";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
@@ -411,18 +412,19 @@ export default function App() {
               </svg>
             </button>
 
-            <BottomTabButton label="Code" active={bottomTab === "code"} onClick={() => { setBottomTab("code"); setBottomPanelOpen(true); }} />
-            <BottomTabButton
-              label={trainingStatus === "running" ? "Charts..." : trainingStatus === "starting" ? "Starting..." : "Charts"}
-              active={bottomTab === "charts"}
-              onClick={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
-              accent={trainingStatus === "running" || trainingStatus === "starting"}
-            />
-            <BottomTabButton
-              label={logCount > 0 ? `Logs (${logCount})` : "Logs"}
-              active={bottomTab === "logs"}
-              onClick={() => { setBottomTab("logs"); setBottomPanelOpen(true); }}
-            />
+            <div className="h-full" onMouseDown={(e) => e.stopPropagation()}>
+              <Tabs
+                label="Bottom panel"
+                className="h-full"
+                value={bottomTab}
+                onChange={(t) => { setBottomTab(t); setBottomPanelOpen(true); }}
+                items={[
+                  { id: "code", label: "Code" },
+                  { id: "charts", label: "Charts", live: trainingStatus === "running" || trainingStatus === "starting" },
+                  { id: "logs", label: "Logs", badge: logCount > 0 ? logCount : undefined },
+                ]}
+              />
+            </div>
 
             {bottomPanelOpen && (
               <div className="flex-1 flex justify-center">
@@ -518,8 +520,8 @@ function CollapsedSideBar({ label, side, onClick }: { label: string; side: "left
       style={{ background: "var(--bg-secondary)" }}
       title={`Expand ${label} (${shortcut})`}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-        className="opacity-60 group-hover:opacity-100" style={{ transition: "opacity 0.15s ease" }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+        className="text-fg-muted group-hover:text-fg-secondary transition-colors" aria-hidden="true">
         {side === "left" ? (
           <><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><polyline points="14 10 17 12 14 14" /></>
         ) : (
@@ -527,8 +529,8 @@ function CollapsedSideBar({ label, side, onClick }: { label: string; side: "left
         )}
       </svg>
       <span
-        className="text-[10px] font-semibold uppercase tracking-widest opacity-50 group-hover:opacity-80"
-        style={{ color: "var(--text-muted)", writingMode: "vertical-lr", transition: "opacity 0.15s ease" }}
+        className="text-[11px] font-semibold uppercase tracking-widest text-fg-muted group-hover:text-fg-secondary transition-colors"
+        style={{ writingMode: "vertical-lr" }}
       >
         {label}
       </span>
@@ -536,30 +538,3 @@ function CollapsedSideBar({ label, side, onClick }: { label: string; side: "left
   );
 }
 
-function BottomTabButton({ label, active, onClick, accent }: { label: string; active: boolean; onClick: () => void; accent?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      onMouseDown={(e) => e.stopPropagation()}
-      className="relative px-3 py-1 text-[10px] font-semibold uppercase tracking-wider rounded-md"
-      style={{
-        color: active ? (accent ? "#10b981" : "var(--text-primary)") : "var(--text-muted)",
-        background: active ? "var(--bg-tertiary)" : "transparent",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) e.currentTarget.style.color = "var(--text-secondary)";
-      }}
-      onMouseLeave={(e) => {
-        if (!active) e.currentTarget.style.color = "var(--text-muted)";
-      }}
-    >
-      {label}
-      {active && (
-        <span
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] rounded-full"
-          style={{ width: "60%", background: accent ? "#10b981" : "var(--accent)" }}
-        />
-      )}
-    </button>
-  );
-}

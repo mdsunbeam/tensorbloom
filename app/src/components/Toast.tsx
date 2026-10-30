@@ -52,9 +52,9 @@ export default function ToastContainer({ rightOffset = 304 }: { rightOffset?: nu
 function ToastItem({ toast: t, onDismiss }: { toast: ToastItem; onDismiss: () => void }) {
   const colors = {
     info: { bg: "var(--bg-secondary)", border: "var(--accent)", icon: "var(--accent)" },
-    success: { bg: "var(--bg-secondary)", border: "#10b981", icon: "#10b981" },
+    success: { bg: "var(--bg-secondary)", border: "var(--success)", icon: "var(--success)" },
     error: { bg: "var(--bg-secondary)", border: "var(--danger)", icon: "var(--danger)" },
-    warning: { bg: "var(--bg-secondary)", border: "#f59e0b", icon: "#f59e0b" },
+    warning: { bg: "var(--bg-secondary)", border: "var(--warning)", icon: "var(--warning)" },
   };
   const c = colors[t.type];
 

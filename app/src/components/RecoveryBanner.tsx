@@ -1,4 +1,5 @@
 import type { AutoSaveData } from "../lib/auto-save";
+import Button from "./ui/Button";
 
 function timeAgo(timestamp: number): string {
   const min = Math.round((Date.now() - timestamp) / 60_000);
@@ -23,12 +24,8 @@ export default function RecoveryBanner({ data, onRestore, onDiscard }: {
       <span className="whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
         Unsaved work from your last session: <span className="font-semibold" style={{ color: "var(--text-primary)" }}>{data.projectName}</span>, {data.nodes.length} layer{data.nodes.length === 1 ? "" : "s"}, {timeAgo(data.timestamp)}
       </span>
-      <button onClick={onDiscard} className="px-2.5 py-1 rounded-lg font-medium" style={{ color: "var(--text-secondary)", border: "1px solid var(--border)" }}>
-        Discard
-      </button>
-      <button onClick={onRestore} className="px-2.5 py-1 rounded-lg font-semibold text-white" style={{ background: "var(--accent)" }}>
-        Restore
-      </button>
+      <Button size="sm" onClick={onDiscard}>Discard</Button>
+      <Button size="sm" variant="primary" onClick={onRestore}>Restore</Button>
     </div>
   );
 }

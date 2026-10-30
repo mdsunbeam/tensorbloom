@@ -41,7 +41,7 @@ function BatchToggleButton() {
         className="px-2.5 py-1 text-[10px] font-mono font-medium rounded-lg"
         style={{
           background: shapeDisplayBatch ? "var(--accent-subtle)" : "var(--bg-secondary)",
-          color: shapeDisplayBatch ? "var(--accent)" : "var(--text-muted)",
+          color: shapeDisplayBatch ? "var(--accent-text)" : "var(--text-muted)",
           border: `1px solid ${shapeDisplayBatch ? "var(--accent)" : "var(--border)"}`,
           boxShadow: "var(--node-shadow)",
         }}
@@ -272,7 +272,6 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
   }, [onConnectStore]);
   const addNode = useGraphStore((s) => s.addNode);
   const setSelectedNodeId = useGraphStore((s) => s.setSelectedNodeId);
-  const theme = useThemeStore((s) => s.theme);
   const trainingStatus = useTrainingStore((s) => s.status);
   const reactFlowInstance = useRef<ReactFlowInstance<Node<NodeData>> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -446,7 +445,7 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
         proOptions={{ hideAttribution: true }}
         deleteKeyCode="Delete"
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={theme === "dark" ? 0.8 : 1.2} color={theme === "dark" ? "#27272a" : "#d4d4d8"} />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="var(--bg-dot)" />
         <Controls showInteractive={false} />
       </ReactFlow>
 
@@ -478,7 +477,7 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
             <div className="text-xs font-medium mb-1.5" style={{ color: "var(--text-muted)" }}>
               Build your neural network
             </div>
-            <div className="text-[11px] mb-3" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
+            <div className="text-[11px] mb-3" style={{ color: "var(--text-muted)" }}>
               Drag layers from the left panel, or start from a template
             </div>
             <button
@@ -490,7 +489,7 @@ export default function GraphEditor({ onShowSpotlight, onShowTemplates, minimapV
             >
               Start from a template
             </button>
-            <div className="flex items-center justify-center gap-3 text-[10px]" style={{ color: "var(--text-muted)", opacity: 0.6 }}>
+            <div className="flex items-center justify-center gap-3 text-[10px]" style={{ color: "var(--text-muted)" }}>
               <span>
                 <kbd className="px-1.5 py-0.5 rounded" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Ctrl+K</kbd> search layers
               </span>

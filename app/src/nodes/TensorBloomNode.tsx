@@ -129,7 +129,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             {isCodeBlock && (
               <span
                 className="text-[10px] px-1 py-0.5 rounded font-mono flex-shrink-0"
-                style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+                style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
                 title="Code block mode"
               >
                 &lt;/&gt;
@@ -162,7 +162,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             {formatShape(shapeInfo.shape, effectiveBatch)}
           </span>
           {shapeDisplayBatch && shapeInfo.shape.length >= 2 && (
-            <span className="text-[10px] font-mono" style={{ color: "var(--text-muted)", opacity: 0.7 }}>
+            <span className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>
               N={batchSize}
             </span>
           )}
@@ -306,7 +306,7 @@ function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
   if (match === null) return null;
 
   return (
-    <div className="px-3 pb-1.5 text-[11px] font-medium" style={{ color: match ? "rgb(34, 197, 94)" : "rgb(245, 158, 11)" }}>
+    <div className="px-3 pb-1.5 text-[11px] font-medium" style={{ color: match ? "var(--success)" : "var(--warning)" }}>
       {match ? `${info.label} \u2713` : `${info.label} expects ${JSON.stringify(info.inputShape)}`}
     </div>
   );
