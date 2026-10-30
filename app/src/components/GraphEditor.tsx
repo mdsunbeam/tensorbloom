@@ -14,6 +14,7 @@ import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useTrainingStore } from "../store/training-store";
 import { CATEGORY_COLORS } from "../lib/registry";
 import { inferShapesClient } from "../lib/shape-inference";
+import { setCanvasFocusHandler } from "../lib/canvas-focus";
 import { isValidConnection as checkValid } from "../lib/connection-validation";
 import { endDrag, getDragState } from "./DragOverlay";
 import TensorBloomNode from "../nodes/TensorBloomNode";
@@ -308,6 +309,20 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     const y = b.height * z <= H - VIEW_PAD * 2 ? H / 2 - (b.y + b.height / 2) * z : VIEW_PAD - b.y * z;
     rf.setViewport({ x, y, zoom: z }, { duration: 300 });
   }, []);
+
+  // Bring a node into view and select it, for the problems list and "Go to" links
+  useEffect(() => setCanvasFocusHandler((nodeId) => {
+    const rf = reactFlowInstance.current;
+    const node = rf?.getInternalNode(nodeId);
+    if (!rf || !node) return;
+    const { onNodesChange, nodes: all } = useGraphStore.getState();
+    onNodesChange(all.map((n) => ({ type: "select" as const, id: n.id, selected: n.id === nodeId })));
+    setSelectedNodeId(nodeId);
+    const w = node.measured?.width ?? 200;
+    const h = node.measured?.height ?? 80;
+    const { x, y } = node.internals.positionAbsolute;
+    rf.setCenter(x + w / 2, y + h / 2, { zoom: Math.max(rf.getZoom(), READABLE_ZOOM), duration: 300 });
+  }), [setSelectedNodeId]);
 
   // Re-frame when nodes are bulk-loaded
   useEffect(() => {

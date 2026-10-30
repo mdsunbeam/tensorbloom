@@ -7,6 +7,7 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
 import type { TrainingConfig } from "../store/training-store";
 import { inferShapesClient } from "./shape-inference";
+import { shapeErrorFix } from "./shape-fixes";
 import { DATASET_METADATA, isDatasetNode, resolveDataNodeShape } from "./dataset-metadata";
 import type { DataOutputDef } from "./types";
 
@@ -193,36 +194,21 @@ export function preflightCheck(
   const tentativeNodes = applyTentativeFixes(nodes, autoFixes);
   const { shapes: inferredShapes, errors: shapeErrors } = inferShapesClient(tentativeNodes, edges);
 
-  // Auto-fixable param hints from shape inference.
-  // Maps paramHint → how to extract the correct value from receivedShape.
-  const FIXABLE_PARAMS: Record<string, (received: number[]) => number> = {
-    in_features: (s) => s[s.length - 1],      // last dim
-    in_channels: (s) => s[1],                   // channel dim (N, C, ...)
-    num_features: (s) => s[1],                  // channel/feature dim for BatchNorm
-  };
+  // Size parameters that shape inference can correct (in_features, in_channels, ...)
   const alreadyFixed = new Set(autoFixes.map((f) => `${f.nodeId}:${f.param}`));
 
   for (const [nodeId, shapeErr] of Object.entries(shapeErrors)) {
-    if (shapeErr.type === "cascaded") continue;
-    if (!shapeErr.paramHint || !shapeErr.receivedShape) continue;
-
-    const extractor = FIXABLE_PARAMS[shapeErr.paramHint];
-    if (!extractor) continue;
-    if (alreadyFixed.has(`${nodeId}:${shapeErr.paramHint}`)) continue;
-
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) continue;
-
-    const correctValue = extractor(shapeErr.receivedShape);
-    const currentValue = Number(node.data.params[shapeErr.paramHint] ?? 0);
-    if (correctValue > 0 && currentValue > 0 && correctValue !== currentValue) {
-      autoFixes.push({
-        nodeId, param: shapeErr.paramHint,
-        oldValue: currentValue, newValue: correctValue,
-        reason: `${node.data.moduleType} "${node.data.label}" has ${shapeErr.paramHint}=${currentValue} but receives ${correctValue}`,
-      });
-      alreadyFixed.add(`${nodeId}:${shapeErr.paramHint}`);
-    }
+    const fix = shapeErrorFix(shapeErr, node.data.params);
+    if (!fix || !(fix.from > 0)) continue;
+    if (alreadyFixed.has(`${nodeId}:${fix.param}`)) continue;
+    autoFixes.push({
+      nodeId, param: fix.param,
+      oldValue: fix.from, newValue: fix.to,
+      reason: `${node.data.moduleType} "${node.data.label}" has ${fix.param}=${fix.from} but receives ${fix.to}`,
+    });
+    alreadyFixed.add(`${nodeId}:${fix.param}`);
   }
 
   // Report remaining non-auto-fixable shape errors
