@@ -7,6 +7,9 @@ import { autoLayout } from "../lib/auto-layout";
 import { computeModelSummary, formatParamCount } from "../lib/model-summary";
 import { newProject, openProject, saveProject } from "../lib/document-actions";
 import { useEscapeKey } from "../lib/use-escape-key";
+import RunControls from "./RunControls";
+import { IconButton } from "./ui/Button";
+import { LogoMark, Wordmark } from "./ui/Logo";
 
 interface ToolbarProps {
   onShowImport: () => void;
@@ -14,10 +17,12 @@ interface ToolbarProps {
   onShowExport: () => void;
   onShowSpotlight: () => void;
   onShowCustomBlock: () => void;
+  /** Opens the Charts tab, where the run's details are */
+  onShowRun: () => void;
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, onShowRun, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -90,100 +95,78 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
   ];
 
   return (
-    <div
-      className="flex items-center h-9 px-1 flex-shrink-0 select-none"
-      style={{ background: "var(--bg-secondary)", borderBottom: "1px solid var(--border)" }}
-    >
-      {/* Menu bar */}
-      <div className="flex items-center" ref={menuBarRef}>
-        {menus.map((menu) => (
-          <div key={menu.id} className="relative">
-            <button
-              onClick={() => setOpenMenu(openMenu === menu.id ? null : menu.id)}
-              onMouseEnter={() => { if (openMenu) setOpenMenu(menu.id); }}
-              className="px-2.5 py-1 text-[11px] font-medium rounded-sm"
-              style={{
-                color: openMenu === menu.id ? "var(--text-primary)" : "var(--text-secondary)",
-                background: openMenu === menu.id ? "var(--bg-tertiary)" : "transparent",
-              }}
-              onMouseLeave={(e) => {
-                if (openMenu !== menu.id) e.currentTarget.style.background = "transparent";
-              }}
-            >
-              {menu.label}
-            </button>
-            {openMenu === menu.id && (
-              <div
-                className="absolute top-full left-0 mt-0.5 py-1 rounded-md z-50 min-w-[220px]"
-                style={{
-                  background: "var(--bg-secondary)",
-                  border: "1px solid var(--border)",
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.2), 0 1px 4px rgba(0,0,0,0.1)",
-                }}
+    <div className="flex items-center gap-4 h-10 px-2 flex-shrink-0 select-none bg-surface border-b border-line">
+      {/* Left: brand and menus */}
+      <div className="flex-1 basis-0 flex items-center min-w-0">
+        <div className="flex items-center gap-1.5 pl-1 pr-3 mr-1 h-5 border-r border-line">
+          <LogoMark size={16} className="text-accent-text" />
+          <Wordmark className="text-[13px]" />
+        </div>
+        <div className="flex items-center" ref={menuBarRef}>
+          {menus.map((menu) => (
+            <div key={menu.id} className="relative">
+              <button
+                aria-expanded={openMenu === menu.id}
+                onClick={() => setOpenMenu(openMenu === menu.id ? null : menu.id)}
+                onMouseEnter={() => { if (openMenu) setOpenMenu(menu.id); }}
+                className={`px-2.5 h-7 text-xs rounded-md transition-colors ${
+                  openMenu === menu.id ? "bg-surface-raised text-fg" : "text-fg-secondary hover:bg-surface-raised hover:text-fg"
+                }`}
               >
-                {menu.items.map((item, i) =>
-                  item.type === "separator" ? (
-                    <div key={i} className="my-1 mx-2" style={{ borderTop: "1px solid var(--border)" }} />
-                  ) : (
-                    <button
-                      key={i}
-                      onClick={() => { setOpenMenu(null); item.action?.(); }}
-                      disabled={item.disabled}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] text-left transition-colors"
-                      style={{
-                        color: item.disabled ? "var(--text-muted)" : "var(--text-secondary)",
-                        opacity: item.disabled ? 0.5 : 1,
-                      }}
-                      onMouseEnter={(e) => { if (!item.disabled) { e.currentTarget.style.background = "var(--bg-tertiary)"; e.currentTarget.style.color = "var(--text-primary)"; } }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = item.disabled ? "var(--text-muted)" : "var(--text-secondary)"; }}
-                    >
-                      <span>{item.label}</span>
-                      {item.shortcut && <span className="text-[9px] ml-4" style={{ color: "var(--text-muted)" }}>{item.shortcut}</span>}
-                    </button>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-        ))}
+                {menu.label}
+              </button>
+              {openMenu === menu.id && (
+                <div
+                  className="absolute top-full left-0 mt-1 py-1 rounded-lg z-50 min-w-[230px] bg-surface border border-line"
+                  style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.12)" }}
+                >
+                  {menu.items.map((item, i) =>
+                    item.type === "separator" ? (
+                      <div key={i} role="separator" className="my-1 mx-2 border-t border-line" />
+                    ) : (
+                      <button
+                        key={i}
+                        onClick={() => { setOpenMenu(null); item.action?.(); }}
+                        disabled={item.disabled}
+                        className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-left transition-colors text-fg-secondary enabled:hover:bg-surface-raised enabled:hover:text-fg disabled:text-fg-muted disabled:opacity-60"
+                      >
+                        <span>{item.label}</span>
+                        {item.shortcut && <span className="text-[11px] ml-4 text-fg-muted">{item.shortcut}</span>}
+                      </button>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Editable project name */}
-      <ProjectNameInput />
+      {/* Center: the project's name, which is also where it's renamed */}
+      <div className="flex items-center gap-2 min-w-0 max-w-[40%]">
+        <ProjectNameInput />
+        <span className="text-[11px] tabular-nums whitespace-nowrap text-fg-muted">
+          {nodeCount} nodes · {edgeCount} edges
+          {summary.totalParams > 0 && <> · {formatParamCount(summary.totalParams)} params</>}
+        </span>
+      </div>
 
-      <div className="flex-1" />
-
-      {/* Stats */}
-      <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-        {nodeCount} nodes · {edgeCount} edges
-        {summary.totalParams > 0 && <> · {formatParamCount(summary.totalParams)} params</>}
-      </span>
-
-      <div className="flex-1" />
-
-      {/* GPU info */}
-      {gpuInfo && (
-        <div className="flex items-center gap-1 mr-2" title={gpuInfo}>
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)" }}>
-            <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>
-          </svg>
-          <span className="text-[10px] tabular-nums whitespace-nowrap" style={{ color: "var(--text-muted)" }}>
-            {gpuInfo}
-          </span>
-        </div>
-      )}
-
-      {/* Theme toggle */}
-      <button
-        onClick={toggleTheme}
-        title={`${theme === "dark" ? "Light" : "Dark"} mode`}
-        className="w-7 h-7 flex items-center justify-center rounded-md"
-        style={{ color: "var(--text-muted)" }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text-secondary)"; }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; }}
-      >
-        {theme === "dark" ? ICONS.sun : ICONS.moon}
-      </button>
+      {/* Right: hardware, the run, theme */}
+      <div className="flex-1 basis-0 flex items-center justify-end gap-2 min-w-0">
+        {gpuInfo && (
+          <div className="flex items-center gap-1 min-w-0" title={gpuInfo}>
+            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-fg-muted" aria-hidden="true">
+              <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>
+            </svg>
+            {/* The full name is in the tooltip; the vendor prefix only takes room */}
+            <span className="text-[11px] tabular-nums whitespace-nowrap truncate text-fg-muted">{gpuInfo.replace(/^NVIDIA (GeForce )?|^AMD (Radeon )?/, "")}</span>
+          </div>
+        )}
+        <RunControls onShowRun={onShowRun} />
+        <IconButton label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} onClick={toggleTheme} className="text-fg-muted">
+          {theme === "dark" ? ICONS.sun : ICONS.moon}
+        </IconButton>
+      </div>
     </div>
   );
 }
@@ -208,11 +191,11 @@ function ProjectNameInput() {
   if (editing) {
     return (
       <input ref={inputRef} value={draft}
+        aria-label="Project name"
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(projectName); setEditing(false); } }}
-        className="ml-2 px-1.5 py-0.5 text-[11px] rounded-sm max-w-[160px]"
-        style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--text-primary)", outline: "none" }}
+        onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { e.stopPropagation(); setDraft(projectName); setEditing(false); } }}
+        className="px-1.5 h-7 text-xs font-semibold rounded-md w-[200px] min-w-0 bg-transparent border border-accent text-fg outline-none"
       />
     );
   }
@@ -220,14 +203,11 @@ function ProjectNameInput() {
   return (
     <button
       onClick={() => setEditing(true)}
-      className="ml-2 px-1.5 py-0.5 text-[11px] truncate max-w-[160px] rounded-sm"
-      style={{ color: "var(--text-muted)" }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = "var(--bg-tertiary)"; e.currentTarget.style.color = "var(--text-secondary)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--text-muted)"; }}
+      className="flex items-center px-1.5 h-7 text-xs font-semibold rounded-md min-w-0 text-fg hover:bg-surface-raised transition-colors"
       title={dirty ? "Unsaved changes. Click to rename the project." : "Click to rename the project"}
     >
-      {projectName}
-      {dirty && <span className="inline-block w-1.5 h-1.5 rounded-full ml-1.5 align-middle" style={{ background: "var(--text-secondary)" }} aria-label="Unsaved changes" />}
+      <span className="truncate">{projectName}</span>
+      {dirty && <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full ml-1.5 bg-fg-secondary" aria-label="Unsaved changes" />}
     </button>
   );
 }

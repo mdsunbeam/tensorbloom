@@ -7,6 +7,8 @@ import { useGraphStore } from "../store/graph-store";
 import { useTrainingStore, type TrainingResults } from "../store/training-store";
 import { preflightCheck } from "./preflight-check";
 import { toast } from "../components/Toast";
+import { reviewPreflightFixes } from "../components/PreflightDialog";
+import { useHistoryStore } from "../store/history-store";
 import { isDatasetNode, extractDatasetConfig } from "./dataset-metadata";
 import { buildSidecarGraph } from "./sidecar-graph";
 
@@ -15,37 +17,46 @@ export async function startTraining() {
   let { nodes } = store;
   const { edges } = store;
   const config = useTrainingStore.getState().config;
+  const previousStatus = useTrainingStore.getState().status;
+  if (previousStatus === "running" || previousStatus === "starting") return;
 
   if (nodes.length === 0) {
-    useTrainingStore.getState().setError("No nodes in graph");
+    useTrainingStore.getState().setError("The graph is empty. Add a Data node and some layers first.", "check");
     return;
   }
 
   useTrainingStore.getState().setStatus("starting");
 
-  // Pre-flight validation and auto-fix
+  // Pre-flight validation
   const preflight = preflightCheck(nodes, edges, config);
 
-  if (preflight.autoFixes.length > 0) {
-    // Apply auto-fixes to the graph store
-    // Apply fixes to the graph store
-    for (const fix of preflight.autoFixes) {
-      useGraphStore.getState().updateNodeParam(fix.nodeId, fix.param, fix.newValue);
-    }
-    // Re-read nodes after fixes
-    nodes = useGraphStore.getState().nodes;
-    const fixSummary = preflight.autoFixes.map((f) => `${f.param}: ${f.oldValue} → ${f.newValue}`).join(", ");
-    toast.info(`Auto-fixed: ${fixSummary}`);
-  }
-
-  // Show warnings as toasts
-  for (const w of preflight.warnings) {
-    toast.warning(w);
-  }
-
   if (!preflight.valid && preflight.errors.length > 0) {
-    useTrainingStore.getState().setError(preflight.errors.join("; "));
+    useTrainingStore.getState().setError(preflight.errors.join("\n"), "check");
     return;
+  }
+
+  if (preflight.autoFixes.length > 0) {
+    // Show the suggested changes instead of making them silently
+    const labelOf = (id: string) => nodes.find((n) => n.id === id)?.data.label ?? id;
+    const choice = await reviewPreflightFixes(
+      preflight.autoFixes.map((f) => ({ ...f, nodeLabel: labelOf(f.nodeId) })),
+      preflight.warnings,
+    );
+    if (choice === "cancel") {
+      useTrainingStore.getState().setStatus(previousStatus);
+      return;
+    }
+    if (choice === "apply") {
+      useHistoryStore.getState().pushSnapshot();
+      for (const fix of preflight.autoFixes) {
+        useGraphStore.getState().updateNodeParam(fix.nodeId, fix.param, fix.newValue);
+      }
+      nodes = useGraphStore.getState().nodes;
+    }
+  } else {
+    for (const w of preflight.warnings) {
+      toast.warning(w);
+    }
   }
 
   // Auto-generate seeds if null (random-but-recorded)
@@ -78,10 +89,13 @@ export async function startTraining() {
   });
 
   // Set up progress callback
+  let earlyStopped = false;
   setTrainProgressCallback((params: unknown) => {
     const p = params as {
       epoch?: number;
       step?: number;
+      total_steps?: number;
+      dataset?: string;
       train_loss?: number;
       val_loss?: number;
       train_acc?: number;
@@ -93,7 +107,15 @@ export async function startTraining() {
       gpu?: { allocated_mb: number; reserved_mb: number; max_allocated_mb: number };
     };
 
-    if (p.status === "complete" || p.status === "early_stop") {
+    if (p.status === "downloading") {
+      useTrainingStore.getState().setDownloading(p.dataset ?? "dataset");
+      return;
+    }
+    if (p.status === "early_stop") {
+      earlyStopped = true;
+      return;
+    }
+    if (p.status === "complete") {
       // Compute TrainingResults from accumulated metrics
       const store = useTrainingStore.getState();
       const metrics = store.metrics;
@@ -102,6 +124,7 @@ export async function startTraining() {
         let bestValLoss: number | undefined;
         let bestValEpoch: number | undefined;
         let bestValAcc: number | undefined;
+        let bestValAccEpoch: number | undefined;
         for (const m of metrics) {
           if (m.valLoss != null) {
             if (bestValLoss === undefined || m.valLoss < bestValLoss) {
@@ -112,6 +135,7 @@ export async function startTraining() {
           if (m.valAcc != null) {
             if (bestValAcc === undefined || m.valAcc > bestValAcc) {
               bestValAcc = m.valAcc;
+              bestValAccEpoch = m.epoch;
             }
           }
         }
@@ -126,6 +150,10 @@ export async function startTraining() {
           finalTrainAcc: last.trainAcc,
           finalValAcc: last.valAcc,
           bestValAcc,
+          bestValAccEpoch,
+          earlyStopped: earlyStopped || undefined,
+          stoppedByUser: store.stopRequested || undefined,
+          plannedEpochs: finalConfig.epochs,
           durationMs: store.startedAt ? Date.now() - store.startedAt : 0,
           environment: getCachedEnvironment() ?? undefined,
         };
@@ -143,7 +171,15 @@ export async function startTraining() {
       return;
     }
     if (p.epoch != null && p.train_loss != null) {
-      useTrainingStore.getState().appendMetric({
+      const ts = useTrainingStore.getState();
+      if (ts.downloading) ts.setDownloading(null);
+      if (p.total_steps) {
+        ts.setEpochProgress({ step: p.step ?? 0, total: p.total_steps });
+      } else if (ts.epochProgress) {
+        // End-of-epoch report: the epoch's batches are all done
+        ts.setEpochProgress({ step: ts.epochProgress.total, total: ts.epochProgress.total });
+      }
+      ts.appendMetric({
         epoch: p.epoch,
         step: p.step ?? 0,
         trainLoss: p.train_loss,
@@ -206,11 +242,19 @@ export async function startTraining() {
 }
 
 export async function stopTraining() {
+  useTrainingStore.getState().setStopRequested(true);
   setTrainLogCallback(null);
   try {
     await sidecarCall("train.stop", {});
   } catch {
-    // Ignore if sidecar is not running
+    // No sidecar, so nothing will report back: end the run here
+    useTrainingStore.setState({ status: "idle" });
+    return;
   }
-  useTrainingStore.getState().setStatus("idle");
+  // The sidecar finishes the batch it's on and then reports "complete", which ends the run.
+  // If that never arrives, don't leave the app looking busy.
+  setTimeout(() => {
+    const s = useTrainingStore.getState();
+    if (s.status === "running" && s.stopRequested) useTrainingStore.setState({ status: "idle" });
+  }, 15000);
 }

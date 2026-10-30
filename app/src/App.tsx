@@ -11,6 +11,9 @@ import ToastContainer, { toast } from "./components/Toast";
 import PythonSetup from "./components/PythonSetup";
 import DragOverlay from "./components/DragOverlay";
 import ConfirmDialog from "./components/ConfirmDialog";
+import PreflightDialog from "./components/PreflightDialog";
+import { LogoMark } from "./components/ui/Logo";
+import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
@@ -164,9 +167,9 @@ export default function App() {
     return () => { unlisten?.(); window.removeEventListener("beforeunload", onBeforeUnload); };
   }, []);
 
-  // Auto-switch to training tab when training starts
+  // Show the Charts tab when a run starts, or when it can't start
   useEffect(() => {
-    if (trainingStatus === "running" || trainingStatus === "starting") {
+    if (trainingStatus === "running" || trainingStatus === "starting" || trainingStatus === "error") {
       setBottomTab("charts");
       setBottomPanelOpen(true);
     }
@@ -203,6 +206,12 @@ export default function App() {
       else if (ctrl && key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
       else if (ctrl && key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
       else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
+      else if (ctrl && key === "enter") {
+        // Not while typing or while a dialog is open, where Enter belongs to the field or the dialog
+        if (editable || document.querySelector('[aria-modal="true"]')) return;
+        e.preventDefault();
+        void startTraining();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -310,18 +319,7 @@ export default function App() {
   if (checkingPython) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 h-screen w-screen" style={{ background: "var(--bg-primary)" }}>
-        <svg width="48" height="48" viewBox="0 0 36 36" fill="none" style={{ opacity: 0.5 }}>
-          <g transform="translate(18,18)">
-            <circle cx="0" cy="-10" r="5" fill="var(--text-primary)"/>
-            <circle cx="7" cy="-7" r="5" fill="var(--text-primary)"/>
-            <circle cx="10" cy="0" r="5" fill="var(--text-primary)"/>
-            <circle cx="7" cy="7" r="5" fill="var(--text-primary)"/>
-            <circle cx="0" cy="10" r="5" fill="var(--text-primary)"/>
-            <circle cx="-7" cy="7" r="5" fill="var(--text-primary)"/>
-            <circle cx="-10" cy="0" r="5" fill="var(--text-primary)"/>
-            <circle cx="-7" cy="-7" r="5" fill="var(--text-primary)"/>
-          </g>
-        </svg>
+        <LogoMark size={48} className="text-accent-text animate-pulse" />
         <div className="text-sm" style={{ color: "var(--text-muted)" }}>Starting TensorBloom...</div>
       </div>
     );
@@ -335,6 +333,7 @@ export default function App() {
         onShowExport={() => setExportOpen(true)}
         onShowSpotlight={() => setSpotlightOpen(true)}
         onShowCustomBlock={() => setCustomBlockOpen(true)}
+        onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
         gpuInfo={gpuInfo}
       />
 
@@ -436,7 +435,7 @@ export default function App() {
           {bottomPanelOpen && (
             <div className="flex-shrink-0 overflow-hidden" style={{ height: tabHeights[bottomTab], background: "var(--bg-secondary)" }}>
               {bottomTab === "code" && <CodePanel />}
-              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} />}
+              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onExport={() => setExportOpen(true)} />}
               {bottomTab === "logs" && <TrainingLogs />}
             </div>
           )}
@@ -477,6 +476,7 @@ export default function App() {
       <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
       <DragOverlay />
       <ConfirmDialog />
+      <PreflightDialog />
     </div>
   );
 }

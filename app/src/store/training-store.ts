@@ -58,6 +58,13 @@ export interface TrainingResults {
   finalTrainAcc?: number;
   finalValAcc?: number;
   bestValAcc?: number;
+  bestValAccEpoch?: number;
+  /** The run ended before its last epoch because validation stopped improving */
+  earlyStopped?: boolean;
+  /** The run ended before its last epoch because Stop was pressed */
+  stoppedByUser?: boolean;
+  /** Epochs the run was set up for */
+  plannedEpochs?: number;
   durationMs: number;
   environment?: EnvironmentInfo;
 }
@@ -68,7 +75,10 @@ export interface LogEntry {
   timestamp: number;
 }
 
-type TrainingStatus = "idle" | "starting" | "running" | "paused" | "finished" | "error";
+export type TrainingStatus = "idle" | "starting" | "running" | "paused" | "finished" | "error";
+
+/** "check": the pre-flight check stopped the run before it started. "run": PyTorch raised during the run. */
+export type TrainingErrorKind = "check" | "run";
 
 interface TrainingState {
   config: TrainingConfig;
@@ -77,6 +87,12 @@ interface TrainingState {
   metrics: TrainingMetrics[];
   logs: LogEntry[];
   error: string | null;
+  errorKind: TrainingErrorKind;
+  /** Batches done in the current epoch, when the sidecar reports them */
+  epochProgress: { step: number; total: number } | null;
+  /** Name of the dataset being downloaded before the first epoch */
+  downloading: string | null;
+  stopRequested: boolean;
   startedAt: number | null;
   lastAppliedTemplate: string | null;
   trainingResults: TrainingResults | null;
@@ -87,7 +103,10 @@ interface TrainingState {
   setStatus: (status: TrainingStatus) => void;
   appendMetric: (m: TrainingMetrics) => void;
   appendLog: (entry: LogEntry) => void;
-  setError: (error: string | null) => void;
+  setError: (error: string | null, kind?: TrainingErrorKind) => void;
+  setEpochProgress: (progress: { step: number; total: number } | null) => void;
+  setDownloading: (dataset: string | null) => void;
+  setStopRequested: (requested: boolean) => void;
   applyTemplateDefaults: (name: string, defaults: Partial<TrainingConfig>) => void;
   setTrainingResults: (results: TrainingResults | null) => void;
   setCachedEnvironment: (env: EnvironmentInfo | null) => void;
@@ -129,6 +148,10 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   metrics: [],
   logs: [],
   error: null,
+  errorKind: "run",
+  epochProgress: null,
+  downloading: null,
+  stopRequested: false,
   startedAt: null,
   lastAppliedTemplate: null,
   trainingResults: null,
@@ -155,7 +178,10 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
     set({ logs: logs.length >= 1000 ? [...logs.slice(-999), entry] : [...logs, entry] });
   },
 
-  setError: (error) => set({ error, status: error ? "error" : get().status }),
+  setError: (error, kind = "run") => set({ error, errorKind: kind, status: error ? "error" : get().status, downloading: null }),
+  setEpochProgress: (epochProgress) => set({ epochProgress }),
+  setDownloading: (downloading) => set({ downloading }),
+  setStopRequested: (stopRequested) => set({ stopRequested }),
 
   applyTemplateDefaults: (name, defaults) => {
     const current = get().config;
@@ -172,5 +198,16 @@ export const useTrainingStore = create<TrainingState>((set, get) => ({
   setLastCheckpointPath: (path) => set({ lastCheckpointPath: path }),
 
   clearLogs: () => set({ logs: [] }),
-  reset: () => set({ metrics: [], logs: [], currentEpoch: 0, error: null, status: "idle", startedAt: null, trainingResults: null }),
+  reset: () => set({
+    metrics: [], logs: [], currentEpoch: 0, error: null, errorKind: "run", status: "idle", startedAt: null, trainingResults: null,
+    epochProgress: null, downloading: null, stopRequested: false,
+  }),
 }));
+
+/** How far the run is, from 0 to 1, counting batches inside the current epoch when they're known */
+export function runFraction(s: Pick<TrainingState, "currentEpoch" | "epochProgress" | "config">): number {
+  const epochs = s.config.epochs;
+  if (epochs <= 0 || s.currentEpoch <= 0) return 0;
+  const within = s.epochProgress && s.epochProgress.total > 0 ? Math.min(1, s.epochProgress.step / s.epochProgress.total) : 1;
+  return Math.min(1, (s.currentEpoch - 1 + within) / epochs);
+}
