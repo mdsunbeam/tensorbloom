@@ -118,28 +118,33 @@ export function deserializeProject(
   };
 }
 
-export async function downloadProject(
+/**
+ * Writes the project to `path`, or asks where to save it when there's no path yet (Save As).
+ * Resolves to the path written (null when the browser downloaded it instead), or null if the user cancelled.
+ */
+export async function writeProjectFile(
   name: string,
   nodes: Node<NodeData>[],
   edges: Edge[],
-) {
+  path: string | null,
+): Promise<{ path: string | null } | null> {
   const project = serializeProject(name, nodes, edges);
   const json = JSON.stringify(project, null, 2);
 
   try {
-    // Tauri native save dialog
-    const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-    const path = await save({
-      defaultPath: `${name.replace(/\s+/g, "_").toLowerCase()}.tbloom`,
-      filters: [{ name: "TensorBloom Project", extensions: ["tbloom"] }, { name: "JSON", extensions: ["json"] }],
-      title: "Save Project",
-    });
-    if (path) {
-      await writeTextFile(path, json);
-      return path;
+    if (!path) {
+      // Tauri native save dialog
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      path = await save({
+        defaultPath: `${name.replace(/\s+/g, "_").toLowerCase()}.tbloom`,
+        filters: [{ name: "TensorBloom Project", extensions: ["tbloom"] }, { name: "JSON", extensions: ["json"] }],
+        title: "Save Project",
+      });
+      if (!path) return null; // user cancelled
     }
-    return null; // user cancelled
+    await writeTextFile(path, json);
+    return { path };
   } catch (e) {
     console.error("[save] Tauri save failed, falling back to download:", e);
     // Fallback: browser download
@@ -152,6 +157,7 @@ export async function downloadProject(
   a.download = `${name.replace(/\s+/g, "_").toLowerCase()}.tbloom`;
   a.click();
   URL.revokeObjectURL(url);
+  return { path: null };
 }
 
 export function downloadCode(code: string, filename: string = "model.py") {
@@ -164,7 +170,8 @@ export function downloadCode(code: string, filename: string = "model.py") {
   URL.revokeObjectURL(url);
 }
 
-export async function loadProjectFile(): Promise<ProjectFile | null> {
+/** Asks for a project file and reads it. `path` is null when the browser's file picker was used. */
+export async function loadProjectFile(): Promise<{ project: ProjectFile; path: string | null } | null> {
   try {
     // Tauri native open dialog
     const { open } = await import("@tauri-apps/plugin-dialog");
@@ -179,7 +186,7 @@ export async function loadProjectFile(): Promise<ProjectFile | null> {
       const text = await readTextFile(path);
       const parsed = JSON.parse(text) as ProjectFile;
       if (!parsed.version || !parsed.nodes) throw new Error("Invalid project file");
-      return parsed;
+      return { project: parsed, path };
     }
     return null;
   } catch {
@@ -195,7 +202,7 @@ export async function loadProjectFile(): Promise<ProjectFile | null> {
           const text = await file.text();
           const parsed = JSON.parse(text) as ProjectFile;
           if (!parsed.version || !parsed.nodes) throw new Error("Invalid project file");
-          resolve(parsed);
+          resolve({ project: parsed, path: null });
         } catch {
           resolve(null);
         }

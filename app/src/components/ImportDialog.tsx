@@ -4,7 +4,8 @@ import { useEscapeKey } from "../lib/use-escape-key";
 interface ImportDialogProps {
   open: boolean;
   onClose: () => void;
-  onImport: (code: string) => void;
+  /** Resolves to false when the import was called off (e.g. the user cancelled at the unsaved-changes prompt) */
+  onImport: (code: string) => Promise<boolean>;
 }
 
 const PLACEHOLDER = `import torch
@@ -42,7 +43,7 @@ export default function ImportDialog({ open, onClose, onImport }: ImportDialogPr
     setError("");
     setLoading(true);
     try {
-      await onImport(trimmed);
+      if (!(await onImport(trimmed))) return;
       setCode("");
       onClose();
     } catch (e) {

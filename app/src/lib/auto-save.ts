@@ -1,29 +1,38 @@
 /**
- * Auto-save to localStorage every 30 seconds.
- * Restores on app load if no explicit project is opened.
+ * Auto-save to localStorage every 30 seconds while the project has unsaved changes.
+ * On the next launch the app offers to restore it (see readAutoSave).
  */
 
 import { useGraphStore, type NodeData } from "../store/graph-store";
+import { useDocumentStore } from "../store/document-store";
 import type { Node, Edge } from "@xyflow/react";
 
 const STORAGE_KEY = "tensorbloom-autosave";
 const INTERVAL_MS = 30_000;
+const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-interface AutoSaveData {
+export interface AutoSaveData {
   timestamp: number;
   projectName: string;
+  filePath?: string | null;
   nodes: Node<NodeData>[];
   edges: Edge[];
 }
 
-export function startAutoSave(): () => void {
-  const timer = setInterval(() => {
-    const { nodes, edges, projectName } = useGraphStore.getState();
-    if (nodes.length === 0) return;
-
+/** Writes the project now if it has unsaved work, and removes the old copy if it doesn't */
+export function writeAutoSave() {
+  const { nodes, edges, projectName } = useGraphStore.getState();
+  const { dirty, filePath } = useDocumentStore.getState();
+  try {
+    // Saved or empty work needs no recovery copy, and a stale one would come back on the next launch
+    if (!dirty || nodes.length === 0) {
+      localStorage.removeItem(STORAGE_KEY);
+      return;
+    }
     const data: AutoSaveData = {
       timestamp: Date.now(),
       projectName,
+      filePath,
       nodes: nodes.map((n) => ({
         id: n.id,
         type: n.type,
@@ -39,43 +48,37 @@ export function startAutoSave(): () => void {
         type: e.type,
       })),
     };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage full or unavailable
+  }
+}
 
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch {
-      // Storage full or unavailable
-    }
-  }, INTERVAL_MS);
-
+export function startAutoSave(): () => void {
+  const timer = setInterval(writeAutoSave, INTERVAL_MS);
   return () => clearInterval(timer);
 }
 
-export function restoreAutoSave(): boolean {
+/** The unsaved work left by the last session, if there is any worth offering back */
+export function readAutoSave(): AutoSaveData | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return false;
-
+    if (!raw) return null;
     const data: AutoSaveData = JSON.parse(raw);
-
-    // Only restore if less than 24 hours old
-    if (Date.now() - data.timestamp > 24 * 60 * 60 * 1000) {
+    if (Date.now() - data.timestamp > MAX_AGE_MS || !data.nodes?.length) {
       localStorage.removeItem(STORAGE_KEY);
-      return false;
+      return null;
     }
-
-    if (data.nodes.length === 0) return false;
-
-    useGraphStore.getState().loadGraph(
-      data.nodes as Node<NodeData>[],
-      data.edges as Edge[],
-    );
-    useGraphStore.getState().setProjectName(data.projectName);
-    return true;
+    return data;
   } catch {
-    return false;
+    return null;
   }
 }
 
 export function clearAutoSave() {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable
+  }
 }
