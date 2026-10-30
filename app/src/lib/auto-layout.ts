@@ -35,6 +35,11 @@ function nodeHeight(data: NodeData): number {
   return h + 28; // output shape line
 }
 
+/** A node's rough size on the canvas, before it has been measured */
+export function nodeSize(data: NodeData): { width: number; height: number } {
+  return { width: nodeWidth(data), height: nodeHeight(data) };
+}
+
 function snap(v: number): number {
   return Math.round(v / GRID) * GRID;
 }

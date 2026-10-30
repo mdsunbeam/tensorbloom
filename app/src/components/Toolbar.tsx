@@ -146,7 +146,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
       <div className="flex items-center gap-2 min-w-0 max-w-[40%]">
         <ProjectNameInput />
         <span className="text-[11px] tabular-nums whitespace-nowrap text-fg-muted">
-          {nodeCount} nodes · {edgeCount} edges
+          {nodeCount} {nodeCount === 1 ? "node" : "nodes"} · {edgeCount} {edgeCount === 1 ? "edge" : "edges"}
           {summary.totalParams > 0 && <> · {formatParamCount(summary.totalParams)} params</>}
         </span>
       </div>
