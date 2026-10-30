@@ -73,7 +73,7 @@ export default function CodePanel() {
       const newEdges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
 
       useHistoryStore.getState().pushSnapshot();
-      useGraphStore.getState().loadGraph(autoLayout(newNodes, newEdges), newEdges);
+      useGraphStore.getState().loadGraph(autoLayout(newNodes, newEdges), newEdges, useGraphStore.getState().groups);
       setMode("preview");
       setEditCode("");
       toast.success("Code applied to graph");

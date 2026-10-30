@@ -8,6 +8,7 @@ import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
 import { useRunStore } from "../store/run-store";
+import { normalizeGroups, type LayerGroup } from "./groups";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
 import { clearAutoSave, type AutoSaveData } from "./auto-save";
 import { askToSaveChanges } from "../components/ConfirmDialog";
@@ -45,9 +46,9 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
 }
 
 /** Replaces the graph with a different project. Undo can still bring the old graph back. */
-export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string) {
+export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string, groups: LayerGroup[] = []) {
   useHistoryStore.getState().pushSnapshot();
-  useGraphStore.getState().loadGraph(nodes, edges);
+  useGraphStore.getState().loadGraph(nodes, edges, groups);
   useGraphStore.getState().setProjectName(projectName);
 }
 
@@ -66,8 +67,8 @@ export async function openProject() {
   const opened = await loadProjectFile();
   if (!opened) return;
   const { project, path } = opened;
-  const { nodes, edges, warnings } = deserializeProject(project);
-  replaceGraph(nodes, edges, project.name);
+  const { nodes, edges, groups, warnings } = deserializeProject(project);
+  replaceGraph(nodes, edges, project.name, groups);
   useDocumentStore.getState().markSaved(path);
   clearAutoSave();
   for (const w of warnings) toast.warning(w);
@@ -76,8 +77,29 @@ export async function openProject() {
 
 /** Brings back unsaved work from the last session. It stays unsaved until the user saves it. */
 export function restoreAutoSave(data: AutoSaveData) {
-  replaceGraph(data.nodes, data.edges, data.projectName);
+  replaceGraph(data.nodes, data.edges, data.projectName, normalizeGroups(data.groups));
   useRunStore.getState().setRuns(data.runs ?? []);
   useDocumentStore.getState().markSaved(data.filePath ?? null);
   useDocumentStore.getState().markUnsaved();
+}
+
+/** Groups the selected layers, or says how to select several */
+export function groupSelection() {
+  const s = useGraphStore.getState();
+  const count = s.nodes.filter((n) => n.selected || n.id === s.selectedNodeId).length;
+  if (count < 2) {
+    toast.info("Select two or more layers to group them: Shift-drag a box around them, or Ctrl-click each one.");
+    return;
+  }
+  useHistoryStore.getState().pushSnapshot();
+  s.groupSelected();
+}
+
+/** Removes the selected group, or the group of the selected layer. The layers stay. */
+export function ungroupSelection() {
+  const s = useGraphStore.getState();
+  const id = s.selectedGroupId ?? s.groups.find((g) => s.selectedNodeId && g.nodeIds.includes(s.selectedNodeId))?.id;
+  if (!id) return;
+  useHistoryStore.getState().pushSnapshot();
+  s.ungroup(id);
 }

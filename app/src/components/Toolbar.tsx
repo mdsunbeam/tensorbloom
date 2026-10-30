@@ -5,7 +5,7 @@ import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
 import { autoLayout } from "../lib/auto-layout";
 import { computeModelSummary, formatParamCount } from "../lib/model-summary";
-import { newProject, openProject, saveProject } from "../lib/document-actions";
+import { newProject, openProject, saveProject, groupSelection, ungroupSelection } from "../lib/document-actions";
 import { useEscapeKey } from "../lib/use-escape-key";
 import RunControls from "./RunControls";
 import { openExternal } from "../lib/open-external";
@@ -59,7 +59,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
     if (nodes.length === 0) return;
     useHistoryStore.getState().pushSnapshot();
     const laid = autoLayout(nodes, edges);
-    useGraphStore.getState().loadGraph(laid, edges);
+    useGraphStore.getState().loadGraph(laid, edges, useGraphStore.getState().groups);
   }, []);
 
   const menus: { label: string; id: string; items: MenuItem[] }[] = [
@@ -82,6 +82,9 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { label: "Select All", shortcut: "Ctrl+A", action: () => useGraphStore.getState().selectAll() },
         { label: "Duplicate", shortcut: "Ctrl+D", action: () => { useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().duplicateSelected(); } },
         { label: "Delete Selected", shortcut: "Del", action: () => { useHistoryStore.getState().pushSnapshot(); useGraphStore.getState().deleteSelected(); } },
+        { type: "separator" },
+        { label: "Group Selection", shortcut: "Ctrl+G", action: groupSelection },
+        { label: "Ungroup", shortcut: "Ctrl+Shift+G", action: ungroupSelection },
       ],
     },
     {

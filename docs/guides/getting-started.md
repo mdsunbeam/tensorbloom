@@ -83,7 +83,8 @@ Your tensor file should be a dictionary of tensors saved with `torch.save({"feat
 
 - **Ctrl+C / Ctrl+V** — Copy and paste selected nodes (with edges between them preserved)
 - **Ctrl+D** — Duplicate selected nodes in place
-- **Ctrl+G** — Group selected nodes into a composite block. You'll be prompted for a group name. The group collapses multiple nodes into a single reusable block.
+- **Ctrl+G** — Group the selected layers into a named frame. Type a name on the frame's title bar, drag the title bar to move the whole group, and use the arrow to collapse it into a single card. Groups only organize the canvas: the model, its code and its training are the same with or without them, and groups are saved with the project.
+- **Ctrl+Shift+G** — Ungroup, keeping the layers
 - **Ctrl+A** — Select all nodes
 
 ## Code Blocks
@@ -119,7 +120,7 @@ See the [Export guide](export.md) for details on trace vs script and limitations
 | `Ctrl+Z` / `Ctrl+Y` | Undo / Redo |
 | `Ctrl+C` / `Ctrl+V` | Copy / Paste |
 | `Ctrl+D` | Duplicate |
-| `Ctrl+G` | Group into block |
+| `Ctrl+G` / `Ctrl+Shift+G` | Group / Ungroup |
 | `Ctrl+A` | Select all |
 | `Ctrl+L` | Auto-layout graph |
 | `Ctrl+B` / `Ctrl+.` | Toggle panels |

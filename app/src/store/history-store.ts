@@ -10,10 +10,12 @@
 import { create } from "zustand";
 import { useGraphStore, type NodeData } from "./graph-store";
 import type { Node, Edge } from "@xyflow/react";
+import type { LayerGroup } from "../lib/groups";
 
 interface Snapshot {
   nodes: Node<NodeData>[];
   edges: Edge[];
+  groups: LayerGroup[];
 }
 
 interface HistoryState {
@@ -38,7 +40,7 @@ let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let applyingHistory = false;
 
 /** The parts of the graph that are the user's work: no selection, drag or measurement state */
-function snapshotOf(nodes: Node<NodeData>[], edges: Edge[]): Snapshot {
+function snapshotOf(nodes: Node<NodeData>[], edges: Edge[], groups: LayerGroup[]): Snapshot {
   return {
     nodes: nodes.map((n) => {
       const { selected, dragging, measured, resizing, ...rest } = n;
@@ -48,19 +50,20 @@ function snapshotOf(nodes: Node<NodeData>[], edges: Edge[]): Snapshot {
       const { selected, animated, ...rest } = e;
       return structuredClone(rest);
     }),
+    groups: structuredClone(groups),
   };
 }
 
 const keyOf = (s: Snapshot) => JSON.stringify(s);
 
 function currentSnapshot(): Snapshot {
-  const { nodes, edges } = useGraphStore.getState();
-  return snapshotOf(nodes, edges);
+  const { nodes, edges, groups } = useGraphStore.getState();
+  return snapshotOf(nodes, edges, groups);
 }
 
 function apply(s: Snapshot) {
   applyingHistory = true;
-  useGraphStore.getState().loadGraph(structuredClone(s.nodes), structuredClone(s.edges));
+  useGraphStore.getState().loadGraph(structuredClone(s.nodes), structuredClone(s.edges), structuredClone(s.groups));
   applyingHistory = false;
   baseline = s;
   baselineKey = keyOf(s);
@@ -121,7 +124,7 @@ export function startHistoryTracking(): () => void {
   useHistoryStore.getState().clear();
   const unsub = useGraphStore.subscribe((state, prev) => {
     if (applyingHistory) return;
-    if (state.nodes === prev.nodes && state.edges === prev.edges) return;
+    if (state.nodes === prev.nodes && state.edges === prev.edges && state.groups === prev.groups) return;
     // Wait for a drag to finish so the whole move is one step
     if (state.nodes.some((n) => n.dragging)) {
       if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }

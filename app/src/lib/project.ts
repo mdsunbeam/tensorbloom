@@ -7,6 +7,8 @@ import type { NodeData } from "../store/graph-store";
 import { useTrainingStore, type TrainingConfig, type EnvironmentInfo, type TrainingResults } from "../store/training-store";
 import { getCachedEnvironment } from "./sidecar";
 import { useRunStore, type RunRecord } from "../store/run-store";
+import { useGraphStore } from "../store/graph-store";
+import { normalizeGroups, type LayerGroup } from "./groups";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -36,6 +38,8 @@ export interface ProjectFile {
   trainingResults?: TrainingResults;
   /** Earlier training runs, oldest first */
   runs?: RunRecord[];
+  /** Named frames around sets of layers */
+  groups?: LayerGroup[];
 }
 
 export function serializeProject(
@@ -72,13 +76,20 @@ export function serializeProject(
     environment: getCachedEnvironment() ?? undefined,
     trainingResults: store.trainingResults ?? undefined,
     runs: useRunStore.getState().runs,
+    groups: useGraphStore.getState().groups,
   };
 }
 
 export function deserializeProject(
   json: ProjectFile,
-): { nodes: Node<NodeData>[]; edges: Edge[]; warnings: string[] } {
+): { nodes: Node<NodeData>[]; edges: Edge[]; groups: LayerGroup[]; warnings: string[] } {
   const warnings: string[] = [];
+
+  // Groups from older versions were saved as an empty "Composite" node, without the layers inside
+  const shells = json.nodes.filter((n) => n.data?.moduleType === "Composite").length;
+  if (shells) {
+    warnings.push(`Removed ${shells === 1 ? "a group" : `${shells} groups`} saved by an older version of TensorBloom. The layers inside weren't saved with it, so add them again.`);
+  }
 
   // Restore training config if present
   if (json.training) {
@@ -120,6 +131,7 @@ export function deserializeProject(
       targetHandle: e.targetHandle,
       type: e.type ?? "smoothstep",
     })),
+    groups: normalizeGroups(json.groups),
     warnings,
   };
 }

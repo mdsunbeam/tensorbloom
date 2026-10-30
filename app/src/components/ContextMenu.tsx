@@ -2,16 +2,19 @@ import { useEffect, useRef } from "react";
 import { useGraphStore } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { alignLeft, alignCenter, alignTop, distributeVertically } from "../lib/align";
+import { groupSelection } from "../lib/document-actions";
 
 interface ContextMenuProps {
   x: number;
   y: number;
   nodeId: string | null;
+  /** Set when the menu was opened on a group's frame or card */
+  groupId?: string | null;
   onClose: () => void;
   onShowSpotlight: () => void;
 }
 
-export default function ContextMenu({ x, y, nodeId, onClose, onShowSpotlight }: ContextMenuProps) {
+export default function ContextMenu({ x, y, nodeId, groupId, onClose, onShowSpotlight }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,9 +63,13 @@ export default function ContextMenu({ x, y, nodeId, onClose, onShowSpotlight }: 
   const doAlign = (fn: typeof alignLeft) => {
     useHistoryStore.getState().pushSnapshot();
     const { nodes } = useGraphStore.getState();
-    useGraphStore.getState().loadGraph(fn(nodes, selectedIds), useGraphStore.getState().edges);
+    const { edges, groups } = useGraphStore.getState();
+    useGraphStore.getState().loadGraph(fn(nodes, selectedIds), edges, groups);
     onClose();
   };
+
+  const group = groupId ? useGraphStore.getState().groups.find((g) => g.id === groupId) : undefined;
+  const groupAction = (fn: () => void) => () => { useHistoryStore.getState().pushSnapshot(); fn(); onClose(); };
 
   return (
     <div
@@ -70,7 +77,15 @@ export default function ContextMenu({ x, y, nodeId, onClose, onShowSpotlight }: 
       className="fixed z-50 w-48 rounded-lg shadow-xl overflow-hidden py-1"
       style={{ left: x, top: y, background: "var(--bg-secondary)", border: "1px solid var(--border)" }}
     >
-      {nodeId ? (
+      {group ? (
+        <>
+          <MenuItem label="Rename" onClick={() => { useGraphStore.getState().setRenamingGroupId(group.id); onClose(); }} />
+          <MenuItem label={group.collapsed ? "Expand" : "Collapse"} onClick={groupAction(() => useGraphStore.getState().setGroupCollapsed(group.id, !group.collapsed))} />
+          <MenuDivider />
+          <MenuItem label="Ungroup" shortcut="Ctrl+Shift+G" onClick={groupAction(() => useGraphStore.getState().ungroup(group.id))} />
+          <MenuItem label="Delete Group and Layers" danger onClick={groupAction(() => useGraphStore.getState().deleteMultiple(group.nodeIds))} />
+        </>
+      ) : nodeId ? (
         <>
           <MenuItem label="Copy" shortcut="Ctrl+C" onClick={copyNode} />
           <MenuItem label="Duplicate" shortcut="Ctrl+D" onClick={duplicateNode} />
@@ -84,15 +99,10 @@ export default function ContextMenu({ x, y, nodeId, onClose, onShowSpotlight }: 
               <MenuItem label="Distribute Vertically" onClick={() => doAlign(distributeVertically)} />
             </>
           )}
-          {/* Ungroup composite */}
-          {nodeId && useGraphStore.getState().compositeBlocks[nodeId] && (
+          {multiSelected && (
             <>
               <MenuDivider />
-              <MenuItem label="Ungroup" onClick={() => {
-                useHistoryStore.getState().pushSnapshot();
-                useGraphStore.getState().ungroupNode(nodeId);
-                onClose();
-              }} />
+              <MenuItem label="Group Selection" shortcut="Ctrl+G" onClick={() => { groupSelection(); onClose(); }} />
             </>
           )}
           <MenuDivider />
