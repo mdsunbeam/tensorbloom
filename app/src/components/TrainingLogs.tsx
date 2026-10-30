@@ -47,7 +47,7 @@ export default function TrainingLogs() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Metrics strip */}
       <div
-        className="flex items-center gap-4 px-3 py-1.5 flex-shrink-0 text-[10px]"
+        className="flex items-center gap-4 px-3 py-1.5 flex-shrink-0 text-[11px]"
         style={{ borderBottom: "1px solid var(--border)", background: "var(--bg-tertiary)" }}
       >
         <div className="flex items-center gap-1.5">
@@ -62,7 +62,7 @@ export default function TrainingLogs() {
         {error && <span style={{ color: "var(--danger)" }}>{error}</span>}
         <button
           onClick={clearLogs}
-          className="ml-auto text-[9px] px-1.5 py-0.5 rounded"
+          className="ml-auto text-[11px] px-1.5 py-0.5 rounded"
           style={{ color: "var(--text-muted)", background: "var(--bg-secondary)" }}
         >
           Clear
@@ -72,7 +72,7 @@ export default function TrainingLogs() {
       {/* Log content */}
       <div
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden font-mono px-3 py-1"
-        style={{ background: "var(--bg-primary)", fontSize: "10px", lineHeight: "1.5" }}
+        style={{ background: "var(--bg-primary)", fontSize: "11px", lineHeight: "1.5" }}
       >
         {logs.length === 0 ? (
           <div className="h-full flex items-center justify-center">
@@ -92,6 +92,14 @@ export default function TrainingLogs() {
           logs.map((l, i) => (
             <div key={i} className="flex gap-2" style={{ color: l.stream === "stderr" ? "var(--warning)" : "var(--text-muted)" }}>
               <span className="flex-shrink-0 select-none" style={{ color: "var(--text-muted)" }}>{formatTimestamp(l.timestamp)}</span>
+              {/* stderr gets a mark, not only a color */}
+              <span className="flex-shrink-0 w-3 select-none" aria-label={l.stream === "stderr" ? "stderr" : undefined}>
+                {l.stream === "stderr" && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="mt-[3px]" aria-hidden="true">
+                    <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                )}
+              </span>
               <span style={{ whiteSpace: "pre-wrap", wordBreak: "break-all" }}>{l.text}</span>
             </div>
           ))

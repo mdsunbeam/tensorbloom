@@ -84,7 +84,7 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
         {/* Context banner when connecting */}
         {connectFrom && (
           <div
-            className="px-4 py-2 text-[10px] font-medium"
+            className="px-4 py-2 text-[11px] font-medium"
             style={{ background: "var(--accent-subtle)", color: "var(--accent-text)", borderBottom: "1px solid var(--border)" }}
           >
             Adding connected layer after <strong>{connectFrom.sourceLabel}</strong>
@@ -135,13 +135,13 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
                         {mod.label}
                       </span>
                       <span
-                        className="text-[9px] px-1.5 py-0.5 rounded font-medium"
+                        className="text-[11px] px-1.5 py-0.5 rounded font-medium"
                         style={{ background: tint(color, 12), color }}
                       >
                         {CATEGORY_LABELS[mod.category]}
                       </span>
                     </div>
-                    <div className="text-[10px] truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
+                    <div className="text-[11px] truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
                       {mod.description}
                     </div>
                   </div>
@@ -153,12 +153,12 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
 
         {/* Footer hint */}
         <div
-          className="px-4 py-2 text-[10px] flex items-center gap-3"
+          className="px-4 py-2 text-[11px] flex items-center gap-3"
           style={{ borderTop: "1px solid var(--border)", color: "var(--text-muted)" }}
         >
-          <span><kbd className="px-1 py-0.5 rounded text-[9px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Enter</kbd> to add</span>
-          <span><kbd className="px-1 py-0.5 rounded text-[9px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>&uarr;&darr;</kbd> to navigate</span>
-          <span><kbd className="px-1 py-0.5 rounded text-[9px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Esc</kbd> to close</span>
+          <span><kbd className="px-1 py-0.5 rounded text-[11px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Enter</kbd> to add</span>
+          <span><kbd className="px-1 py-0.5 rounded text-[11px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>&uarr;&darr;</kbd> to navigate</span>
+          <span><kbd className="px-1 py-0.5 rounded text-[11px]" style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)" }}>Esc</kbd> to close</span>
         </div>
       </div>
     </>

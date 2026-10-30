@@ -129,7 +129,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             </span>
             {isCodeBlock && (
               <span
-                className="text-[10px] px-1 py-0.5 rounded font-mono flex-shrink-0"
+                className="text-[11px] px-1 py-0.5 rounded font-mono flex-shrink-0"
                 style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}
                 title="Code block mode"
               >
@@ -182,7 +182,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             {formatShape(shapeInfo.shape, effectiveBatch)}
           </span>
           {shapeDisplayBatch && shapeInfo.shape.length >= 2 && (
-            <span className="text-[10px] font-mono" style={{ color: "var(--text-muted)" }}>
+            <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>
               N={batchSize}
             </span>
           )}
@@ -203,7 +203,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
                 style={{ top: "50%" }} title={h.label} />
               {showHandleLabels && (
                 <span
-                  className="absolute text-[10px] font-mono pointer-events-none"
+                  className="absolute text-[11px] font-mono pointer-events-none"
                   style={{ right: 10, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
                 >
                   {h.label} →
@@ -222,7 +222,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               style={{ left: `${leftPct}%`, top: 0 }} title={h.label} />
             {showHandleLabels && (
               <span
-                className="absolute text-[10px] font-mono pointer-events-none"
+                className="absolute text-[11px] font-mono pointer-events-none"
                 style={{ left: `${leftPct}%`, top: 4, transform: "translateX(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
               >
                 {h.label}
@@ -249,7 +249,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
                 style={{ top: `${topPct}%` }} title={`${h.label}${shapeStr}`} />
               {showHandleLabels && (
                 <span
-                  className="absolute text-[10px] font-mono pointer-events-none"
+                  className="absolute text-[11px] font-mono pointer-events-none"
                   style={{ right: 10, top: `${topPct}%`, transform: "translateY(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
                 >
                   {h.label}{shapeStr} →
@@ -266,7 +266,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               style={{ left: `${leftPct}%` }} title={`${h.label}${shapeStr}`} />
             {showHandleLabels && (
               <span
-                className="absolute text-[10px] font-mono pointer-events-none"
+                className="absolute text-[11px] font-mono pointer-events-none"
                 style={{ left: `${leftPct}%`, bottom: 4, transform: "translateX(-50%)", color: "var(--text-muted)", whiteSpace: "nowrap" }}
               >
                 {h.label}{shapeStr}

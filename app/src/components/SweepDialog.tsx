@@ -82,7 +82,7 @@ export default function SweepDialog({ open, onClose, onLaunch }: SweepDialogProp
 
           {/* Preview */}
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
+            <div className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
               {runs.length} run{runs.length !== 1 ? "s" : ""} will be generated
             </div>
             <div className="max-h-[120px] overflow-y-auto space-y-0.5">
@@ -125,7 +125,7 @@ function ParamField({ label, value, onChange, hint }: { label: string; value: st
       <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
         className="w-full px-2.5 py-[6px] text-xs rounded-lg"
         style={{ background: "var(--bg-tertiary)", border: "1px solid var(--border)", color: "var(--text-primary)" }} />
-      <div className="text-[10px] mt-0.5" style={{ color: "var(--text-muted)" }}>{hint}</div>
+      <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{hint}</div>
     </div>
   );
 }

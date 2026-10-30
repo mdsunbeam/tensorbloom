@@ -48,7 +48,7 @@ export default function Tabs<T extends string>({ items, value, onChange, label, 
               active ? "text-fg" : "text-fg-muted hover:text-fg-secondary"
             }`}
           >
-            {t.live && <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true" />}
+            {t.live && <><span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" aria-hidden="true" /><span className="sr-only">(live)</span></>}
             {t.label}
             {t.badge != null && <span className="tabular-nums text-fg-muted font-normal">{t.badge}</span>}
             <span className={`absolute left-2 right-2 bottom-0 h-0.5 rounded-full ${active ? "bg-accent" : "bg-transparent"}`} aria-hidden="true" />

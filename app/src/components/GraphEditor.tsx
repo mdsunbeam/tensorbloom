@@ -39,7 +39,7 @@ function BatchToggleButton() {
     <div className="absolute bottom-2.5 left-14 z-10">
       <button
         onClick={toggleShapeDisplayBatch}
-        className="px-2.5 py-1 text-[10px] font-mono font-medium rounded-lg"
+        className="px-2.5 py-1 text-[11px] font-mono font-medium rounded-lg"
         style={{
           background: shapeDisplayBatch ? "var(--accent-subtle)" : "var(--bg-secondary)",
           color: shapeDisplayBatch ? "var(--accent-text)" : "var(--text-muted)",

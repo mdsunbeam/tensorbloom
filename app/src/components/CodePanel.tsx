@@ -107,11 +107,11 @@ export default function CodePanel() {
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-1.5 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
             {mode === "edit" ? "Edit Code" : "Generated PyTorch"}
           </span>
           {mode === "edit" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
+            <span className="text-[11px] px-1.5 py-0.5 rounded" style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>
               editing
             </span>
           )}

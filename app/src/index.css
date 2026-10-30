@@ -29,6 +29,8 @@
   --scrollbar-track: transparent;
   --danger: #ef4444;
   --danger-subtle: rgba(239, 68, 68, 0.1);
+  /* Text on a danger fill: white doesn't reach 4.5:1 on this red, near-black does */
+  --on-danger: #09090b;
   --warning: #f59e0b;
   --warning-subtle: rgba(245, 158, 11, 0.1);
   --success: #10b981;
@@ -79,12 +81,14 @@
   --node-shadow-hover: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.06);
   --scrollbar-thumb: #d4d4d8;
   --scrollbar-track: transparent;
-  --danger: #dc2626;
-  --danger-subtle: rgba(220, 38, 38, 0.07);
-  --warning: #d97706;
-  --warning-subtle: rgba(217, 119, 6, 0.07);
-  --success: #059669;
-  --success-subtle: rgba(5, 150, 105, 0.07);
+  /* Status colors are also used as text, so they're dark enough for 4.5:1 on white */
+  --danger: #b91c1c;
+  --danger-subtle: rgba(185, 28, 28, 0.07);
+  --on-danger: #ffffff;
+  --warning: #b45309;
+  --warning-subtle: rgba(180, 83, 9, 0.08);
+  --success: #047857;
+  --success-subtle: rgba(4, 120, 87, 0.08);
   --surface-glow: rgba(255, 255, 255, 0.5);
   --chart-train: #4f46e5;
   --chart-val: #ea580c;

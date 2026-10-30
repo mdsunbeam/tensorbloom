@@ -132,7 +132,7 @@ function MenuItem({ label, shortcut, onClick, danger, disabled }: {
       onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
     >
       <span className="flex-1 text-left">{label}</span>
-      {shortcut && <span className="text-[10px] ml-3" style={{ color: "var(--text-muted)" }}>{shortcut}</span>}
+      {shortcut && <span className="text-[11px] ml-3" style={{ color: "var(--text-muted)" }}>{shortcut}</span>}
     </button>
   );
 }

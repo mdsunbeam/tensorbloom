@@ -197,7 +197,7 @@ export default function TrainingPanel() {
 
       {/* ── Collapsible: Advanced ── */}
       <CollapsibleSection title={<>Advanced {config.seed != null && config.deterministicMode && (
-        <span className="text-[8px] px-1.5 py-0.5 rounded-full"
+        <span className="text-[11px] px-1.5 py-0.5 rounded-full"
           style={{ background: "var(--accent-subtle)", color: "var(--accent-text)" }}>Reproducible</span>
       )}</>} defaultOpen={false}>
         <Field label="Random Seed">
@@ -233,7 +233,7 @@ export default function TrainingPanel() {
             </span>
           </label>
           {config.deterministicMode && (
-            <div className="text-[10px] mt-1" style={{ color: "var(--text-muted)" }}>
+            <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
               May reduce performance. Ensures identical results with same seed.
             </div>
           )}
@@ -294,7 +294,7 @@ export default function TrainingPanel() {
           <TextInput value={config.resumeCheckpoint}
             onChange={(v) => updateConfig({ resumeCheckpoint: v })} />
         </Field>
-        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+        <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>
           Leave empty to train from scratch
         </div>
       </CollapsibleSection>
@@ -340,7 +340,7 @@ function DatasetCompatibilityBanner({ datasetType }: { datasetType: string }) {
 
   if (result.status === "unknown") {
     return (
-      <div className="text-[10px] rounded-md p-2" style={{ color: "var(--text-muted)", background: "var(--bg-tertiary)" }}>
+      <div className="text-[11px] rounded-md p-2" style={{ color: "var(--text-muted)", background: "var(--bg-tertiary)" }}>
         {result.message}
       </div>
     );
@@ -354,7 +354,7 @@ function DatasetCompatibilityBanner({ datasetType }: { datasetType: string }) {
   const c = colors[result.status];
 
   return (
-    <div className="text-[10px] rounded-md p-2 flex items-start gap-1.5"
+    <div className="text-[11px] rounded-md p-2 flex items-start gap-1.5"
       style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.text }}>
       <span className="shrink-0 mt-px">{result.status === "match" ? "\u2713" : result.status === "fixable" ? "\u26A0" : "\u2717"}</span>
       <div className="flex-1 min-w-0">
@@ -436,7 +436,7 @@ function DomainRecommendations({ currentDataset, updateConfig, config }: {
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-[9px]" style={{ color: "var(--text-muted)" }}>Recommended:</span>
+      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Recommended:</span>
       {recommendations.map((ds) => (
         <button
           key={ds}
@@ -495,7 +495,7 @@ function CollapsibleSection({ title, defaultOpen, children }: { title: React.Rea
 
 function DatasetHint({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] leading-relaxed rounded-md p-2" style={{ color: "var(--text-muted)", background: "var(--bg-tertiary)" }}>
+    <div className="text-[11px] leading-relaxed rounded-md p-2" style={{ color: "var(--text-muted)", background: "var(--bg-tertiary)" }}>
       {children}
     </div>
   );
