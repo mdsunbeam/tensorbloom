@@ -8,6 +8,8 @@ import { computeModelSummary, formatParamCount } from "../lib/model-summary";
 import { newProject, openProject, saveProject } from "../lib/document-actions";
 import { useEscapeKey } from "../lib/use-escape-key";
 import RunControls from "./RunControls";
+import { openExternal } from "../lib/open-external";
+import { LINKS } from "../lib/links";
 import ProblemsButton from "./ProblemsButton";
 import { IconButton } from "./ui/Button";
 import { LogoMark, Wordmark } from "./ui/Logo";
@@ -20,10 +22,13 @@ interface ToolbarProps {
   onShowCustomBlock: () => void;
   /** Opens the Charts tab, where the run's details are */
   onShowRun: () => void;
+  onShowShortcuts: () => void;
+  onShowGettingStarted: () => void;
+  onShowAbout: () => void;
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, onShowRun, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowAbout, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -93,6 +98,18 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { label: `${theme === "dark" ? "Light" : "Dark"} Theme`, action: toggleTheme },
       ],
     },
+    {
+      label: "Help", id: "help", items: [
+        { label: "Getting Started", action: onShowGettingStarted },
+        { label: "Keyboard Shortcuts", shortcut: "Ctrl+/", action: onShowShortcuts },
+        { type: "separator" },
+        { label: "TensorBloom Docs", external: true, action: () => void openExternal(LINKS.docs) },
+        { label: "PyTorch Layer Reference", external: true, action: () => void openExternal(LINKS.pytorchReference) },
+        { label: "Report a Problem", external: true, action: () => void openExternal(LINKS.newIssue) },
+        { type: "separator" },
+        { label: "About TensorBloom", action: onShowAbout },
+      ],
+    },
   ];
 
   return (
@@ -133,6 +150,11 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
                       >
                         <span>{item.label}</span>
                         {item.shortcut && <span className="text-[11px] ml-4 text-fg-muted">{item.shortcut}</span>}
+                        {item.external && (
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="ml-4 text-fg-muted" aria-label="Opens in your browser" role="img">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        )}
                       </button>
                     )
                   )}
@@ -214,7 +236,7 @@ function ProjectNameInput() {
   );
 }
 
-type MenuItem = { label?: string; shortcut?: string; action?: () => void; disabled?: boolean; type?: "separator" };
+type MenuItem = { label?: string; shortcut?: string; action?: () => void; disabled?: boolean; type?: "separator"; /** Opens a web page */ external?: boolean };
 
 const s = { width: 13, height: 13, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 const ICONS = {

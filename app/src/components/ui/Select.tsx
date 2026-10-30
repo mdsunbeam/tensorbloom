@@ -19,6 +19,7 @@ export interface SelectProps {
   style?: React.CSSProperties;
   disabled?: boolean;
   "aria-label"?: string;
+  "aria-describedby"?: string;
   id?: string;
 }
 
@@ -132,6 +133,7 @@ export default function Select({ value, onChange, options, placeholder = "Select
         aria-controls={open ? listId : undefined}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
         aria-label={aria["aria-label"]}
+        aria-describedby={aria["aria-describedby"]}
         disabled={disabled}
         onClick={() => (open ? close() : openList())}
         onKeyDown={onKeyDown}

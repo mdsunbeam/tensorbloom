@@ -7,11 +7,12 @@ import Button from "./ui/Button";
 const FEATURED = ["Simple MLP", "LeNet-5", "nanoGPT"];
 
 /** What an empty canvas shows: ways to get a first model on it */
-export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowImport, onAddData }: {
+export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowImport, onAddData, onShowGettingStarted }: {
   onSelectTemplate: (index: number) => void;
   onShowTemplates: () => void;
   onShowImport: () => void;
   onAddData: () => void;
+  onShowGettingStarted: () => void;
 }) {
   const featured = FEATURED
     .map((name) => TEMPLATES.findIndex((t) => t.name === name))
@@ -22,7 +23,10 @@ export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowI
       <LogoMark size={36} className="mx-auto mb-3 text-accent-text" />
       <h2 id="welcome-title" className="text-base font-semibold text-fg mb-1">Build a neural network</h2>
       <p className="text-xs text-fg-secondary mb-5">
-        Start from one of these models, or drag layers in from the left.
+        Start from one of these models, or drag layers in from the left.{" "}
+        <button type="button" onClick={onShowGettingStarted} className="text-accent-text hover:underline underline-offset-2">
+          New here? Getting started
+        </button>
       </p>
 
       <div className="grid grid-cols-3 gap-2.5 mb-3">

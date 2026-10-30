@@ -24,6 +24,8 @@ const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
+const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
+const AboutDialog = lazy(() => import("./components/AboutDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
 import { useThemeStore } from "./store/theme-store";
@@ -59,6 +61,8 @@ export default function App() {
   const [connectFrom, setConnectFrom] = useState<ConnectFromContext | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
@@ -315,6 +319,9 @@ export default function App() {
         onShowSpotlight={() => setSpotlightOpen(true)}
         onShowCustomBlock={() => setCustomBlockOpen(true)}
         onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
+        onShowShortcuts={() => setShortcutsOpen(true)}
+        onShowGettingStarted={() => setGettingStartedOpen(true)}
+        onShowAbout={() => setAboutOpen(true)}
         gpuInfo={gpuInfo}
       />
 
@@ -362,6 +369,7 @@ export default function App() {
                     onShowTemplates={() => setTemplatesOpen(true)}
                     onShowImport={() => setImportOpen(true)}
                     onAddData={addDataNode}
+                    onShowGettingStarted={() => setGettingStartedOpen(true)}
                   />
                 </div>
               )}
@@ -463,6 +471,8 @@ export default function App() {
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
+        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} />}
+        {aboutOpen && <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} gpuInfo={gpuInfo} />}
         {customBlockOpen && <CustomBlockDialog open={customBlockOpen} onClose={() => setCustomBlockOpen(false)} />}
         {compareOpen && compareModel && <CompareDialog open={compareOpen} onClose={() => setCompareOpen(false)}
           modelA={{ name: useGraphStore.getState().projectName, nodes: useGraphStore.getState().nodes }}

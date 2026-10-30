@@ -10,6 +10,9 @@ import type { ParamDef, DataOutputDef, ScanResult } from "../lib/types";
 import { safePythonId, DEFAULT_DATA_OUTPUTS } from "../lib/types";
 import { formatShape, type ShapeError } from "../lib/shape-inference";
 import { shapeErrorFix } from "../lib/shape-fixes";
+import { paramHelp, pytorchDocsUrl, torchName } from "../lib/param-help";
+import { openExternal } from "../lib/open-external";
+import HelpTip from "./ui/HelpTip";
 import { focusNode } from "../lib/canvas-focus";
 import { isDatasetNode, DATASET_METADATA, extractDatasetConfig, DATA_PRESETS, type DataDomain, type IntrospectionResult, type ProbeResult } from "../lib/dataset-metadata";
 import { sidecarCall } from "../lib/sidecar";
@@ -1482,9 +1485,7 @@ function NodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
         <CategoryBadge category={node.data.category} color={color} size={32} className="mt-0.5" />
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</div>
-          <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
-            {isDatasetNode(node.data.moduleType) ? `dataset.${node.data.moduleType}` : `torch.nn.${node.data.moduleType}`}
-          </div>
+          <TorchCaption moduleType={node.data.moduleType} />
         </div>
       </div>
 
@@ -1503,6 +1504,7 @@ function NodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
             {def.params.map((param) => (
               <ParamInput
                 key={param.name}
+                moduleType={node.data.moduleType}
                 param={param}
                 value={node.data.params[param.name]}
                 onChange={(v) => updateNodeParam(node.id, param.name, v)}
@@ -1745,7 +1747,25 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
   );
 }
 
-function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; value: unknown; onChange: (v: unknown) => void; highlight?: boolean }) {
+/** "torch.nn.Linear", linking to its page in the PyTorch docs */
+function TorchCaption({ moduleType }: { moduleType: string }) {
+  const name = isDatasetNode(moduleType) ? `dataset.${moduleType}` : torchName(moduleType);
+  const url = isDatasetNode(moduleType) ? null : pytorchDocsUrl(moduleType);
+  if (!name) return null;
+  if (!url) return <div className="text-[11px] mt-0.5 font-mono text-fg-muted">{name}</div>;
+  return (
+    <button type="button" onClick={() => void openExternal(url)} title="Open the PyTorch documentation"
+      className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-mono text-fg-muted hover:text-accent-text hover:underline underline-offset-2">
+      {name}
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+      </svg>
+      <span className="sr-only">(opens the PyTorch documentation)</span>
+    </button>
+  );
+}
+
+function ParamInput({ moduleType, param, value, onChange, highlight }: { moduleType: string; param: ParamDef; value: unknown; onChange: (v: unknown) => void; highlight?: boolean }) {
   const s = {
     background: "transparent",
     border: highlight ? "1px solid var(--danger)" : "1px solid var(--border)",
@@ -1754,26 +1774,31 @@ function ParamInput({ param, value, onChange, highlight }: { param: ParamDef; va
   };
   const c = "w-full px-2.5 py-2 text-xs rounded-md";
   const id = useId();
+  const help = paramHelp(moduleType, param.name);
+  const helpId = help ? `${id}-help` : undefined;
   return (
     <div>
-      <label htmlFor={id} className="block text-[11px] font-medium mb-1" style={{ color: highlight ? "var(--danger)" : "var(--text-secondary)" }}>
-        {param.label ?? param.name}
-        {highlight && <span className="ml-1 text-[11px] font-normal" style={{ color: "var(--danger)" }}>(mismatch)</span>}
-      </label>
+      <div className="flex items-center gap-1 mb-1">
+        <label htmlFor={id} className="text-[11px] font-medium" style={{ color: highlight ? "var(--danger)" : "var(--text-secondary)" }}>
+          {param.label ?? param.name}
+          {highlight && <span className="ml-1 text-[11px] font-normal" style={{ color: "var(--danger)" }}>(mismatch)</span>}
+        </label>
+        {help && helpId && <HelpTip id={helpId} text={help} label={`About ${param.label ?? param.name}`} />}
+      </div>
       {param.type === "bool" ? (
         <label className="flex items-center gap-2.5 cursor-pointer rounded-md px-2.5 py-2" style={{ border: "1px solid var(--border)" }}>
-          <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} className="accent-[var(--accent)]" />
+          <input id={id} type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} aria-describedby={helpId} className="accent-[var(--accent)]" />
           <span className="text-xs" style={{ color: "var(--text-primary)" }}>{value ? "True" : "False"}</span>
         </label>
       ) : param.type === "select" ? (
         <Select value={String(value ?? param.default)} onChange={onChange} options={param.options ?? []}
-          aria-label={param.label ?? param.name} className={c} style={s} />
+          aria-label={param.label ?? param.name} aria-describedby={helpId} className={c} style={s} />
       ) : param.type === "int" || param.type === "float" ? (
-        <NumberField id={id} value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
+        <NumberField id={id} aria-describedby={helpId} value={value} integer={param.type === "int"} step={param.type === "float" ? "any" : "1"} min={param.min} max={param.max}
           onChange={onChange}
           className={c} style={s} />
       ) : (
-        <input id={id} type="text" value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} className={c} style={s} />
+        <input id={id} aria-describedby={helpId} type="text" value={value == null ? "" : String(value)} onChange={(e) => onChange(e.target.value)} className={c} style={s} />
       )}
     </div>
   );
