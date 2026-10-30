@@ -6,6 +6,7 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
 import { useTrainingStore, type TrainingConfig, type EnvironmentInfo, type TrainingResults } from "../store/training-store";
 import { getCachedEnvironment } from "./sidecar";
+import { useRunStore, type RunRecord } from "../store/run-store";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -33,6 +34,8 @@ export interface ProjectFile {
   };
   environment?: EnvironmentInfo;
   trainingResults?: TrainingResults;
+  /** Earlier training runs, oldest first */
+  runs?: RunRecord[];
 }
 
 export function serializeProject(
@@ -68,6 +71,7 @@ export function serializeProject(
     },
     environment: getCachedEnvironment() ?? undefined,
     trainingResults: store.trainingResults ?? undefined,
+    runs: useRunStore.getState().runs,
   };
 }
 
@@ -87,6 +91,8 @@ export function deserializeProject(
   } else {
     useTrainingStore.getState().setTrainingResults(null);
   }
+
+  useRunStore.getState().setRuns(Array.isArray(json.runs) ? json.runs : []);
 
   // Compare environment if present (v2.0)
   if (json.environment) {

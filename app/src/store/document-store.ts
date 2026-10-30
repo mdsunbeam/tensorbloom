@@ -1,12 +1,13 @@
 /**
  * The open project's file path and whether it has unsaved changes.
- * The project counts as saved while its graph, name and training settings match what was last
+ * The project counts as saved while its graph, name, training settings and runs match what was last
  * saved, opened, or started fresh.
  */
 
 import { create } from "zustand";
 import { useGraphStore } from "./graph-store";
 import { useTrainingStore } from "./training-store";
+import { useRunStore } from "./run-store";
 import { graphKey } from "./history-store";
 
 interface DocumentState {
@@ -22,7 +23,7 @@ let savedKey = "";
 
 function documentKey(): string {
   const { projectName } = useGraphStore.getState();
-  return JSON.stringify([graphKey(), projectName, useTrainingStore.getState().config]);
+  return JSON.stringify([graphKey(), projectName, useTrainingStore.getState().config, useRunStore.getState().runs.map((r) => r.id)]);
 }
 
 export const useDocumentStore = create<DocumentState>((set) => ({
@@ -51,9 +52,11 @@ export function startDirtyTracking(): () => void {
     if (s.nodes !== p.nodes || s.edges !== p.edges || s.projectName !== p.projectName) schedule();
   });
   const unsubTraining = useTrainingStore.subscribe((s, p) => { if (s.config !== p.config) schedule(); });
+  const unsubRuns = useRunStore.subscribe((s, p) => { if (s.runs !== p.runs) schedule(); });
   return () => {
     unsubGraph();
     unsubTraining();
+    unsubRuns();
     if (timer) clearTimeout(timer);
   };
 }
