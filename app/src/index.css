@@ -39,21 +39,22 @@
   --chart-lr: #a78bfa;
   --chart-grid: #27272a;
 
-  --node-linear: #3b82f6;
-  --node-conv: #8b5cf6;
-  --node-activation: #eab308;
-  --node-norm: #10b981;
-  --node-pool: #ec4899;
-  --node-dropout: #71717a;
-  --node-loss: #ef4444;
-  --node-io: #6366f1;
-  --node-recurrent: #06b6d4;
-  --node-transformer: #f97316;
-  --node-embedding: #d946ef;
-  --node-reshape: #0ea5e9;
-  --node-math: #f472b6;
-  --node-vision: #84cc16;
+  /* Layer colors: 8 families, each category also has its own icon */
+  --node-io: #14b8a6;
   --node-data: #14b8a6;
+  --node-linear: #3b82f6;
+  --node-embedding: #3b82f6;
+  --node-conv: #8b5cf6;
+  --node-pool: #8b5cf6;
+  --node-vision: #8b5cf6;
+  --node-norm: #84cc16;
+  --node-dropout: #84cc16;
+  --node-activation: #f59e0b;
+  --node-recurrent: #ec4899;
+  --node-transformer: #ec4899;
+  --node-loss: #ef4444;
+  --node-reshape: #94a3b8;
+  --node-math: #94a3b8;
 }
 
 /* ------------- Light theme · Zinc palette ------------- */
@@ -90,21 +91,22 @@
   --chart-lr: #7c3aed;
   --chart-grid: #e4e4e7;
 
-  --node-linear: #2563eb;
-  --node-conv: #7c3aed;
-  --node-activation: #ca8a04;
-  --node-norm: #059669;
-  --node-pool: #db2777;
-  --node-dropout: #57534e;
-  --node-loss: #dc2626;
-  --node-io: #4f46e5;
-  --node-recurrent: #0891b2;
-  --node-transformer: #ea580c;
-  --node-embedding: #c026d3;
-  --node-reshape: #0284c7;
-  --node-math: #ec4899;
-  --node-vision: #65a30d;
+  /* Layer colors: 8 families, each category also has its own icon */
+  --node-io: #0d9488;
   --node-data: #0d9488;
+  --node-linear: #2563eb;
+  --node-embedding: #2563eb;
+  --node-conv: #7c3aed;
+  --node-pool: #7c3aed;
+  --node-vision: #7c3aed;
+  --node-norm: #65a30d;
+  --node-dropout: #65a30d;
+  --node-activation: #d97706;
+  --node-recurrent: #db2777;
+  --node-transformer: #db2777;
+  --node-loss: #dc2626;
+  --node-reshape: #64748b;
+  --node-math: #64748b;
 }
 
 /* ------------- Base reset ------------- */
@@ -245,6 +247,12 @@ button, input, select {
   height: 8px !important;
   background: var(--accent) !important;
   border-radius: 50% !important;
+}
+
+/* Skip connection: dotted, so the main path reads first */
+.react-flow__edge-path.edge-skip {
+  stroke-dasharray: 0.5 6 !important;
+  stroke-width: 2.5 !important;
 }
 
 /* Error edge — root cause */

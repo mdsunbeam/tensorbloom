@@ -9,14 +9,24 @@ import {
 import type { NodeCategory, ModuleDef } from "../lib/types";
 import { startDrag, endDrag } from "./DragOverlay";
 import { TEMPLATES } from "../lib/templates";
+import { CategoryIcon, tint } from "../lib/category-icons";
 
 const modulesByCategory = getModulesByCategory();
 const layerCategories = (Object.keys(modulesByCategory) as NodeCategory[]).filter((c) => c !== "data" && c !== "io");
 const dataModules = modulesByCategory["data"] ?? [];
+// Open at start: the data source and the layers most models begin with
+const OPEN_AT_START = ["data", "linear", "conv", "activation"];
+
+/** Adds a layer below the others, for a click or the keyboard instead of a drag */
+function addAtDefaultSpot(moduleType: string) {
+  const { addNode, nodes } = useGraphStore.getState();
+  const snap = (v: number) => Math.round(v / 20) * 20;
+  addNode(moduleType, { x: snap(260), y: snap(40 + nodes.length * 100) });
+}
 
 export default function NodePalette() {
   const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(OPEN_AT_START));
 
   const toggle = (cat: string) => {
     const next = new Set(expanded);
@@ -53,12 +63,7 @@ export default function NodePalette() {
       window.removeEventListener("mouseup", onUp);
       if (!dragging) {
         // Didn't drag far enough — treat as click, place node snapped to grid
-        const { addNode, nodes } = useGraphStore.getState();
-        const snap = (v: number) => Math.round(v / 20) * 20;
-        addNode(moduleType, {
-          x: snap(260),
-          y: snap(40 + nodes.length * 100),
-        });
+        addAtDefaultSpot(moduleType);
       } else {
         // Clean up drag state if GraphEditor's onMouseUp didn't handle the drop
         // (e.g., mouse released outside the graph area)
@@ -82,7 +87,6 @@ export default function NodePalette() {
     );
 
   const filteredDataModules = filterModules(dataModules);
-  const dataColor = CATEGORY_COLORS["data"];
   const dataOpen = expanded.has("data") || !!search;
 
   // Count only layer modules (exclude data); while searching, count only matches
@@ -146,46 +150,14 @@ export default function NodePalette() {
                 {filteredDataModules.length}
               </span>
             </div>
-            <div className="mb-0.5">
-              <button
-                onClick={() => toggle("data")}
-                className="flex items-center w-full px-2 py-[7px] text-[11px] font-semibold rounded-lg transition-colors"
-                style={{ color: "var(--text-secondary)" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              >
-                <svg
-                  width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="mr-1.5 flex-shrink-0 transition-transform"
-                  style={{ transform: dataOpen ? "rotate(90deg)" : "rotate(0deg)" }}
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span className="w-2.5 h-2.5 rounded flex-shrink-0 mr-2" style={{ background: dataColor }} />
-                Datasets
-                <span className="ml-auto text-[10px] font-normal tabular-nums" style={{ color: "var(--text-muted)" }}>
-                  {filteredDataModules.length}
-                </span>
-              </button>
-              {dataOpen && (
-                <div className="ml-3 pl-2.5 mt-0.5 mb-1 space-y-px" style={{ borderLeft: `2px solid ${dataColor}20` }}>
-                  {filteredDataModules.map((mod) => (
-                    <div
-                      key={mod.type}
-                      onMouseDown={(e) => onMouseDown(e, mod.type)}
-                      className="flex items-center px-2.5 py-[6px] rounded-md cursor-grab active:cursor-grabbing text-xs transition-colors select-none"
-                      style={{ color: "var(--text-primary)", background: "transparent" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-tertiary)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      title={mod.description}
-                    >
-                      <span className="w-[5px] h-[5px] rounded-full mr-2.5 flex-shrink-0 opacity-60" style={{ background: dataColor }} />
-                      <span className="truncate">{mod.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CategoryGroup
+              category="data"
+              label="Datasets"
+              modules={filteredDataModules}
+              open={dataOpen}
+              onToggle={() => toggle("data")}
+              onItemMouseDown={onMouseDown}
+            />
 
             {/* Divider */}
             <div className="mx-2 my-2" style={{ borderTop: "1px solid var(--border)" }} />
@@ -222,84 +194,70 @@ export default function NodePalette() {
           if (!modules.length) return null;
 
           const isOpen = expanded.has(cat) || !!search;
-          const color = CATEGORY_COLORS[cat];
 
           return (
-            <div key={cat} className="mb-0.5">
-              {/* Category header */}
-              <button
-                onClick={() => toggle(cat)}
-                className="flex items-center w-full px-2 py-[7px] text-[11px] font-semibold rounded-lg transition-colors"
-                style={{ color: "var(--text-secondary)" }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = "var(--bg-tertiary)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "transparent")
-                }
-              >
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="mr-1.5 flex-shrink-0 transition-transform"
-                  style={{
-                    transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
-                  }}
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-                <span
-                  className="w-2.5 h-2.5 rounded flex-shrink-0 mr-2"
-                  style={{ background: color }}
-                />
-                {CATEGORY_LABELS[cat]}
-                <span
-                  className="ml-auto text-[10px] font-normal tabular-nums"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  {modules.length}
-                </span>
-              </button>
-
-              {/* Module items */}
-              {isOpen && (
-                <div className="ml-3 pl-2.5 mt-0.5 mb-1 space-y-px" style={{ borderLeft: `2px solid ${color}20` }}>
-                  {modules.map((mod) => (
-                    <div
-                      key={mod.type}
-                      onMouseDown={(e) => onMouseDown(e, mod.type)}
-                      className="flex items-center px-2.5 py-[6px] rounded-md cursor-grab active:cursor-grabbing text-xs transition-colors select-none"
-                      style={{
-                        color: "var(--text-primary)",
-                        background: "transparent",
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "var(--bg-tertiary)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
-                      }
-                      title={mod.description}
-                    >
-                      <span
-                        className="w-[5px] h-[5px] rounded-full mr-2.5 flex-shrink-0 opacity-60"
-                        style={{ background: color }}
-                      />
-                      <span className="truncate">{mod.label}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CategoryGroup
+              key={cat}
+              category={cat}
+              label={CATEGORY_LABELS[cat]}
+              modules={modules}
+              open={isOpen}
+              onToggle={() => toggle(cat)}
+              onItemMouseDown={onMouseDown}
+            />
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** A category heading that opens to its layers. Drag a layer onto the canvas, or click it (or press Enter) to add it. */
+function CategoryGroup({ category, label, modules, open, onToggle, onItemMouseDown }: {
+  category: NodeCategory;
+  label: string;
+  modules: ModuleDef[];
+  open: boolean;
+  onToggle: () => void;
+  onItemMouseDown: (e: React.MouseEvent, moduleType: string) => void;
+}) {
+  const color = CATEGORY_COLORS[category];
+  return (
+    <div className="mb-0.5">
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex items-center w-full px-2 py-[7px] text-xs font-semibold rounded-lg transition-colors text-fg-secondary hover:bg-surface-raised hover:text-fg"
+      >
+        <svg
+          width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+          className="mr-1.5 flex-shrink-0 transition-transform text-fg-muted" aria-hidden="true"
+          style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+        <CategoryIcon category={category} size={14} className="mr-2 flex-shrink-0" style={{ color }} />
+        {label}
+        <span className="ml-auto text-[11px] font-normal tabular-nums text-fg-muted">{modules.length}</span>
+      </button>
+      {open && (
+        <div className="ml-3 pl-2.5 mt-0.5 mb-1 space-y-px" style={{ borderLeft: `2px solid ${tint(color, 25)}` }}>
+          {modules.map((mod) => (
+            <button
+              key={mod.type}
+              type="button"
+              onMouseDown={(e) => onItemMouseDown(e, mod.type)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); addAtDefaultSpot(mod.type); }
+              }}
+              className="flex items-center w-full px-2.5 py-[6px] rounded-md cursor-grab active:cursor-grabbing text-xs text-left transition-colors select-none text-fg hover:bg-surface-raised"
+              title={`${mod.description}\nDrag onto the canvas, or click to add`}
+            >
+              <span className="truncate">{mod.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

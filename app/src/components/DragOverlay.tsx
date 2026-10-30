@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { CATEGORY_COLORS } from "../lib/registry";
 import type { NodeCategory } from "../lib/types";
+import { CategoryBadge } from "../lib/category-icons";
 
 interface DragState {
   active: boolean;
@@ -87,12 +88,7 @@ export default function DragOverlay() {
       >
         <div className="h-[3px] rounded-t-lg" style={{ background: color }} />
         <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold">
-          <div
-            className="w-4 h-4 rounded-[4px] flex items-center justify-center text-[7px] font-bold text-white opacity-90"
-            style={{ background: color }}
-          >
-            {drag.label.slice(0, 2).toUpperCase()}
-          </div>
+          <CategoryBadge category={drag.category} color={color} size={18} />
           <span style={{ color: "var(--text-primary)" }}>{drag.label}</span>
         </div>
       </div>

@@ -16,6 +16,7 @@ import NumberField from "./NumberField";
 import Select from "./ui/Select";
 import Button from "./ui/Button";
 import Tabs from "./ui/Tabs";
+import { CategoryBadge } from "../lib/category-icons";
 
 type Tab = "properties" | "training";
 
@@ -747,9 +748,7 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
     <>
       {/* Header */}
       <div className="px-4 py-3 flex items-start gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: color }}>
-          DA
-        </div>
+        <CategoryBadge category="data" color={color} size={32} className="mt-0.5" />
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -1517,9 +1516,7 @@ function NodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getState>[
   return (
     <>
       <div className="px-4 py-3 flex items-start gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: color }}>
-          {node.data.label.slice(0, 2).toUpperCase()}
-        </div>
+        <CategoryBadge category={node.data.category} color={color} size={32} className="mt-0.5" />
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</div>
           <div className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
@@ -1656,9 +1653,7 @@ function CodeBlockEditor({ node }: { node: ReturnType<typeof useGraphStore.getSt
     <>
       {/* Header */}
       <div className="px-4 py-3 flex items-start gap-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 mt-0.5" style={{ background: color }}>
-          {node.data.label.slice(0, 2).toUpperCase()}
-        </div>
+        <CategoryBadge category={node.data.category} color={color} size={32} className="mt-0.5" />
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>{node.data.label}</span>

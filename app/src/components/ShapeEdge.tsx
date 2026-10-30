@@ -3,9 +3,12 @@ import { BaseEdge, getBezierPath, Position, type EdgeProps } from "@xyflow/react
 import { useGraphStore } from "../store/graph-store";
 import { formatShape } from "../lib/shape-inference";
 
-const R = 8;            // corner radius for orthogonal turns
-const PAD = 30;         // base clearance outside node bounds
-const LANE_GAP = 20;    // spacing between parallel channel lanes
+const R = 14;           // corner radius for the turns around a block
+const PAD = 30;         // clearance outside the whole graph, for Data → Loss target edges
+const SKIP_PAD = 26;    // clearance beside the block a skip connection goes around
+const LANE_GAP = 14;    // spacing between skip connections that run side by side
+
+type Side = "right" | "left";
 
 export default function ShapeEdge(props: EdgeProps) {
   const { id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style, selected } = props;
@@ -16,75 +19,76 @@ export default function ShapeEdge(props: EdgeProps) {
   const nodes = useGraphStore((s) => s.nodes);
   const edges = useGraphStore((s) => s.edges);
 
-  // ── Compute node bounds + lane assignments for all channel edges ──
-  const { bounds, lane, side } = useMemo(() => {
-    // Node bounds
-    let left = Infinity, right = -Infinity;
+  // ── Which edges go around the graph, and where ──
+  const { channelX, side, isSkip } = useMemo(() => {
     const nodeMap = new Map<string, typeof nodes[number]>();
+    const size = (n: typeof nodes[number]) => ({
+      w: n.measured?.width ?? (n.width as number | undefined) ?? 200,
+      h: n.measured?.height ?? (n.height as number | undefined) ?? 80,
+    });
+    let right = -Infinity;
     for (const n of nodes) {
       nodeMap.set(n.id, n);
-      const w = n.measured?.width ?? (n.width as number | undefined) ?? 200;
-      left = Math.min(left, n.position.x);
-      right = Math.max(right, n.position.x + w);
+      right = Math.max(right, n.position.x + size(n).w);
     }
-    const bds = { left, right };
 
-    // Classify every edge as right-channel, left-channel, or normal.
-    // Channel edges: skip connections (Bottom→Top, large dy, small dx)
-    //                and Right→Right edges (Data.y → Loss.target)
-    type CEdge = { id: string; side: "right" | "left"; minY: number };
-    const channelEdges: CEdge[] = [];
+    // Channel edges: Data → Loss target edges run down the graph's right margin.
+    // Skip connections (a long gap between nodes stacked in one column) run just beside the nodes they pass.
+    type CEdge = { id: string; side: Side; top: number; bottom: number; skip: boolean; edge: number };
+    const channel: CEdge[] = [];
+    const rightHandles = new Set(["b", "tgt", "input2", "positive", "negative"]);
 
     for (const e of edges) {
       const sn = nodeMap.get(e.source);
       const tn = nodeMap.get(e.target);
       if (!sn || !tn) continue;
+      const ss = size(sn), ts = size(tn);
 
-      const sw = sn.measured?.width ?? (sn.width as number | undefined) ?? 200;
-      const sh = sn.measured?.height ?? (sn.height as number | undefined) ?? 80;
-      const tw = tn.measured?.width ?? (tn.width as number | undefined) ?? 200;
-
-      // Data → Loss.target edges (both Right→Right for y, and Bottom→Right for x)
-      const isDataSource = !!sn.data.dataOutputs;
-      if (isDataSource && e.targetHandle === "target") {
-        channelEdges.push({ id: e.id, side: "right", minY: sn.position.y });
+      if (sn.data.dataOutputs && e.targetHandle === "target") {
+        channel.push({ id: e.id, side: "right", top: sn.position.y, bottom: tn.position.y, skip: false, edge: right });
         continue;
       }
 
-      // Skip connection: detect by vertical gap between node CENTERS
-      // (not handle positions, which vary by handle index on multi-input nodes)
-      const srcCenterX = sn.position.x + sw / 2;
-      const tgtCenterX = tn.position.x + tw / 2;
-      const nodeCenterDx = Math.abs(tgtCenterX - srcCenterX);
-      const nodeGapY = tn.position.y - (sn.position.y + sh);
-
-      if (nodeGapY > 100 && nodeCenterDx < 150) {
-        // Determine channel side from target handle ID:
-        // Second handles ("b", "tgt", "input2") are right of center (67%)
-        // First handles ("a", "src", "input1") are left of center (33%)
-        const rightHandles = new Set(["b", "tgt", "input2", "positive", "negative"]);
-        const side: "right" | "left" = rightHandles.has(e.targetHandle ?? "") ? "right" : "left";
-        channelEdges.push({
-          id: e.id,
-          side,
-          minY: sn.position.y + sh,
-        });
+      // Detect by the gap between node CENTERS (handle positions vary on multi-input nodes)
+      const nodeCenterDx = Math.abs(tn.position.x + ts.w / 2 - (sn.position.x + ss.w / 2));
+      const top = sn.position.y + ss.h;
+      const bottom = tn.position.y;
+      if (bottom - top > 100 && nodeCenterDx < 150) {
+        // Second handles ("b", "tgt", …) sit right of center, so their skip runs on the right
+        const sd: Side = rightHandles.has(e.targetHandle ?? "") ? "right" : "left";
+        // The outer edge of the nodes this connection passes, not of the whole graph
+        let edgeX = sd === "right" ? -Infinity : Infinity;
+        for (const n of nodes) {
+          const ns = size(n);
+          if (n.position.y + ns.h < sn.position.y || n.position.y > tn.position.y + ts.h) continue;
+          const nx = n.position.x + ns.w / 2;
+          if (Math.abs(nx - (sn.position.x + ss.w / 2)) > 200) continue;
+          edgeX = sd === "right" ? Math.max(edgeX, n.position.x + ns.w) : Math.min(edgeX, n.position.x);
+        }
+        channel.push({ id: e.id, side: sd, top, bottom, skip: true, edge: edgeX });
       }
     }
 
-    // Assign lanes per side: sort by minY, sequential lane index
-    const rightEdges = channelEdges.filter((e) => e.side === "right").sort((a, b) => a.minY - b.minY);
-    const leftEdges = channelEdges.filter((e) => e.side === "left").sort((a, b) => a.minY - b.minY);
+    // Lanes: connections whose spans overlap on the same side sit next to each other; others share lane 0
+    const laneOf = new Map<string, number>();
+    for (const sd of ["right", "left"] as const) {
+      const list = channel.filter((c) => c.side === sd).sort((a, b) => a.top - b.top);
+      const laneEnds: number[] = [];
+      for (const c of list) {
+        let lane = laneEnds.findIndex((end) => end < c.top);
+        if (lane === -1) { lane = laneEnds.length; laneEnds.push(c.bottom); } else laneEnds[lane] = c.bottom;
+        laneOf.set(c.id, lane);
+      }
+    }
 
-    const laneMap = new Map<string, { lane: number; side: "right" | "left" }>();
-    rightEdges.forEach((e, i) => laneMap.set(e.id, { lane: i, side: "right" }));
-    leftEdges.forEach((e, i) => laneMap.set(e.id, { lane: i, side: "left" }));
-
-    const info = laneMap.get(id);
+    const mine = channel.find((c) => c.id === id);
+    const lane = laneOf.get(id) ?? 0;
+    const sign = mine?.side === "left" ? -1 : 1;
+    const pad = mine?.skip ? SKIP_PAD : PAD;
     return {
-      bounds: bds,
-      lane: info?.lane ?? 0,
-      side: info?.side ?? null,
+      side: mine?.side ?? null,
+      isSkip: !!mine?.skip,
+      channelX: mine ? mine.edge + sign * (pad + lane * LANE_GAP) : right + PAD,
     };
   }, [nodes, edges, id]);
 
@@ -98,13 +102,10 @@ export default function ShapeEdge(props: EdgeProps) {
 
   if (sourcePosition === Position.Bottom && targetPosition === Position.Top) {
     if (side !== null) {
-      // Skip connection — route through assigned lane outside all nodes
+      // Skip connection: out to the side of the block it skips, down, and back in
       const signX = side === "right" ? 1 : -1;
-      const channelX = side === "right"
-        ? bounds.right + PAD + lane * LANE_GAP
-        : bounds.left - PAD - lane * LANE_GAP;
       const stub = 20;
-      const r = Math.min(R, stub);
+      const r = Math.min(R, stub, Math.abs(channelX - sourceX) / 2, Math.abs(channelX - targetX) / 2);
       const y1 = sourceY + stub;
       const y2 = targetY - stub;
       edgePath = `M ${sourceX} ${sourceY} `
@@ -135,7 +136,6 @@ export default function ShapeEdge(props: EdgeProps) {
   } else if (sourcePosition === Position.Bottom && targetPosition === Position.Right) {
     // Bottom→Right: e.g., Data.x → Loss.target (reconstruction)
     // Route through right-side channel: down → right to channel → down → left to target
-    const channelX = bounds.right + PAD + lane * LANE_GAP;
     const stub = 20;
     const r = Math.min(R, stub);
     const y1 = sourceY + stub;
@@ -149,7 +149,6 @@ export default function ShapeEdge(props: EdgeProps) {
       + `L ${targetX} ${targetY}`;
   } else if (sourcePosition === Position.Right && targetPosition === Position.Right) {
     // Right→Right: assigned lane on the right margin
-    const channelX = bounds.right + PAD + lane * LANE_GAP;
     const goingDown = targetY > sourceY;
     const d = goingDown ? R : -R;
     edgePath = `M ${sourceX} ${sourceY} `
@@ -203,7 +202,7 @@ export default function ShapeEdge(props: EdgeProps) {
         strokeWidth={16}
         style={{ cursor: "pointer" }}
       />
-      <BaseEdge id={id} path={edgePath} style={style} className={`${selected ? "selected" : ""} ${errorClass}`} />
+      <BaseEdge id={id} path={edgePath} style={style} className={`${selected ? "selected" : ""} ${errorClass || (isSkip ? "edge-skip" : "")}`} />
 
       {/* Hover label at midpoint */}
       {hovered && hoverLabel && (

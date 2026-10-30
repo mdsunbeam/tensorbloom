@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MODULE_REGISTRY, CATEGORY_COLORS, CATEGORY_LABELS } from "../lib/registry";
 import type { ModuleDef } from "../lib/types";
+import { CategoryBadge, tint } from "../lib/category-icons";
 
 export interface ConnectFromContext {
   sourceNodeId: string;
@@ -127,12 +128,7 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
                   onClick={() => { onSelect(mod.type); onClose(); }}
                   onMouseEnter={() => setSelectedIndex(i)}
                 >
-                  <div
-                    className="w-6 h-6 rounded-md flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0"
-                    style={{ background: color }}
-                  >
-                    {mod.label.slice(0, 2).toUpperCase()}
-                  </div>
+                  <CategoryBadge category={mod.category} color={color} size={24} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -140,7 +136,7 @@ export default function SpotlightDialog({ open, onClose, onSelect, connectFrom }
                       </span>
                       <span
                         className="text-[9px] px-1.5 py-0.5 rounded font-medium"
-                        style={{ background: `${color}18`, color }}
+                        style={{ background: tint(color, 12), color }}
                       >
                         {CATEGORY_LABELS[mod.category]}
                       </span>
