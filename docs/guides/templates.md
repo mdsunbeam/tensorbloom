@@ -51,10 +51,10 @@ TensorBloom includes 16 pre-built architecture templates. Each template creates 
 ## Using Templates
 
 1. Go to **Insert > From Template**
-2. Browse by category or search
+2. Browse by category. Each card shows a preview of the model's layout, its layer count, dataset, and paper
 3. Click a template to load it
 4. The graph, training config, and dataset are all pre-configured
-5. Click **Start Training** to train immediately, or modify the architecture first
+5. Press **Train** (or Ctrl+Enter) to train immediately, or modify the architecture first
 
 ## Modifying Templates
 
