@@ -15,7 +15,12 @@ function formatTime(ms: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export default function TrainingCharts({ onSwitchToLogs, onShowRuns, onExport }: { onSwitchToLogs: () => void; onShowRuns: () => void; onExport: () => void }) {
+export default function TrainingCharts({ onSwitchToLogs, onShowRuns, onExport, onTryModel }: {
+  onSwitchToLogs: () => void;
+  onShowRuns: () => void;
+  onExport: () => void;
+  onTryModel: (runId: string) => void;
+}) {
   const metrics = useTrainingStore((s) => s.metrics);
   const status = useTrainingStore((s) => s.status);
   const currentEpoch = useTrainingStore((s) => s.currentEpoch);
@@ -156,7 +161,7 @@ export default function TrainingCharts({ onSwitchToLogs, onShowRuns, onExport }:
       )}
       {status === "finished" && results && (
         <div className="px-3 pt-3 flex-shrink-0">
-          <RunSummary results={results} onExport={onExport} onShowRuns={onShowRuns} />
+          <RunSummary results={results} onExport={onExport} onShowRuns={onShowRuns} onTryModel={onTryModel} />
         </div>
       )}
 
@@ -202,7 +207,7 @@ export default function TrainingCharts({ onSwitchToLogs, onShowRuns, onExport }:
   );
 }
 
-function RunSummary({ results, onExport, onShowRuns }: { results: TrainingResults; onExport: () => void; onShowRuns: () => void }) {
+function RunSummary({ results, onExport, onShowRuns, onTryModel }: { results: TrainingResults; onExport: () => void; onShowRuns: () => void; onTryModel: (runId: string) => void }) {
   const planned = results.plannedEpochs ?? results.totalEpochs;
   const title = results.stoppedByUser ? `Stopped at epoch ${results.totalEpochs} of ${planned}`
     : results.earlyStopped ? `Stopped early at epoch ${results.totalEpochs} of ${planned}, when validation stopped improving`
@@ -216,6 +221,7 @@ function RunSummary({ results, onExport, onShowRuns }: { results: TrainingResult
   // The run that just ended is the last one kept; offer to put it next to the one before
   const runs = useRunStore((s) => s.runs);
   const previous = runs.length >= 2 ? runs[runs.length - 2] : null;
+  const latest = runs[runs.length - 1];
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-line bg-surface-raised" role="status">
@@ -237,6 +243,7 @@ function RunSummary({ results, onExport, onShowRuns }: { results: TrainingResult
           Compare with Run {previous.number}
         </Button>
       )}
+      {latest && <Button size="sm" onClick={() => onTryModel(latest.id)}>Try it</Button>}
       <Button size="sm" onClick={onExport}>Export model</Button>
       <Button size="sm" variant="primary" onClick={() => void startTraining()} title="Ctrl+Enter">Train again</Button>
     </div>

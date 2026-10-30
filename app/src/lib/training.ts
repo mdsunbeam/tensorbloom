@@ -4,7 +4,9 @@
 
 import { sidecarCall, setTrainProgressCallback, setTrainLogCallback, getCachedEnvironment } from "./sidecar";
 import { useGraphStore } from "../store/graph-store";
-import { useTrainingStore, type TrainingResults } from "../store/training-store";
+import { useTrainingStore, type TrainingResults, type TrainingConfig } from "../store/training-store";
+import type { Node } from "@xyflow/react";
+import type { NodeData } from "../store/graph-store";
 import { preflightCheck } from "./preflight-check";
 import { toast } from "../components/Toast";
 import { reviewPreflightFixes } from "../components/PreflightDialog";
@@ -76,12 +78,6 @@ export async function startTraining() {
   // Re-read config after seed updates
   const finalConfig = useTrainingStore.getState().config;
 
-  // Extract dataset config from Dataset node if one exists in the graph
-  const datasetNode = nodes.find((n) => isDatasetNode(n.data.moduleType));
-  const datasetOverride = datasetNode
-    ? extractDatasetConfig(datasetNode.data.moduleType, datasetNode.data.params)
-    : null;
-
   const graphJson = buildSidecarGraph(nodes, edges);
 
   // What this run trains, recorded when it ends so runs can be compared later
@@ -96,6 +92,8 @@ export async function startTraining() {
     },
     graph: graphSnapshot(nodes, edges),
   };
+  // The run's latest checkpoint, so its model can be tried again after the app restarts
+  let checkpoint: RunRecord["checkpoint"];
 
   // Set up log callback — streams stdout/stderr from training thread
   setTrainLogCallback((params) => {
@@ -177,16 +175,19 @@ export async function startTraining() {
         };
         store.setTrainingResults(results);
       }
-      recordRun(run, useTrainingStore.getState().stopRequested ? "stopped" : "finished");
+      recordRun({ ...run, checkpoint }, useTrainingStore.getState().stopRequested ? "stopped" : "finished");
       useTrainingStore.getState().setStatus("finished");
       return;
     }
     if (p.status === "checkpoint") {
-      if (p.path) useTrainingStore.getState().setLastCheckpointPath(p.path);
+      if (p.path) {
+        useTrainingStore.getState().setLastCheckpointPath(p.path);
+        checkpoint = { path: p.path, epoch: p.epoch ?? 0 };
+      }
       return;
     }
     if (p.status === "error" || p.error) {
-      recordRun(run, "failed", p.error ?? "Training error");
+      recordRun({ ...run, checkpoint }, "failed", p.error ?? "Training error");
       useTrainingStore.getState().setError(p.error ?? "Training error");
       return;
     }
@@ -219,40 +220,7 @@ export async function startTraining() {
   try {
     await sidecarCall("train.start", {
       graph: graphJson,
-      config: {
-        optimizer: {
-          type: finalConfig.optimizer.type,
-          lr: finalConfig.optimizer.lr,
-          weight_decay: finalConfig.optimizer.weightDecay,
-          momentum: finalConfig.optimizer.momentum,
-        },
-        scheduler: finalConfig.scheduler ? {
-          type: finalConfig.scheduler.type,
-          ...finalConfig.scheduler.params,
-        } : null,
-        loss: finalConfig.loss,
-        epochs: finalConfig.epochs,
-        batch_size: finalConfig.batchSize,
-        val_split: datasetOverride?.valSplit ?? finalConfig.valSplit,
-        dataset: datasetOverride
-          ? {
-              ...datasetOverride.dataset,
-              val_split: datasetOverride.valSplit,
-              ...datasetOverride.datasetExtra,
-              ...(datasetNode?.data.dataOutputs ? { data_outputs: datasetNode.data.dataOutputs } : {}),
-            }
-          : finalConfig.dataset,
-        device: finalConfig.device,
-        mixed_precision: finalConfig.mixedPrecision,
-        gradient_clipping: finalConfig.gradientClipping.enabled ? { max_norm: finalConfig.gradientClipping.maxNorm } : null,
-        early_stopping: finalConfig.earlyStopping.enabled ? { patience: finalConfig.earlyStopping.patience, min_delta: finalConfig.earlyStopping.minDelta } : null,
-        resume_checkpoint: finalConfig.resumeCheckpoint || null,
-        augmentation: datasetOverride?.augmentation ?? finalConfig.augmentation,
-        weight_init: finalConfig.weightInit,
-        seed: finalConfig.seed,
-        dataloader_seed: finalConfig.dataloaderSeed,
-        deterministic: finalConfig.deterministicMode,
-      },
+      config: sidecarTrainConfig(nodes, finalConfig),
     });
   } catch (e) {
     useTrainingStore.getState().setError(
@@ -261,7 +229,49 @@ export async function startTraining() {
   }
 }
 
-type RunStart = Pick<RunRecord, "modelName" | "startedAt" | "config" | "model" | "graph">;
+/** The training settings as the sidecar takes them. The Data node's settings take precedence over the panel's. */
+export function sidecarTrainConfig(nodes: Node<NodeData>[], config: TrainingConfig) {
+  const datasetNode = nodes.find((n) => isDatasetNode(n.data.moduleType));
+  const datasetOverride = datasetNode
+    ? extractDatasetConfig(datasetNode.data.moduleType, datasetNode.data.params)
+    : null;
+  return {
+    optimizer: {
+      type: config.optimizer.type,
+      lr: config.optimizer.lr,
+      weight_decay: config.optimizer.weightDecay,
+      momentum: config.optimizer.momentum,
+    },
+    scheduler: config.scheduler ? {
+      type: config.scheduler.type,
+      ...config.scheduler.params,
+    } : null,
+    loss: config.loss,
+    epochs: config.epochs,
+    batch_size: config.batchSize,
+    val_split: datasetOverride?.valSplit ?? config.valSplit,
+    dataset: datasetOverride
+      ? {
+          ...datasetOverride.dataset,
+          val_split: datasetOverride.valSplit,
+          ...datasetOverride.datasetExtra,
+          ...(datasetNode?.data.dataOutputs ? { data_outputs: datasetNode.data.dataOutputs } : {}),
+        }
+      : config.dataset,
+    device: config.device,
+    mixed_precision: config.mixedPrecision,
+    gradient_clipping: config.gradientClipping.enabled ? { max_norm: config.gradientClipping.maxNorm } : null,
+    early_stopping: config.earlyStopping.enabled ? { patience: config.earlyStopping.patience, min_delta: config.earlyStopping.minDelta } : null,
+    resume_checkpoint: config.resumeCheckpoint || null,
+    augmentation: datasetOverride?.augmentation ?? config.augmentation,
+    weight_init: config.weightInit,
+    seed: config.seed,
+    dataloader_seed: config.dataloaderSeed,
+    deterministic: config.deterministicMode,
+  };
+}
+
+type RunStart = Pick<RunRecord, "modelName" | "startedAt" | "config" | "model" | "graph" | "checkpoint">;
 
 /** Adds the run that just ended to the project's run history. A run stopped before its first epoch has nothing to keep. */
 function recordRun(start: RunStart, status: RunRecord["status"], error?: string) {

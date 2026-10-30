@@ -20,7 +20,7 @@ const STEPS: { title: string; body: React.ReactNode }[] = [
   },
   {
     title: "Use the result",
-    body: <>Export the trained model as ONNX or TorchScript with <Kbd>Ctrl+E</Kbd>, or copy the generated PyTorch code from the <b>Code</b> tab. Save the project with <Kbd>Ctrl+S</Kbd> to keep the graph and its settings.</>,
+    body: <>Press <b>Try it</b> to see what the model predicts on samples it didn't train on, or on your own image. The <b>Runs</b> tab keeps every run so you can compare them. Export the model as ONNX or TorchScript with <Kbd>Ctrl+E</Kbd>, and save the project with <Kbd>Ctrl+S</Kbd> to keep the graph, its settings and its runs.</>,
   },
 ];
 

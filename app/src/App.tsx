@@ -26,6 +26,7 @@ const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
+const TryModelDialog = lazy(() => import("./components/TryModelDialog"));
 const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
 const AboutDialog = lazy(() => import("./components/AboutDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
@@ -68,6 +69,7 @@ export default function App() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
+  const [tryRunId, setTryRunId] = useState<string | null>(null);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [minimapVisible, setMinimapVisible] = useState(true);
@@ -443,8 +445,8 @@ export default function App() {
           {bottomPanelOpen && (
             <div className="flex-shrink-0 overflow-hidden" style={{ height: tabHeights[bottomTab], background: "var(--bg-secondary)" }}>
               {bottomTab === "code" && <CodePanel />}
-              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} />}
-              {bottomTab === "runs" && <RunsPanel />}
+              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={setTryRunId} />}
+              {bottomTab === "runs" && <RunsPanel onTryModel={setTryRunId} />}
               {bottomTab === "logs" && <TrainingLogs />}
             </div>
           )}
@@ -483,6 +485,7 @@ export default function App() {
           modelA={{ name: useGraphStore.getState().projectName, nodes: useGraphStore.getState().nodes }}
           modelB={compareModel}
         />}
+        {tryRunId && <TryModelDialog runId={tryRunId} onClose={() => setTryRunId(null)} />}
       </Suspense>
       <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
       <DragOverlay />

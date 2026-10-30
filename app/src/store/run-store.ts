@@ -30,6 +30,8 @@ export interface RunRecord {
   model: { params: number; layers: number; /** Same key ⇔ same layers, settings and connections */ key: string };
   /** The graph the run trained, so it can be opened again */
   graph: { nodes: Node<NodeData>[]; edges: Edge[] };
+  /** The last checkpoint the run saved. Its epoch can be earlier than the run's last when it stopped early. */
+  checkpoint?: { path: string; epoch: number };
 }
 
 /** Projects keep this many runs; older ones are dropped */
@@ -39,6 +41,8 @@ interface RunState {
   runs: RunRecord[];
   /** Runs picked for comparison, in the order they were picked */
   compareIds: string[];
+  /** The run whose weights the Python process holds, which lasts until the app closes */
+  liveRunId: string | null;
   addRun: (run: RunRecord) => void;
   removeRun: (id: string) => void;
   setRuns: (runs: RunRecord[]) => void;
@@ -49,14 +53,17 @@ interface RunState {
 export const useRunStore = create<RunState>((set, get) => ({
   runs: [],
   compareIds: [],
+  liveRunId: null,
   // A new run is compared with the one before it, which is what people usually want to see
   addRun: (run) => {
     const runs = [...get().runs, run].slice(-MAX_RUNS);
     const prev = runs[runs.length - 2];
-    set({ runs, compareIds: prev ? [prev.id, run.id] : [run.id] });
+    // A failed run leaves the previous run's weights in place
+    set({ runs, compareIds: prev ? [prev.id, run.id] : [run.id], ...(run.status !== "failed" ? { liveRunId: run.id } : {}) });
   },
   removeRun: (id) => set({ runs: get().runs.filter((r) => r.id !== id), compareIds: get().compareIds.filter((c) => c !== id) }),
-  setRuns: (runs) => set({ runs: runs.slice(-MAX_RUNS), compareIds: runs.length ? [runs[runs.length - 1].id] : [] }),
+  // Another project's runs: whatever weights Python holds aren't theirs
+  setRuns: (runs) => set({ runs: runs.slice(-MAX_RUNS), compareIds: runs.length ? [runs[runs.length - 1].id] : [], liveRunId: null }),
   toggleCompare: (id) => {
     const ids = get().compareIds;
     set({ compareIds: ids.includes(id) ? ids.filter((c) => c !== id) : [...ids, id] });
@@ -109,4 +116,11 @@ export function runHeadline(run: RunRecord): { label: string; value: string } | 
 
 function formatNumber(v: number): string {
   return v >= 100 ? v.toFixed(0) : v >= 1 ? v.toFixed(3) : v.toPrecision(3);
+}
+
+/** Where a run's trained weights can be loaded from, or null when they're gone */
+export function runWeights(run: RunRecord, liveRunId: string | null): { weights: "trained" } | { weights: "checkpoint"; path: string; epoch: number } | null {
+  if (run.id === liveRunId) return { weights: "trained" };
+  if (run.checkpoint) return { weights: "checkpoint", ...run.checkpoint };
+  return null;
 }
