@@ -25,6 +25,12 @@ interface HistoryState {
 
 const MAX_HISTORY = 50;
 
+// True while undo/redo is loading a snapshot, so that load isn't recorded as a new edit
+let applyingHistory = false;
+export function isApplyingHistory() {
+  return applyingHistory;
+}
+
 export const useHistoryStore = create<HistoryState>((set, get) => ({
   past: [],
   future: [],
@@ -55,7 +61,9 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const prev = past[past.length - 1];
     const newPast = past.slice(0, -1);
 
+    applyingHistory = true;
     useGraphStore.getState().loadGraph(prev.nodes, prev.edges);
+    applyingHistory = false;
     set({
       past: newPast,
       future: [currentSnapshot, ...future],
@@ -77,7 +85,9 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     const next = future[0];
     const newFuture = future.slice(1);
 
+    applyingHistory = true;
     useGraphStore.getState().loadGraph(next.nodes, next.edges);
+    applyingHistory = false;
     set({
       past: [...past, currentSnapshot],
       future: newFuture,

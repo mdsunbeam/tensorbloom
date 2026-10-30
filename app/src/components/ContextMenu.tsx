@@ -78,13 +78,6 @@ export default function ContextMenu({ x, y, nodeId, onClose, onShowSpotlight }: 
           {multiSelected && (
             <>
               <MenuDivider />
-              <MenuItem label="Group Selection" shortcut="Ctrl+G" onClick={() => {
-                const name = prompt("Group name:", "Block") ?? "Block";
-                useHistoryStore.getState().pushSnapshot();
-                useGraphStore.getState().groupSelected(name);
-                onClose();
-              }} />
-              <MenuDivider />
               <MenuItem label="Align Left" onClick={() => doAlign(alignLeft)} />
               <MenuItem label="Align Center" onClick={() => doAlign(alignCenter)} />
               <MenuItem label="Align Top" onClick={() => doAlign(alignTop)} />

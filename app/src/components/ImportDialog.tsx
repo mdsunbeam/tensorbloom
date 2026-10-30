@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEscapeKey } from "../lib/use-escape-key";
 
 interface ImportDialogProps {
   open: boolean;
@@ -28,6 +29,7 @@ export default function ImportDialog({ open, onClose, onImport }: ImportDialogPr
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  useEscapeKey(onClose, { enabled: open, ignoreInTextarea: code.trim() !== "" });
 
   if (!open) return null;
 

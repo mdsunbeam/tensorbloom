@@ -8,6 +8,7 @@ import {
 } from "../lib/registry";
 import type { NodeCategory, ModuleDef } from "../lib/types";
 import { startDrag, endDrag } from "./DragOverlay";
+import { TEMPLATES } from "../lib/templates";
 
 const modulesByCategory = getModulesByCategory();
 const layerCategories = (Object.keys(modulesByCategory) as NodeCategory[]).filter((c) => c !== "data" && c !== "io");
@@ -84,11 +85,15 @@ export default function NodePalette() {
   const dataColor = CATEGORY_COLORS["data"];
   const dataOpen = expanded.has("data") || !!search;
 
-  // Count only layer modules (exclude data)
+  // Count only layer modules (exclude data); while searching, count only matches
   const layerCount = layerCategories.reduce(
-    (acc, k) => acc + (modulesByCategory[k]?.length ?? 0),
+    (acc, k) => acc + filterModules(modulesByCategory[k] ?? []).length,
     0,
   );
+  const noMatches = !!search && layerCount === 0 && filteredDataModules.length === 0;
+  const matchingTemplates = noMatches
+    ? TEMPLATES.filter((t) => t.name.toLowerCase().includes(lowerSearch)).map((t) => t.name)
+    : [];
 
   return (
     <div
@@ -187,15 +192,29 @@ export default function NodePalette() {
           </>
         )}
 
+        {noMatches && (
+          <div className="px-2 pt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            No layers match &ldquo;{search}&rdquo;.
+            {matchingTemplates.length > 0 && (
+              <div className="mt-1.5">
+                {matchingTemplates.join(", ")} {matchingTemplates.length === 1 ? "is a template" : "are templates"}.
+                Open {matchingTemplates.length === 1 ? "it" : "them"} from Insert &gt; From Template.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── Layers section header ── */}
-        <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
-          <h2 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-            Layers
-          </h2>
-          <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
-            {layerCount}
-          </span>
-        </div>
+        {!noMatches && (
+          <div className="px-2 pt-1 pb-1.5 flex items-center justify-between">
+            <h2 className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+              Layers
+            </h2>
+            <span className="text-[10px] tabular-nums" style={{ color: "var(--text-muted)" }}>
+              {layerCount}
+            </span>
+          </div>
+        )}
 
         {/* Layer categories */}
         {layerCategories.map((cat) => {

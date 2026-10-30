@@ -3,6 +3,7 @@ import { sidecarCall } from "../lib/sidecar";
 import { useGraphStore } from "../store/graph-store";
 import { useTrainingStore } from "../store/training-store";
 import { buildSidecarGraph, graphInputShapes } from "../lib/sidecar-graph";
+import { useEscapeKey } from "../lib/use-escape-key";
 
 interface ExportDialogProps {
   open: boolean;
@@ -21,14 +22,17 @@ const WEIGHT_OPTIONS: { value: WeightSource; label: string }[] = [
 
 export default function ExportDialog({ open, onClose }: ExportDialogProps) {
   const lastCheckpoint = useTrainingStore((s) => s.lastCheckpointPath);
+  // The sidecar keeps weights in memory only after a run completes, so "trained" isn't available before that
+  const hasTrainedRun = useTrainingStore((s) => s.status === "finished");
   const [format, setFormat] = useState<ExportFormat>("onnx");
   const [tsMethod, setTsMethod] = useState<TSMethod>("trace");
   const [outputPath, setOutputPath] = useState("model.onnx");
-  const [weights, setWeights] = useState<WeightSource>("trained");
+  const [weights, setWeights] = useState<WeightSource>(hasTrainedRun ? "trained" : "random");
   const [checkpointPath, setCheckpointPath] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  useEscapeKey(onClose, { enabled: open });
 
   if (!open) return null;
 
@@ -162,17 +166,23 @@ export default function ExportDialog({ open, onClose }: ExportDialogProps) {
           <div>
             <label className="block text-[11px] font-medium mb-2" style={{ color: "var(--text-secondary)" }}>Weights</label>
             <div className="flex gap-2">
-              {WEIGHT_OPTIONS.map((w) => (
-                <button key={w.value} onClick={() => setWeights(w.value)}
-                  className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors"
-                  style={{
-                    background: weights === w.value ? "var(--accent-subtle)" : "var(--bg-tertiary)",
-                    color: weights === w.value ? "var(--accent)" : "var(--text-secondary)",
-                    border: `1px solid ${weights === w.value ? "var(--accent)" : "var(--border)"}`,
-                  }}>
-                  {w.label}
-                </button>
-              ))}
+              {WEIGHT_OPTIONS.map((w) => {
+                const unavailable = w.value === "trained" && !hasTrainedRun;
+                return (
+                  <button key={w.value} onClick={() => setWeights(w.value)} disabled={unavailable}
+                    title={unavailable ? "No trained weights yet. Finish a training run first." : undefined}
+                    className="flex-1 py-1.5 text-xs font-medium rounded-lg transition-colors"
+                    style={{
+                      background: weights === w.value ? "var(--accent-subtle)" : "var(--bg-tertiary)",
+                      color: weights === w.value ? "var(--accent)" : "var(--text-secondary)",
+                      border: `1px solid ${weights === w.value ? "var(--accent)" : "var(--border)"}`,
+                      opacity: unavailable ? 0.5 : 1,
+                      cursor: unavailable ? "not-allowed" : undefined,
+                    }}>
+                    {w.label}
+                  </button>
+                );
+              })}
             </div>
             {weights === "checkpoint" && (
               <div className="flex gap-2 mt-2">
@@ -187,6 +197,7 @@ export default function ExportDialog({ open, onClose }: ExportDialogProps) {
             {weights === "random" && (
               <div className="text-[11px] mt-1.5" style={{ color: "var(--text-muted)" }}>
                 Exports the architecture with freshly initialized weights.
+                {!hasTrainedRun && " To export trained weights, finish a training run first or pick a checkpoint file."}
               </div>
             )}
           </div>

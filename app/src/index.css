@@ -105,7 +105,7 @@ html, body, #root {
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -127,10 +127,16 @@ html, body, #root {
 }
 
 /* ------------- Focus ring ------------- */
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 2px var(--accent-subtle);
+}
+
+/* Keyboard focus on buttons, menu items, nodes; same look on every platform's webview */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 /* ------------- Transitions ------------- */
