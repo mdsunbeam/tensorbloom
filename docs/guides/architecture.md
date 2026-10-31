@@ -26,7 +26,7 @@ Technical overview of TensorBloom's internals for contributors and curious users
 
 The frontend handles all UI rendering. Key frameworks:
 - **React Flow** (xyflow) — Node graph rendering, edge routing, viewport controls
-- **Zustand** — State management (graph, history, theme, training stores)
+- **Zustand** — State management (graph, history, document, runs, Python setup, theme, training stores)
 - **Tailwind CSS** — Styling
 
 ### Directory Structure
@@ -34,30 +34,48 @@ The frontend handles all UI rendering. Key frameworks:
 ```
 app/src/
 ├── components/          # React components
+│   ├── ui/              # Shared kit: Button, Dialog, Tabs, Select, Segmented, HelpTip
 │   ├── GraphEditor.tsx  # React Flow canvas, node/edge interaction
 │   ├── PropertyPanel.tsx # Right panel — node properties, data config, training
 │   ├── TrainingPanel.tsx # Training config form (optimizer, scheduler, etc.)
 │   ├── NodePalette.tsx  # Left panel — layer browser
-│   ├── Toolbar.tsx      # Menu bar (File/Edit/Insert/View/Tools)
+│   ├── Toolbar.tsx      # Menus, project name, Train/Stop and run status
+│   ├── ProblemsButton.tsx # Toolbar list of shape problems with fixes
+│   ├── WelcomeCard.tsx  # Empty-canvas starter models
+│   ├── PythonSetupCard.tsx # Background Python/PyTorch setup with progress
+│   ├── TemplatesDialog.tsx # Template cards with layout previews
 │   ├── CodePanel.tsx    # Bottom panel — generated PyTorch code
-│   ├── TrainingCharts.tsx # Training loss/accuracy charts
+│   ├── TrainingCharts.tsx # Live charts, run summary, error panel
+│   ├── RunsPanel.tsx    # Run history: compare curves and settings
+│   ├── TryModelDialog.tsx # Predictions from a trained model
+│   ├── GroupPanel.tsx   # Properties for a layer group
 │   ├── TrainingLogs.tsx # Training log output
 │   └── Toast.tsx        # Notification system
 ├── lib/                 # Core logic
 │   ├── registry.ts      # 70+ PyTorch module definitions
+│   ├── param-help.ts    # Help text for every parameter
 │   ├── shape-inference.ts # Client-side dimension propagation
+│   ├── shape-fixes.ts   # The fix for a shape problem (banner, list, pre-flight)
 │   ├── decompiler.ts    # Graph → PyTorch code generation
 │   ├── training.ts      # Training pipeline (preflight, graph → sidecar)
-│   ├── preflight-check.ts # Validation + auto-fix before training
+│   ├── training-errors.ts # Plain-language hints for training errors
+│   ├── preflight-check.ts # Validation + suggested fixes before training
+│   ├── groups.ts        # Layer groups (canvas-only frames)
 │   ├── templates.ts     # 16 architecture templates
 │   ├── project.ts       # Save/load .tbloom files
+│   ├── document-actions.ts # New, open, save shared by menus and shortcuts
+│   ├── auto-save.ts     # Recovery copy while there are unsaved changes
 │   ├── auto-layout.ts   # Dagre-based graph layout
 │   └── dataset-metadata.ts # Dataset definitions, shape resolution
 ├── nodes/
-│   └── TensorBloomNode.tsx # Custom React Flow node component
+│   ├── TensorBloomNode.tsx # Custom React Flow node component
+│   └── LayerGroupNode.tsx  # Group frame and collapsed card
 └── store/
-    ├── graph-store.ts   # Graph state (nodes, edges, selection)
-    ├── history-store.ts # Undo/redo snapshots
+    ├── graph-store.ts   # Graph state (nodes, edges, groups, selection)
+    ├── history-store.ts # Undo/redo (settled-state snapshots, with tests)
+    ├── document-store.ts # File path and unsaved-changes tracking
+    ├── run-store.ts     # Run history kept with the project
+    ├── python-store.ts  # Python environment status and setup progress
     ├── theme-store.ts   # Dark/light theme
     └── training-store.ts # Training state (status, metrics, config)
 ```
@@ -77,7 +95,7 @@ User action → Zustand store update → React re-render → React Flow update
 The Rust layer is thin — it manages the window and the Python sidecar process:
 
 - `sidecar_manager.rs` — Spawns Python process, pipes stdin/stdout, routes JSON-RPC messages
-- `python_env.rs` — Auto-provisions a Python venv with PyTorch on first launch
+- `python_env.rs` — Provisions a Python venv with PyTorch in the background, streaming `python-setup` progress events
 - `lib.rs` — Tauri command handlers, GPU detection
 
 ## Python Sidecar (`python/`)
@@ -97,6 +115,7 @@ A single-file JSON-RPC server that handles all PyTorch operations:
 | `data.introspect` | Inspect HuggingFace dataset schema |
 | `export.onnx` | Export to ONNX format |
 | `export.torchscript` | Export to TorchScript |
+| `model.predict` | Run a trained model on validation samples or an image file |
 | `system.gpu_info` | Return CUDA device info |
 | `validate` | Check graph for structural errors |
 

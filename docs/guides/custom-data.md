@@ -154,7 +154,7 @@ All data sources support a **Val Split** parameter (default 0.2). This splits yo
 
 ## Tips
 
-- **Shape mismatch?** TensorBloom auto-fixes `in_features` and `in_channels` when you click Start Training
+- **Shape mismatch?** The toolbar lists each problem with a one-click fix, and starting training offers to fix `in_features` and `in_channels` for you
 - **Wrong loss function?** If your target is class labels but you're using MSELoss, the preflight check will warn you
 - **Large datasets?** Use mixed precision training (Advanced > Mixed Precision) to reduce VRAM usage
 - **Reproducibility?** Set a random seed in Advanced > Random Seed
