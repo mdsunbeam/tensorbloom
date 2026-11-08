@@ -29,6 +29,8 @@ The assistant can look at:
 
 And it can change the model when you ask: add, remove and connect layers, change their settings, apply shape fixes, group layers, tidy the layout, and change training settings. Try "add dropout after each Linear layer" or "make fc2 smaller and fix the shapes".
 
+It can also build whole models: open a template, or design an architecture from a description ("a small CNN for CIFAR-10 with batch norm") or from a paper's text. When no built-in layer does the job, it can write a custom layer with its own `forward()`, turn PyTorch code into a graph, and start or stop training.
+
 ## Reviewing its changes
 
 The assistant's changes show on the canvas as a preview while it works: added layers and connections in green, changed layers in amber, and removed ones as faded red outlines. A bar at the bottom of the canvas, and a card above the message box, list the changes and any new shape errors.
@@ -37,6 +39,10 @@ The assistant's changes show on the canvas as a preview while it works: added la
 - **Discard** puts the model and training settings back exactly as they were.
 
 While a preview is showing, the canvas can't be edited and undo is off. The assistant checks every layer type and setting against the catalog, and fixes the shape errors its changes cause before it hands them over. Opening another project or template keeps pending changes as an undo step.
+
+## Code it runs
+
+Custom layers, importing code and training run Python on your computer, with the same access to your files as TensorBloom. So before any of them, the assistant shows a card with exactly what will run (the full code for a custom layer or an import, the settings for a training run) and waits. **Don't run** declines, and the assistant won't retry the same thing. A custom layer you approve is then previewed like any other change.
 
 ## What's sent
 

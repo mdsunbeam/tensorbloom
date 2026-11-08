@@ -3,8 +3,9 @@ import { DEFAULT_MODEL, MODELS, keyStatus, type KeyStatus, type MessageParam } f
 import { runTurn, type TurnOutcome } from "../lib/assistant/agent";
 import { READ_TOOLS } from "../lib/assistant/read-tools";
 import { EDIT_TOOLS } from "../lib/assistant/edit-tools";
+import { CODE_TOOLS } from "../lib/assistant/code-tools";
 import { takeDecision } from "../lib/assistant/change-set";
-import type { AssistantTool } from "../lib/assistant/tool-types";
+import type { AssistantTool, ApprovalRequest } from "../lib/assistant/tool-types";
 
 export interface ToolActivity {
   id: string;
@@ -18,7 +19,8 @@ export type ChatItem =
   | { id: string; kind: "user"; text: string }
   | { id: string; kind: "assistant"; text: string }
   | { id: string; kind: "tools"; tools: ToolActivity[] }
-  | { id: string; kind: "notice"; tone: "info" | "error"; text: string };
+  | { id: string; kind: "notice"; tone: "info" | "error"; text: string }
+  | { id: string; kind: "approval"; request: ApprovalRequest; status: "pending" | "approved" | "declined" };
 
 const MODEL_STORAGE = "tensorbloom.assistant.model";
 
@@ -44,16 +46,26 @@ interface AssistantState {
   send: (text: string) => Promise<void>;
   stop: () => void;
   reset: () => void;
+  /** The user's answer to an approval card */
+  answer: (itemId: string, approved: boolean) => void;
 }
 
 let itemCounter = 0;
 const nextId = () => `item_${++itemCounter}`;
 // Bumped by stop() and reset(), so a turn in flight knows it was abandoned
 let generation = 0;
+// Approval cards waiting for an answer, by item id
+const waiting = new Map<string, (approved: boolean) => void>();
+
+/** Declines every approval still waiting, e.g. when the turn is stopped */
+function declineWaiting() {
+  for (const resolve of waiting.values()) resolve(false);
+  waiting.clear();
+}
 
 /** The tools available to the assistant. Later phases add more. */
 export function assistantTools(): AssistantTool[] {
-  return [...READ_TOOLS, ...EDIT_TOOLS];
+  return [...READ_TOOLS, ...EDIT_TOOLS, ...CODE_TOOLS];
 }
 
 function outcomeNotice(outcome: TurnOutcome): ChatItem | null {
@@ -96,6 +108,13 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     try {
       const turn = runTurn(trimmed, { model: get().model, tools: assistantTools(), transcript }, {
         cancelled: () => gen !== generation,
+        approve: (request) => new Promise<boolean>((resolve) => {
+          if (gen !== generation) { resolve(false); return; }
+          const id = nextId();
+          waiting.set(id, resolve);
+          toolRow = null;
+          set({ items: [...get().items, { id, kind: "approval", request, status: "pending" }] });
+        }),
         onText: (t) => { toolRow = null; push({ id: nextId(), kind: "assistant", text: t }); },
         onTool: (call) => {
           if (gen !== generation) return;
@@ -128,14 +147,24 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     }
   },
 
+  answer: (itemId, approved) => {
+    const resolve = waiting.get(itemId);
+    if (!resolve) return;
+    waiting.delete(itemId);
+    set({ items: get().items.map((i) => (i.id === itemId && i.kind === "approval" ? { ...i, status: approved ? "approved" : "declined" } : i)) });
+    resolve(approved);
+  },
+
   stop: () => {
     if (!get().busy) return;
     generation++;
+    declineWaiting();
     set({ busy: false, items: [...get().items, { id: nextId(), kind: "notice", tone: "info", text: "Stopped." }] });
   },
 
   reset: () => {
     generation++;
+    declineWaiting();
     set({ items: [], transcript: [], busy: false });
   },
 }));

@@ -3,11 +3,28 @@ import type Anthropic from "@anthropic-ai/sdk";
 export type ToolDefinition = Anthropic.Beta.BetaTool;
 export type ToolResultContent = Anthropic.Beta.BetaToolResultBlockParam["content"];
 
-/** A tool the assistant can call. Read tools run right away; others say how they need approval. */
+/** What the user sees before a tool that runs code (or starts training) is allowed to go ahead */
+export interface ApprovalRequest {
+  title: string;
+  /** What will happen, in a sentence or two */
+  summary: string;
+  /** The exact code that would run, shown in full */
+  code?: string;
+  /** What running it means for their computer */
+  warning?: string;
+  approveLabel: string;
+}
+
+/**
+ * A tool the assistant can call. "read" tools only look and run right away. "edit" tools change the
+ * model as a preview the user applies or discards. "confirm" tools run code or start training, so the
+ * user approves each call first.
+ */
 export interface AssistantTool<I = Record<string, unknown>> {
   definition: ToolDefinition;
-  /** "read" tools only look. Later phases add tools that preview changes or ask first. */
   kind: "read" | "edit" | "confirm";
+  /** For "confirm" tools: what to show the user. May throw a ToolError when the input can't work. */
+  confirm?: (input: I) => ApprovalRequest;
   /** Shown in the chat while the tool runs, e.g. "Reading the graph" */
   describe: (input: I) => string;
   run: (input: I) => Promise<unknown>;

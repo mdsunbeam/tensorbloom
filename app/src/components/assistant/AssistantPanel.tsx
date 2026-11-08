@@ -133,6 +133,7 @@ function Settings({ onDone }: { onDone: () => void }) {
         <p>
           Changes the assistant makes are previewed on the canvas until you apply or discard them, and applying is one undo step.
           Each message sends your question with the model's layers and settings, shape problems, training settings and a summary of recent runs.
+          Before the assistant runs code (a custom layer, importing code) or starts training, it shows you exactly what will run and waits for you to approve it.
           When the assistant asks for more, the app sends the generated code, run curves, predicted classes and dataset statistics.
           Dataset contents such as images and text stay on this computer.
         </p>
@@ -145,6 +146,7 @@ function Chat() {
   const items = useAssistantStore((s) => s.items);
   const busy = useAssistantStore((s) => s.busy);
   const send = useAssistantStore((s) => s.send);
+  const waitingForYou = useAssistantStore((s) => s.items.some((i) => i.kind === "approval" && i.status === "pending"));
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -170,7 +172,7 @@ function Chat() {
             </div>
           </div>
         ) : items.map((item) => <Item key={item.id} item={item} />)}
-        {busy && <div className="text-[11px] text-fg-muted animate-pulse">Thinking…</div>}
+        {busy && !waitingForYou && <div className="text-[11px] text-fg-muted animate-pulse">Thinking…</div>}
       </div>
       <ChangeSetReview variant="panel" />
       <Composer />
@@ -201,6 +203,8 @@ function Item({ item }: { item: ChatItem }) {
           ))}
         </ul>
       );
+    case "approval":
+      return <ApprovalCard item={item} />;
     case "notice":
       return (
         <div role={item.tone === "error" ? "alert" : undefined}
@@ -209,6 +213,32 @@ function Item({ item }: { item: ChatItem }) {
         </div>
       );
   }
+}
+
+function ApprovalCard({ item }: { item: Extract<ChatItem, { kind: "approval" }> }) {
+  const answer = useAssistantStore((s) => s.answer);
+  const { request, status } = item;
+  return (
+    <div role="group" aria-label={request.title}
+      className={`rounded-lg border text-[11px] leading-relaxed ${status === "pending" ? "border-warning bg-warning-subtle" : "border-line"}`}>
+      <div className="px-3 pt-2.5 font-semibold text-fg">{request.title}</div>
+      <p className="px-3 pt-1 text-fg-secondary">{request.summary}</p>
+      {request.code && (
+        <pre className="mx-3 mt-2 p-2 max-h-64 overflow-auto rounded-md bg-surface-sunken border border-line font-mono text-[10.5px] leading-snug text-fg whitespace-pre">{request.code}</pre>
+      )}
+      {request.warning && <p className="px-3 pt-2 text-warning">{request.warning}</p>}
+      <div className="flex items-center justify-end gap-2 px-3 py-2">
+        {status === "pending" ? (
+          <>
+            <Button size="sm" onClick={() => answer(item.id, false)}>Don't run</Button>
+            <Button size="sm" variant="primary" onClick={() => answer(item.id, true)}>{request.approveLabel}</Button>
+          </>
+        ) : (
+          <span className="text-fg-muted">{status === "approved" ? "Approved" : "Not approved"}</span>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function Composer() {

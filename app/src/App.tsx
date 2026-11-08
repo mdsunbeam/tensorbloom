@@ -42,11 +42,10 @@ import { TEMPLATES, templateGraph } from "./lib/templates";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
 import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
-import { MODULE_REGISTRY } from "./lib/registry";
+import { compiledToGraph, type CompiledGraph } from "./lib/compiled-graph";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
-import type { NodeCategory } from "./lib/types";
 import Tabs from "./components/ui/Tabs";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
 type BottomTab = "code" | "charts" | "runs" | "logs";
@@ -245,19 +244,8 @@ export default function App() {
   const handleImport = useCallback(async (code: string) => {
     if (!(await confirmDiscardChanges("importing this code"))) return false;
     try {
-      const result = await sidecarCall<{
-        nodes: Array<{ id: string; type: string; moduleType?: string; label: string; position: { x: number; y: number }; params: Record<string, unknown> }>;
-        edges: Array<{ id: string; source: string; target: string; sourceHandle: string; targetHandle: string }>;
-      }>("compile", { code });
-
-      const nodes: Node<NodeData>[] = result.nodes.map((n) => {
-        const mt = n.moduleType ?? "Identity";
-        const def = MODULE_REGISTRY[mt];
-        return { id: n.id, type: "tensorLabNode", position: n.position,
-          data: { moduleType: mt, label: n.label, category: (def?.category ?? "linear") as NodeCategory, params: n.params } };
-      });
-      const edges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
-      replaceGraph(autoLayout(nodes, edges), edges, "Imported Model");
+      const { nodes, edges } = compiledToGraph(await sidecarCall<CompiledGraph>("compile", { code }));
+      replaceGraph(nodes, edges, "Imported Model");
       useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
       return true;
