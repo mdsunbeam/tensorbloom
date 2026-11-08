@@ -2,6 +2,8 @@
  * The built-in lessons. Each one is plain data in the format described in types.ts and
  * docs/guides/lessons.md. Keep thresholds relative ("beat your first run") where training
  * numbers vary between machines, and absolute only where any reasonable run clears them.
+ * Lessons use a constant learning rate (no scheduler) so runs are easy to compare, and must
+ * train in a few minutes on a laptop CPU.
  */
 
 import type { Lesson, LessonCheck } from "./types";
@@ -24,7 +26,7 @@ export const LESSONS: Lesson[] = [
     level: "beginner",
     minutes: 5,
     concepts: ["training", "epoch", "loss", "validation accuracy"],
-    start: { template: "Simple MLP", training: { epochs: 3 } },
+    start: { template: "Simple MLP", training: { scheduler: "None", epochs: 3 } },
     steps: [
       {
         id: "train",
@@ -69,7 +71,7 @@ export const LESSONS: Lesson[] = [
     concepts: ["tensor shapes", "in_features and out_features", "shape errors"],
     start: {
       template: "Simple MLP",
-      training: { epochs: 2 },
+      training: { scheduler: "None", epochs: 2 },
       edits: [{ op: "set_param", target: { label: "fc2" }, param: "in_features", value: 500 }],
     },
     steps: [
@@ -129,7 +131,7 @@ export const LESSONS: Lesson[] = [
     level: "beginner",
     minutes: 8,
     concepts: ["learning rate", "optimizer", "divergence"],
-    start: { template: "Simple MLP", training: { epochs: 2 } },
+    start: { template: "Simple MLP", training: { scheduler: "None", epochs: 2 } },
     steps: [
       {
         id: "too-big",
@@ -170,14 +172,14 @@ export const LESSONS: Lesson[] = [
     id: "overfitting",
     title: "Stop a model from overfitting",
     summary: "Watch a model memorize its training data, then use dropout or weight decay to make it generalize.",
-    goal: "Get a lower validation loss than the model starts with.",
+    goal: "Close the gap between how the model does on its training data and on data it hasn't seen.",
     level: "intermediate",
     minutes: 12,
     concepts: ["overfitting", "generalization", "dropout", "weight decay"],
     start: {
       template: "Simple MLP",
       dataset: "FashionMNIST",
-      training: { epochs: 15 },
+      training: { scheduler: "None", epochs: 15 },
       edits: [
         { op: "remove_layer", target: { moduleType: "Dropout" } },
         { op: "set_param", target: { label: "fc1" }, param: "out_features", value: 1024 },
@@ -190,22 +192,22 @@ export const LESSONS: Lesson[] = [
         instruction: "This model classifies photos of clothing. Train it, then compare the train and validation curves in Charts.",
         check: { kind: "run", label: "A training run has finished" },
         hints: ["Press Train. It takes 15 epochs, so give it a minute or two."],
-        explain: "Training loss keeps falling, but validation loss stops improving after a few epochs and then rises. The model is memorizing the training images instead of learning what makes a shirt a shirt. That's overfitting.",
+        explain: "Training loss keeps falling all the way, but validation loss stops improving after about 10 epochs and starts to climb, ending at about twice the training loss. The model is memorizing the training images instead of learning what makes a shirt a shirt. That's overfitting.",
       },
       {
         id: "regularize",
-        instruction: "Change the model or its settings so that it overfits less, and train again. Beat the first run's best validation loss.",
+        instruction: "Change the model or its settings so that it overfits less, and train again. Get a smaller gap between training and validation loss than the first run.",
         check: {
           kind: "run",
-          where: [{ metric: "bestValLoss", op: "lt", than: "first" }],
-          label: "Lower validation loss than the first run",
+          where: [{ metric: "trainValLossGap", op: "lt", than: "first" }],
+          label: "A smaller train/validation gap than the first run",
         },
         hints: [
           "Two common fixes: randomly switch off some neurons during training, or penalize large weights.",
           "Add a Dropout layer after relu1 and after relu2, or set Weight decay in the Training panel.",
           "Add a Dropout with p = 0.3 right after relu1 and another after relu2, then train.",
         ],
-        explain: "Dropout makes the network work without any one neuron, so it can't lean on a few memorized details. Weight decay pulls the weights toward zero, which keeps the model simpler. Either way the model fits the training data a little worse and new data better.",
+        explain: "Dropout makes the network work without any one neuron, so it can't lean on a few memorized details. Weight decay pulls the weights toward zero, which keeps the model simpler. Either way the model fits its training data less tightly, and validation loss stays down instead of climbing.",
         solution: [
           { op: "insert_after", target: { label: "relu1" }, module: "Dropout", label: "drop1", params: { p: 0.3 } },
           { op: "insert_after", target: { label: "relu2" }, module: "Dropout", label: "drop2", params: { p: 0.3 } },
@@ -213,10 +215,10 @@ export const LESSONS: Lesson[] = [
       },
       {
         id: "compare",
-        instruction: "Open the Runs tab and compare the two runs. Look at the gap between training and validation accuracy in each.",
+        instruction: "Open the Runs tab and compare the two runs' validation loss curves, epoch by epoch.",
         check: { kind: "manual", button: "I've compared them" },
         hints: ["The Runs tab is next to Charts at the bottom. Both runs are picked for comparison already."],
-        explain: "The regularized run has a smaller gap between training and validation accuracy. A small gap with good validation numbers is what you want: it means the model will do about as well on data it has never seen.",
+        explain: "The first run's validation loss climbs in the last epochs while the regularized run's holds steady. Validation accuracy ends up about the same here, and that's common: regularization's main job is to make the numbers you measure on held-out data trustworthy, so the model does about as well on data it has never seen.",
       },
     ],
   },
@@ -232,7 +234,7 @@ export const LESSONS: Lesson[] = [
     concepts: ["batch normalization", "convolution", "comparing runs"],
     start: {
       template: "LeNet-5",
-      training: { epochs: 3 },
+      training: { scheduler: "None", epochs: 3 },
       edits: [{ op: "replace_layer", target: { moduleType: "Tanh" }, module: "Sigmoid" }],
     },
     steps: [
@@ -300,7 +302,7 @@ export const LESSONS: Lesson[] = [
     start: {
       template: "Simple MLP",
       dataset: "CIFAR10",
-      training: { epochs: 5 },
+      training: { scheduler: "None", epochs: 5 },
       edits: [{ op: "set_param", target: { label: "fc1" }, param: "in_features", value: 3072 }],
     },
     steps: [
@@ -362,7 +364,7 @@ export const LESSONS: Lesson[] = [
     concepts: ["activation functions", "vanishing gradients", "depth"],
     start: {
       template: "Simple MLP",
-      training: { epochs: 3, "optimizer.type": "SGD", "optimizer.lr": 0.05, "optimizer.momentum": 0 },
+      training: { scheduler: "None", epochs: 3, "optimizer.type": "SGD", "optimizer.lr": 0.05, "optimizer.momentum": 0 },
       edits: [
         { op: "remove_layer", target: { moduleType: "Dropout" } },
         { op: "insert_after", target: { label: "relu2" }, module: "Linear", label: "fc3a", params: { in_features: 256, out_features: 256 } },
@@ -417,78 +419,6 @@ export const LESSONS: Lesson[] = [
     ],
   },
 
-  // ───────────────────────────────────────────────────────────────────────────
-  {
-    id: "shrink-gpt",
-    title: "Shrink nanoGPT and see what it costs",
-    summary: "Cut a small language model down to one block and compare how well it predicts text.",
-    goal: "Find out what depth buys a language model.",
-    level: "intermediate",
-    minutes: 15,
-    concepts: ["transformers", "model size", "language modeling", "validation loss"],
-    start: {
-      template: "nanoGPT",
-      training: { epochs: 2 },
-      edits: [
-        { op: "remove_layer", target: { label: "block_5" } },
-        { op: "remove_layer", target: { label: "block_6" } },
-        { op: "set_param", target: { label: "token_embed" }, param: "embedding_dim", value: 128 },
-        { op: "set_param", target: { moduleType: "TransformerDecoderLayer" }, param: "d_model", value: 128 },
-        { op: "set_param", target: { moduleType: "TransformerDecoderLayer" }, param: "nhead", value: 4 },
-        { op: "set_param", target: { moduleType: "TransformerDecoderLayer" }, param: "dim_feedforward", value: 512 },
-        { op: "set_param", target: { label: "final_ln" }, param: "normalized_shape", value: "[128]" },
-        { op: "set_param", target: { label: "lm_head" }, param: "in_features", value: 128 },
-      ],
-    },
-    steps: [
-      {
-        id: "baseline",
-        instruction: "This is a small GPT with 4 transformer blocks. It learns to predict the next character of Shakespeare. Train it.",
-        check: { kind: "run", label: "A training run has finished" },
-        hints: ["Press Train. Language models are slower than the image ones; this may take a few minutes on a CPU."],
-        explain: "The loss is cross-entropy over 65 possible characters. Guessing uniformly gives about 4.17; anything well below that means the model has learned which characters tend to follow which.",
-      },
-      {
-        id: "shrink",
-        instruction: "Remove transformer blocks until only one is left, keeping the model connected.",
-        check: {
-          kind: "all",
-          checks: [
-            { kind: "layer_count", select: { moduleType: "TransformerDecoderLayer" }, min: 1, max: 1, label: "One transformer block" },
-            valid,
-          ],
-        },
-        hints: [
-          "Delete block_2, block_3 and block_4.",
-          "After deleting, connect block_1 straight to final_ln.",
-        ],
-        explain: "Each block lets every character look at the ones before it and mix in what it finds. Fewer blocks means fewer rounds of that.",
-        solution: [
-          { op: "remove_layer", target: { label: "block_2" } },
-          { op: "remove_layer", target: { label: "block_3" } },
-          { op: "remove_layer", target: { label: "block_4" } },
-        ],
-      },
-      {
-        id: "train-small",
-        instruction: "Train the one-block model with the same settings.",
-        check: {
-          kind: "run",
-          where: [{ graph: { kind: "layer_count", select: { moduleType: "TransformerDecoderLayer" }, max: 1 } }],
-          label: "The one-block model has trained",
-        },
-        hints: ["Press Train."],
-        explain: "Compare the two runs in the Runs tab. The one-block model trains faster, but its validation loss ends higher: it predicts the next character less well.",
-      },
-      {
-        id: "reflect",
-        instruction: "In the Runs tab, compare the parameter counts and validation losses. Was the extra depth worth it?",
-        check: { kind: "manual", button: "I've compared them" },
-        hints: ["The Runs tab shows both runs' settings and results side by side."],
-        explain: "Bigger models predict better, but each step up costs more compute for a smaller gain. Finding the right size for the data and the budget is a big part of designing a model. Real GPTs are this same block, repeated dozens of times, with a much wider d_model.",
-      },
-    ],
-  },
 ];
 
 export function findLesson(id: string): Lesson | undefined {

@@ -19,6 +19,7 @@ import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
 import LessonPanel from "./components/LessonPanel";
+import { useLessonStore } from "./store/lesson-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -241,6 +242,7 @@ export default function App() {
           data: { moduleType: mt, label: n.label, category: (def?.category ?? "linear") as NodeCategory, params: n.params } };
       });
       const edges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
+      useLessonStore.getState().exit();
       replaceGraph(autoLayout(nodes, edges), edges, "Imported Model");
       useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
@@ -260,6 +262,7 @@ export default function App() {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
+    useLessonStore.getState().exit();
     const { nodes, edges } = templateGraph(tpl);
     replaceGraph(nodes, edges, tpl.name);
     if (tpl.trainingDefaults) {

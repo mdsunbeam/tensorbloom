@@ -26,12 +26,14 @@ export function selectorText(select: LayerSelector): string {
 
 /** Reads a setting by its dotted path, e.g. "optimizer.lr" */
 export function getTrainingField(config: TrainingConfig, field: TrainingField): unknown {
+  if (field === "scheduler") return config.scheduler?.type ?? "None";
   let v: unknown = config;
   for (const key of field.split(".")) v = (v as Record<string, unknown> | undefined)?.[key];
   return v;
 }
 
 function setTrainingField(config: TrainingConfig, field: TrainingField, value: unknown): TrainingConfig {
+  if (field === "scheduler") return { ...config, scheduler: value === "None" ? null : { type: String(value), params: {} } };
   const [head, tail] = field.split(".");
   if (!tail) return { ...config, [head]: value };
   const inner = (config as unknown as Record<string, Record<string, unknown>>)[head] ?? {};

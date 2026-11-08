@@ -11,7 +11,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - **See your architecture** — No more debugging invisible dimension mismatches in code. The graph shows every layer, every connection, and every tensor shape.
 - **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection.
 - **See what changed** — Every run is kept, so you can compare runs side by side and try a trained model on samples it never saw.
-- **Learn by doing** — 8 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
+- **Learn by doing** — 7 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
 - **Real PyTorch underneath** — Every graph generates real `nn.Module` code. Export your model and use it anywhere.
 
 ## Features

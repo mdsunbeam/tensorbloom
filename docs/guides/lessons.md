@@ -15,9 +15,8 @@ While a lesson is open, a panel at the top left of the canvas shows the goal, th
 | 5 | Add BatchNorm and compare runs | LeNet-5 with sigmoid activations | Batch normalization, comparing runs |
 | 6 | Why does a CNN beat an MLP? | Simple MLP on CIFAR-10 | Convolution, pooling, spatial structure |
 | 7 | Why ReLU? Train a deep network | Six-layer sigmoid MLP, plain SGD | Activation functions, vanishing gradients |
-| 8 | Shrink nanoGPT and see what it costs | A 4-block nanoGPT | Transformers, model size, validation loss |
 
-Every lesson trains in a few minutes or less on a laptop CPU. Each one's claims (the sigmoid network stays near 10%, BatchNorm fixes it, and so on) were checked against real training runs.
+Every lesson trains in a few minutes on a laptop CPU, with a constant learning rate so runs are easy to compare. Each one's claims (the sigmoid network stays near 10%, BatchNorm fixes it, and so on) were checked against real training runs.
 
 ## The lesson format
 
@@ -70,7 +69,7 @@ Edits build a lesson's starting graph, and describe a step's solution.
 | `remove_layer` | Removes every matching layer and connects its input to whatever it fed |
 | `replace_layer` | Swaps the module of every matching layer, keeping its connections |
 | `insert_after` | Adds a layer right after the one matching layer, taking over everything it fed |
-| `set_training` | Sets a training setting, such as `optimizer.lr` or `epochs` |
+| `set_training` | Sets a training setting, such as `optimizer.lr`, `epochs`, or `scheduler` (`"None"` for a constant learning rate) |
 
 ### Checks
 

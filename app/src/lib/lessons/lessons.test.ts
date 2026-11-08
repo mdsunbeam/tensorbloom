@@ -19,7 +19,7 @@ function fakeRun(graph: LessonGraph, config: TrainingConfig, n: number): RunReco
     status: "finished", config, epochs: [], model: { params: 0, layers: graph.nodes.length, key: "" }, graph,
     results: {
       startedAt: "", completedAt: "", totalEpochs: config.epochs, durationMs: 1000,
-      finalTrainLoss: loss - 0.1, finalValLoss: loss, bestValLoss: loss, finalTrainAcc: acc + 0.01, finalValAcc: acc, bestValAcc: acc,
+      finalTrainLoss: loss - 0.1 + 0.01 * n, finalValLoss: loss, bestValLoss: loss, finalTrainAcc: acc + 0.01, finalValAcc: acc, bestValAcc: acc,
     },
   };
 }

@@ -24,7 +24,9 @@ export type TrainingField =
   | "epochs"
   | "batchSize"
   | "loss"
-  | "dataset.type";
+  | "dataset.type"
+  /** The scheduler's type, or "None" for a constant learning rate */
+  | "scheduler";
 
 /** A change to the graph or the training settings. Lessons use these to build the starting graph, and to describe a solution. */
 export type LessonEdit =
