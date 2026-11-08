@@ -97,7 +97,7 @@ class Model(nn.Module):
 - Each layer is a shaded block sized by its output tensor: channels set its depth along the flow, height and width set its face. Sizes are on a log scale so a 512-channel layer doesn't swallow the figure.
 - BatchNorm, activations and pooling fold onto the layer before them as colored bands (`Conv 3×3` with `+ BN · ReLU` underneath), the way most papers draw them. Dropout is named in the caption.
 - Identical layers in a row become one stacked block, such as `Encoder ×12`.
-- Skip connections arc over the blocks they skip. Side branches, extra inputs and extra heads run in lanes below the main path.
+- Skip connections arc over the blocks they skip. Side branches, extra inputs and extra heads stand beside the main path at the same level in the Isometric view, and in lanes below it in the 3D and Flat views.
 - Flatten and other reshapes, loss layers and the dataset's labels are left out. A collapsed group is drawn as one block named after the group.
 
 Options:

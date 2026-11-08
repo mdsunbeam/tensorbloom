@@ -514,6 +514,7 @@ interface Placed {
   x0: number; // world x where the block starts
   x1: number; // world x where it ends
   y: number; // world y of the lane's axis
+  z: number; // world z of the lane's axis
   hull: Pt[];
   top: number; // highest world y of the block
   bottom: number;
@@ -606,22 +607,37 @@ export function buildDiagramScene(
   // Lane heights and their axes
   const laneCount = Math.max(...lane.values()) + 1;
   const laneHalf = Array.from({ length: laneCount }, () => 10);
+  const laneHalfW = Array.from({ length: laneCount }, () => 10);
   const laneCaption = Array.from({ length: laneCount }, () => 0);
   for (const [id, b] of blocks) {
     const l = lane.get(id)!;
     laneHalf[l] = Math.max(laneHalf[l], maxH(b) / 2);
+    laneHalfW[l] = Math.max(laneHalfW[l], b.op ? OP_R : Math.max(...b.parts.map((p) => p.size.w)) / 2);
     laneCaption[l] = Math.max(laneCaption[l], captionLines(b, opts).length * 13);
   }
+  // In the isometric view branches stand beside the main path, on the same level and further back.
+  // In the front-on views a lane further back would hide behind the main path, so lanes stack below it.
   const laneY: number[] = [0];
-  for (let l = 1; l < laneCount; l++) laneY[l] = laneY[l - 1] - laneHalf[l - 1] - laneCaption[l - 1] - laneHalf[l] - 34;
+  const laneZ: number[] = [0];
+  const besideMain = opts.projection === "isometric";
+  for (let l = 1; l < laneCount; l++) {
+    if (besideMain) {
+      laneY[l] = 0;
+      // Far enough back to clear the lane in front; the branch's captions go above it
+      laneZ[l] = laneZ[l - 1] + laneHalfW[l - 1] + laneHalfW[l] + 50;
+    } else {
+      laneZ[l] = 0;
+      laneY[l] = laneY[l - 1] - laneHalf[l - 1] - laneCaption[l - 1] - laneHalf[l] - 34;
+    }
+  }
 
   // Columns: each rank starts where the previous one's blocks and captions end on screen
-  const blockCorners = (b: Block, x0: number, y: number): V3[] => {
+  const blockCorners = (b: Block, x0: number, y: number, z = 0): V3[] => {
     const pts: V3[] = [];
     let x = x0;
     for (const p of b.op ? [{ size: { dx: OP_R * 2, h: OP_R * 2, w: 0 }, gap: 0 }] : b.parts) {
       x += p.gap ?? 0;
-      for (const xx of [x, x + p.size.dx]) for (const yy of [y - p.size.h / 2, y + p.size.h / 2]) for (const zz of [-p.size.w / 2, p.size.w / 2]) pts.push([xx, yy, zz]);
+      for (const xx of [x, x + p.size.dx]) for (const yy of [y - p.size.h / 2, y + p.size.h / 2]) for (const zz of [z - p.size.w / 2, z + p.size.w / 2]) pts.push([xx, yy, zz]);
       x += p.size.dx;
     }
     return pts;
@@ -641,7 +657,7 @@ export function buildDiagramScene(
       const b = blocks.get(id)!;
       const dx = totalDx(b);
       maxDx = Math.max(maxDx, dx);
-      const xs = blockCorners(b, -dx / 2, laneY[lane.get(id)!]).map((c) => proj.project(c)[0]);
+      const xs = blockCorners(b, -dx / 2, 0).map((c) => proj.project(c)[0]);
       const cap = Math.max(0, ...captionLines(b, opts).map((c) => textWidth(c.text, c.size, c.bold)));
       lo = Math.min(lo, ...xs, -cap / 2);
       hi = Math.max(hi, ...xs, cap / 2);
@@ -660,10 +676,10 @@ export function buildDiagramScene(
     const r = rank.get(id)!, l = lane.get(id)!;
     const dx = totalDx(b);
     const x0 = colStart[r] - dx / 2;
-    const y = laneY[l];
-    const hull = b.op ? circlePoly(proj.project([x0 + OP_R, y, 0]), OP_R) : convexHull(blockCorners(b, x0, y).map(proj.project));
+    const y = laneY[l], z = laneZ[l];
+    const hull = b.op ? circlePoly(proj.project([x0 + OP_R, y, z]), OP_R) : convexHull(blockCorners(b, x0, y, z).map(proj.project));
     const maxW = b.op ? 0 : Math.max(...b.parts.map((p) => p.size.w));
-    placed.set(id, { block: b, rank: r, lane: l, x0, x1: x0 + dx, y, hull, top: y + maxH(b) / 2, bottom: y - maxH(b) / 2, rise: (maxW / 2) * zRise });
+    placed.set(id, { block: b, rank: r, lane: l, x0, x1: x0 + dx, y, z, hull, top: y + maxH(b) / 2, bottom: y - maxH(b) / 2, rise: (maxW / 2) * zRise });
   }
 
   // Blocks, far ones first
@@ -674,9 +690,9 @@ export function buildDiagramScene(
   for (const p of placed.values()) {
     const b = p.block;
     if (b.op) {
-      const c = proj.project([p.x0 + OP_R, p.y, 0]);
+      const c = proj.project([p.x0 + OP_R, p.y, p.z]);
       drawables.push({
-        depth: dot([p.x0 + OP_R, p.y, 0], proj.view),
+        depth: dot([p.x0 + OP_R, p.y, p.z], proj.view),
         draw: () => {
           prims.push({ kind: "poly", pts: circlePoly(c, OP_R, 32), fill: "#FFFFFF", stroke: EDGE_INK, width: 1.1 });
           const s = 4.5;
@@ -698,7 +714,7 @@ export function buildDiagramScene(
     for (const part of b.parts) {
       x += part.gap ?? 0;
       const { dx, h, w } = part.size;
-      const xa = x, xb = x + dx, ya = p.y - h / 2, yb = p.y + h / 2, za = -w / 2, zb = w / 2;
+      const xa = x, xb = x + dx, ya = p.y - h / 2, yb = p.y + h / 2, za = p.z - w / 2, zb = p.z + w / 2;
       const base = palette[part.category] ?? palette.reshape;
       const faces: { n: V3; pts: V3[]; fill: string }[] = [
         { n: [0, 0, -1], pts: [[xa, ya, za], [xb, ya, za], [xb, yb, za], [xa, yb, za]], fill: base },
@@ -708,7 +724,7 @@ export function buildDiagramScene(
         { n: [1, 0, 0], pts: [[xb, ya, za], [xb, yb, za], [xb, yb, zb], [xb, ya, zb]], fill: shade(base, -0.14) },
         { n: [-1, 0, 0], pts: [[xa, ya, za], [xa, yb, za], [xa, yb, zb], [xa, ya, zb]], fill: shade(base, -0.14) },
       ];
-      const center: V3 = [(xa + xb) / 2, p.y, 0];
+      const center: V3 = [(xa + xb) / 2, p.y, p.z];
       drawables.push({
         depth: dot(center, proj.view),
         draw: () => {
@@ -734,25 +750,25 @@ export function buildDiagramScene(
     let world: V3[];
     const between = [...placed.values()].filter((p) => p.lane === a.lane && p.rank > a.rank && p.rank < b.rank);
     if (a.lane === b.lane && !between.length) {
-      world = [[a.x1, a.y, 0], [b.x0, b.y, 0]];
+      world = [[a.x1, a.y, a.z], [b.x0, b.y, b.z]];
     } else if (a.lane === b.lane && a.lane === 0) {
       const level = arcLevels.filter((s) => s.r0 < b.rank && s.r1 > a.rank).reduce((m, s) => Math.max(m, s.level + 1), 0);
       arcLevels.push({ r0: a.rank, r1: b.rank, level });
       const yArc = Math.max(a.top + a.rise, b.top + b.rise, ...between.map((p) => p.top + p.rise)) + 18 + level * 14;
       const ax = (a.x0 + a.x1) / 2, bx = (b.x0 + b.x1) / 2;
-      world = [[ax, a.top, 0], [ax, yArc, 0], [bx, yArc, 0], [bx, b.top, 0]];
+      world = [[ax, a.top, a.z], [ax, yArc, a.z], [bx, yArc, b.z], [bx, b.top, b.z]];
     } else if (a.lane === b.lane) {
       const yArc = Math.min(a.bottom, b.bottom, ...between.map((p) => p.bottom)) - 40;
       const ax = (a.x0 + a.x1) / 2, bx = (b.x0 + b.x1) / 2;
-      world = [[ax, a.bottom, 0], [ax, yArc, 0], [bx, yArc, 0], [bx, b.bottom, 0]];
+      world = [[ax, a.bottom, a.z], [ax, yArc, a.z], [bx, yArc, b.z], [bx, b.bottom, b.z]];
     } else if (a.lane < b.lane) {
       // Down into a side branch: leave just after the source, drop between columns, run along the branch's lane
       const xm = midGap(a, "after");
-      world = [[a.x1, a.y, 0], [xm, a.y, 0], [xm, b.y, 0], [b.x0, b.y, 0]];
+      world = [[a.x1, a.y, a.z], [xm, a.y, a.z], [xm, b.y, b.z], [b.x0, b.y, b.z]];
     } else {
       // Back up from a side branch: run along its lane, then rise just before the target
       const xm = midGap(b, "before");
-      world = [[a.x1, a.y, 0], [xm, a.y, 0], [xm, b.y, 0], [b.x0, b.y, 0]];
+      world = [[a.x1, a.y, a.z], [xm, a.y, a.z], [xm, b.y, b.z], [b.x0, b.y, b.z]];
     }
     let pts = world.map(proj.project);
     pts = trimStart(pts, a.hull);
@@ -760,13 +776,17 @@ export function buildDiagramScene(
     pushArrow(prims, pts);
   }
 
-  // Captions under each block
+  // Captions under each block. A branch standing behind the main path gets its captions above it,
+  // so they don't land on the blocks in front.
   for (const p of placed.values()) {
     const lines = captionLines(p.block, opts);
     if (!lines.length) continue;
-    const anchor = proj.project([(p.x0 + p.x1) / 2, p.y, 0]);
-    const lowest = Math.max(...p.hull.map((h) => h[1]));
-    let y = lowest + 14;
+    const anchor = proj.project([(p.x0 + p.x1) / 2, p.y, p.z]);
+    const above = besideMain && p.lane > 0;
+    const height = lines.reduce((a, l) => a + l.size + 3.5, 0);
+    let y = above
+      ? Math.min(...p.hull.map((h) => h[1])) - 8 - height + lines[0].size
+      : Math.max(...p.hull.map((h) => h[1])) + 14;
     for (const line of lines) {
       prims.push({ kind: "text", x: anchor[0], y, text: line.text, size: line.size, bold: line.bold, color: line.color, anchor: "middle" });
       y += line.size + 3.5;
