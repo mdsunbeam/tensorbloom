@@ -1044,6 +1044,20 @@ function DataNodeEditor({ node }: { node: ReturnType<typeof useGraphStore.getSta
                 onChange={(v) => updateNodeParam(node.id, "val_split", v)}
                 className={inputCls} style={inputStyle} />
             </div>
+            <div className="mt-3">
+              <div className="flex items-center gap-1 mb-1.5">
+                <label htmlFor={`${node.id}-max-samples`} className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>Training samples</label>
+                <HelpTip id={`${node.id}-max-samples-help`} text={paramHelp("Data", "max_samples") ?? ""} label="About Training samples" />
+              </div>
+              <NumberField id={`${node.id}-max-samples`} value={Number(p.max_samples ?? 0)} integer min={0}
+                onChange={(v) => updateNodeParam(node.id, "max_samples", v)}
+                className={inputCls} style={inputStyle} />
+              <p className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>
+                {Number(p.max_samples ?? 0) > 0
+                  ? `A quick run on ${Number(p.max_samples).toLocaleString()} samples. Set to 0 to train on all of them.`
+                  : "Trains on the whole dataset."}
+              </p>
+            </div>
           </div>
         )}
       </div>

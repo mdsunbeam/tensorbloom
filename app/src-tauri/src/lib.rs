@@ -17,27 +17,42 @@ async fn check_python_env(app: tauri::AppHandle) -> Result<python_env::PythonEnv
 
 static SETUP_RUNNING: AtomicBool = AtomicBool::new(false);
 
-/// Set up the Python venv and install PyTorch. Progress arrives as
-/// "python-setup" events while it runs.
-#[tauri::command]
-async fn setup_python_env(app: tauri::AppHandle) -> Result<python_env::PythonEnvStatus, String> {
+/// Runs an install off the async runtime (it takes minutes), one at a time, sending its
+/// progress as "python-setup" events.
+async fn run_install(
+    app: tauri::AppHandle,
+    install: fn(&std::path::Path, &(dyn Fn(python_env::SetupUpdate) + Sync)) -> Result<python_env::PythonEnvStatus, String>,
+) -> Result<python_env::PythonEnvStatus, String> {
     let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&app_data).map_err(|e| e.to_string())?;
     if SETUP_RUNNING.swap(true, Ordering::SeqCst) {
         return Err("Python setup is already running".to_string());
     }
-    // Installing takes minutes; keep it off the async runtime
     let result = tauri::async_runtime::spawn_blocking(move || {
         let report = |update: python_env::SetupUpdate| {
             let _ = app.emit("python-setup", update);
         };
-        python_env::setup_env(&app_data, &report)
+        install(&app_data, &report)
     })
     .await
     .map_err(|e| e.to_string())
     .and_then(|r| r);
     SETUP_RUNNING.store(false, Ordering::SeqCst);
     result
+}
+
+/// Download Python and install PyTorch (CPU build). Progress arrives as
+/// "python-setup" events while it runs.
+#[tauri::command]
+async fn setup_python_env(app: tauri::AppHandle) -> Result<python_env::PythonEnvStatus, String> {
+    run_install(app, python_env::setup_env).await
+}
+
+/// Replace the CPU build of PyTorch with the CUDA build. Progress arrives as
+/// "python-setup" events while it runs.
+#[tauri::command]
+async fn install_gpu_support(app: tauri::AppHandle) -> Result<python_env::PythonEnvStatus, String> {
+    run_install(app, python_env::install_cuda_torch).await
 }
 
 /// Get the venv Python path.
@@ -89,6 +104,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_python_env,
             setup_python_env,
+            install_gpu_support,
             get_python_path,
             detect_gpu,
             sidecar_manager::start_sidecar,

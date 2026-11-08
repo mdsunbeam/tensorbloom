@@ -52,7 +52,7 @@ jobs:
           releaseBody: |
             Download the installer for your platform below.
 
-            **Requirements:** Python 3.9+ (PyTorch is installed automatically on first launch).
+            Nothing else needs to be installed: TensorBloom downloads its own Python and PyTorch the first time you train.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

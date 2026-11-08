@@ -206,6 +206,24 @@ except ValueError as e:
     check("trying with no trained weights is refused", "No trained weights" in str(e), str(e))
 sc._load_dataset = _real_load
 
+# --- Training on a subset ---
+print("Max samples")
+big_path = os.path.join(tmp, "big.pt")
+torch.save({"x": torch.randn(1000, 8), "y": torch.randint(0, 3, (1000,))}, big_path)
+big = {"type": "TensorFile", "root": big_path, "features_key": "x", "labels_key": "y", "val_split": 0.2}
+# The train/validation split itself is random unless seeded, as training seeds it
+torch.manual_seed(0)
+tl, vl = sc._load_dataset(dict(big, max_samples=300), batch_size=32)
+check("training set is cut to max_samples", len(tl.dataset) == 300, str(len(tl.dataset)))
+check("validation set is cut in proportion", len(vl.dataset) == 100, str(len(vl.dataset)))
+check("subset stays one level over the original dataset", isinstance(tl.dataset.dataset, torch.utils.data.TensorDataset))
+torch.manual_seed(0)
+tl2, vl2 = sc._load_dataset(dict(big, max_samples=300), batch_size=32)
+check("same subset every time", list(tl.dataset.indices) == list(tl2.dataset.indices) and list(vl.dataset.indices) == list(vl2.dataset.indices))
+check("train and validation subsets don't overlap", not set(tl.dataset.indices) & set(vl.dataset.indices))
+tl, vl = sc._load_dataset(dict(big, max_samples=0), batch_size=32)
+check("0 uses everything", len(tl.dataset) == 800 and len(vl.dataset) == 200, f"{len(tl.dataset)} {len(vl.dataset)}")
+
 print()
 if failures:
     print(f"{len(failures)} failed: {', '.join(failures)}")

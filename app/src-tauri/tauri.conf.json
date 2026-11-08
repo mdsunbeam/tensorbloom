@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "node scripts/fetch-uv.mjs && npm run dev",
+    "beforeBuildCommand": "node scripts/fetch-uv.mjs && npm run build"
   },
   "app": {
     "windows": [
@@ -27,6 +27,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/uv"],
     "resources": {
       "../../python/tensorbloom_sidecar.py": "python/tensorbloom_sidecar.py",
       "../../python/requirements.txt": "python/requirements.txt"

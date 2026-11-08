@@ -945,6 +945,18 @@ def _build_augmentation(aug_config: dict | None, is_grayscale: bool = False) -> 
     return transforms
 
 
+def _limit_samples(ds, n: int):
+    """The same n samples of ds every time, so runs on a subset stay comparable.
+    Keeps a single Subset level over the original dataset, which callers unwrap to reach
+    its targets and classes."""
+    if len(ds) <= n:
+        return ds
+    picks = torch.randperm(len(ds), generator=torch.Generator().manual_seed(0))[:n].tolist()
+    if isinstance(ds, torch.utils.data.Subset):
+        return torch.utils.data.Subset(ds.dataset, [ds.indices[i] for i in picks])
+    return torch.utils.data.Subset(ds, picks)
+
+
 def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None, dataloader_seed: int | None = None, is_reconstruction: bool = False):
     import torchvision
     import torchvision.transforms as T
@@ -1334,7 +1346,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         except ImportError:
             raise ImportError("Install 'datasets' package: pip install datasets")
         send_notification("train.progress", {"status": "downloading", "dataset": "WikiText-2"})
-        ds = hf_load("wikitext", "wikitext-2-raw-v1")
+        ds = hf_load("Salesforce/wikitext", "wikitext-2-raw-v1")
         train_text = "\n".join(t for t in ds["train"]["text"] if t.strip())
         test_text = "\n".join(t for t in ds["test"]["text"] if t.strip())
 
@@ -1371,12 +1383,12 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         send_notification("train.progress", {"status": "downloading", "dataset": ds_type})
 
         if ds_type == "IMDB":
-            ds = hf_load("imdb")
+            ds = hf_load("stanfordnlp/imdb")
             text_col, label_col = "text", "label"
             seq_len = config.get("max_length", 100)
             max_vocab = config.get("vocab_size", 25000)
         else:
-            ds = hf_load("ag_news")
+            ds = hf_load("fancyzhx/ag_news")
             text_col, label_col = "text", "label"
             seq_len = config.get("max_length", 100)
             max_vocab = config.get("vocab_size", 25000)
@@ -1584,6 +1596,12 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
 
     else:
         raise ValueError(f"Unsupported dataset: {ds_type}")
+
+    max_samples = int(config.get("max_samples") or 0)
+    if max_samples > 0:
+        train_ds = _limit_samples(train_ds, max_samples)
+        if test_ds is not None:
+            test_ds = _limit_samples(test_ds, max(100, max_samples // 5))
 
     generator = None
     if dataloader_seed is not None:
