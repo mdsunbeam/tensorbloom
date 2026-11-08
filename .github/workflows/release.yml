@@ -20,6 +20,11 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
 
+    env:
+      # Where opt-in usage events go (Settings > Secrets and variables > Actions > Variables).
+      # Left unset, the app never offers or sends usage events.
+      VITE_USAGE_ENDPOINT: ${{ vars.USAGE_ENDPOINT }}
+
     steps:
       - uses: actions/checkout@v4
 
