@@ -88,6 +88,33 @@ class Model(nn.Module):
         return self.fc2(x)
 ```
 
+## Architecture Diagrams
+
+**File > Export Diagram** (`Ctrl+Shift+E`) draws the model as a 3D figure for a paper, poster or slides, with a live preview.
+
+![ResNet-18 exported as a 3D diagram](../diagram-example.png)
+
+- Each layer is a shaded block sized by its output tensor: channels set its depth along the flow, height and width set its face. Sizes are on a log scale so a 512-channel layer doesn't swallow the figure.
+- BatchNorm, activations and pooling fold onto the layer before them as colored bands (`Conv 3×3` with `+ BN · ReLU` underneath), the way most papers draw them. Dropout is named in the caption.
+- Identical layers in a row become one stacked block, such as `Encoder ×12`.
+- Skip connections arc over the blocks they skip. Side branches, extra inputs and extra heads run in lanes below the main path.
+- Flatten and other reshapes, loss layers and the dataset's labels are left out. A collapsed group is drawn as one block named after the group.
+
+Options:
+
+| Option | Choices |
+|--------|---------|
+| View | 3D (oblique), Isometric, Flat |
+| Colors | Paper (soft print colors), App (the canvas colors), Gray |
+| Layer names | Type (`Conv 3×3 /2`, `FC`), the node's name, or none |
+| Show | Tensor shapes, legend, white or transparent background |
+
+Formats:
+
+- **PDF** — vector, one page sized to the figure, using the built-in Helvetica font. Use it with `\includegraphics` in LaTeX.
+- **SVG** — vector, editable in Inkscape, Illustrator or Figma. **Copy SVG** puts it on the clipboard.
+- **PNG** — 2× or 4× resolution, for slides.
+
 ## Tips
 
 - **Train before exporting** — Export uses the weights from your last training run. Train first, or pick a checkpoint file.
