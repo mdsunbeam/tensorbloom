@@ -22,6 +22,7 @@ import Select from "./ui/Select";
 import Button from "./ui/Button";
 import Tabs from "./ui/Tabs";
 import { CategoryBadge } from "../lib/category-icons";
+import { askAssistant } from "../store/assistant-store";
 
 type Tab = "properties" | "training";
 
@@ -244,6 +245,7 @@ function ErrorBanner({ error, nodeId }: { error: ShapeError; nodeId: string }) {
   const sourceLabel = useGraphStore((s) => s.nodes.find((n) => n.id === error.sourceNodeId)?.data.label ?? error.sourceNodeId);
   const params = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId)?.data.params);
   const updateNodeParam = useGraphStore((s) => s.updateNodeParam);
+  const nodeLabel = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId)?.data.label ?? "this layer");
   const fix = params ? shapeErrorFix(error, params) : null;
 
   if (error.type === "root") {
@@ -258,11 +260,16 @@ function ErrorBanner({ error, nodeId }: { error: ShapeError; nodeId: string }) {
             Gets {formatShape(error.receivedShape)}, expects {formatShape(error.expectedShape)}
           </div>
         )}
-        {fix && (
-          <Button size="sm" onClick={() => updateNodeParam(nodeId, fix.param, fix.to)} className="mt-2 ml-[18px]">
-            Set {fix.param} to {fix.to}
+        <div className="flex flex-wrap gap-2 mt-2 ml-[18px]">
+          {fix && (
+            <Button size="sm" onClick={() => updateNodeParam(nodeId, fix.param, fix.to)}>
+              Set {fix.param} to {fix.to}
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" onClick={() => askAssistant(`Why does ${nodeLabel} have a shape error, and how do I fix it?`)}>
+            Explain
           </Button>
-        )}
+        </div>
       </div>
     );
   }

@@ -37,6 +37,7 @@ const SHORTCUTS = [
   { section: "View" },
   { key: "Ctrl+B", action: "Toggle left panel" },
   { key: "Ctrl+.", action: "Toggle right panel" },
+  { key: "Ctrl+J", action: "Open or close the assistant" },
   { key: "Ctrl+M", action: "Toggle minimap" },
   { key: "Ctrl+?", action: "Keyboard shortcuts" },
   { key: "Scroll", action: "Pan canvas" },
