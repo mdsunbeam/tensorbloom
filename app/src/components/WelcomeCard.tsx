@@ -2,6 +2,7 @@ import { TEMPLATES } from "../lib/templates";
 import { TemplateCard } from "./TemplatesDialog";
 import { LogoMark } from "./ui/Logo";
 import Button from "./ui/Button";
+import { IS_WEB } from "../lib/platform";
 
 /** Small, quick-to-train models across the main kinds of data, for a first run */
 const FEATURED = ["Simple MLP", "LeNet-5", "nanoGPT"];
@@ -23,7 +24,7 @@ export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowI
       <LogoMark size={36} className="mx-auto mb-3 text-accent-text" />
       <h2 id="welcome-title" className="text-base font-semibold text-fg mb-1">Build a neural network</h2>
       <p className="text-xs text-fg-secondary mb-5">
-        Start from one of these models, or drag layers in from the left.{" "}
+        Start from one of these models, or press Ctrl+K to add a layer.{" "}
         <button type="button" onClick={onShowGettingStarted} className="text-accent-text hover:underline underline-offset-2">
           New here? Getting started
         </button>
@@ -41,11 +42,12 @@ export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowI
 
       <div className="flex items-center justify-center gap-2 mb-4">
         <Button size="sm" onClick={onAddData}>Start with a Data node</Button>
-        <Button size="sm" onClick={onShowImport}>Import PyTorch code</Button>
+        {/* Turning code into a graph runs in Python, which only the desktop app has */}
+        {!IS_WEB && <Button size="sm" onClick={onShowImport}>Import PyTorch code</Button>}
       </div>
       <div className="flex items-center justify-center gap-4 text-[11px] text-fg-muted">
         <span><Kbd>Ctrl+K</Kbd> search layers</span>
-        <span><Kbd>Ctrl+I</Kbd> import code</span>
+        {!IS_WEB && <span><Kbd>Ctrl+I</Kbd> import code</span>}
         <span><Kbd>Ctrl+/</Kbd> all shortcuts</span>
       </div>
     </section>

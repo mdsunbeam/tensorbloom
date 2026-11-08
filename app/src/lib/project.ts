@@ -9,6 +9,7 @@ import { getCachedEnvironment } from "./sidecar";
 import { useRunStore, type RunRecord } from "../store/run-store";
 import { useGraphStore } from "../store/graph-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
+import { IS_WEB } from "./platform";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -149,7 +150,7 @@ export async function writeProjectFile(
   const project = serializeProject(name, nodes, edges);
   const json = JSON.stringify(project, null, 2);
 
-  try {
+  if (!IS_WEB) try {
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     if (!path) {
       // Tauri native save dialog
@@ -191,6 +192,7 @@ export function downloadCode(code: string, filename: string = "model.py") {
 /** Asks for a project file and reads it. `path` is null when the browser's file picker was used. */
 export async function loadProjectFile(): Promise<{ project: ProjectFile; path: string | null } | null> {
   try {
+    if (IS_WEB) throw new Error("No native dialog in the browser");
     // Tauri native open dialog
     const { open } = await import("@tauri-apps/plugin-dialog");
     const { readTextFile } = await import("@tauri-apps/plugin-fs");

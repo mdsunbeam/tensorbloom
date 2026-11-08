@@ -4,6 +4,7 @@ app/node_modules/
 
 # Build output
 app/dist/
+app/dist-web/
 app/src-tauri/target/
 app/src-tauri/gen/
 

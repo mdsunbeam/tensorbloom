@@ -9,6 +9,7 @@ import type { NodeCategory } from "./types";
 import { DEFAULT_DATA_OUTPUTS } from "./types";
 import { MODULE_REGISTRY } from "./registry";
 import { autoLayout } from "./auto-layout";
+import type { LayerGroup } from "./groups";
 
 export type TemplateCategory = "getting-started" | "vision" | "language" | "audio" | "generative" | "other";
 
@@ -29,7 +30,17 @@ export interface Template {
   /** False for unsupervised (autoencoder, etc.) — no Data.y → Loss.target edge. Default true. */
   supervised?: boolean;
   trainingDefaults?: TemplateTrainingDefaults;
+  /**
+   * Stages that open as collapsed groups, so a big model fits on screen (ResNet as its stages, not
+   * every layer). Each matches layers by label; a layer joins the first stage that matches it.
+   */
+  groups?: TemplateGroup[];
   build: () => { nodes: Node<NodeData>[]; edges: Edge[] };
+}
+
+export interface TemplateGroup {
+  name: string;
+  match: RegExp;
 }
 
 let _id = 0;
@@ -151,6 +162,20 @@ export function templateGraph(tpl: Template): { nodes: Node<NodeData>[]; edges: 
   return { nodes: autoLayout(nodes, edges), edges };
 }
 
+/** The template's stages as layer groups over `nodes` (from templateGraph). Stages with fewer than two layers are left out. */
+export function templateGroups(tpl: Template, nodes: Node<NodeData>[]): LayerGroup[] {
+  if (!tpl.groups) return [];
+  const members = tpl.groups.map(() => [] as string[]);
+  for (const n of nodes) {
+    const i = tpl.groups.findIndex((g) => g.match.test(n.data.label));
+    if (i >= 0) members[i].push(n.id);
+  }
+  const stamp = Date.now().toString(36);
+  return tpl.groups
+    .map((g, i) => ({ id: `group_tpl_${stamp}_${i}`, name: g.name, nodeIds: members[i], collapsed: false }))
+    .filter((g) => g.nodeIds.length >= 2);
+}
+
 export const TEMPLATE_CATEGORY_ORDER: TemplateCategory[] = [
   "getting-started", "vision", "language", "audio", "generative", "other",
 ];
@@ -229,6 +254,7 @@ export const TEMPLATES: Template[] = [
     year: 2015,
     paper: "He et al., 2015",
     trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 100, batchSize: 128, dataset: { type: "CIFAR10", root: "./data" } },
+    groups: [{ name: "Stem", match: /^stem_/ }, { name: "Residual block 1", match: /^block1_/ }, { name: "Residual block 2", match: /^(block2_|downsample_)/ }],
     build() {
       _id = 0;
       // Stem
@@ -295,6 +321,7 @@ export const TEMPLATES: Template[] = [
     year: 2020,
     paper: "Dosovitskiy et al., 2020",
     trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 128, dataset: { type: "CIFAR10", root: "./data" } },
+    groups: [{ name: "Patch embedding", match: /^(patch_embed|flatten|permute)$/ }, { name: "Encoder (4 layers)", match: /^encoder_/ }],
     build() {
       _id = 0;
       const nodes = [
@@ -322,6 +349,7 @@ export const TEMPLATES: Template[] = [
     year: 2018,
     paper: "Sandler et al., 2018",
     trainingDefaults: { optimizer: { type: "SGD", lr: 0.01, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 64, dataset: { type: "CIFAR10", root: "./data" } },
+    groups: [{ name: "Stem", match: /^init_/ }, { name: "Inverted residual 1", match: /^b1_/ }, { name: "Inverted residual 2", match: /^b2_/ }],
     build() {
       _id = 0;
       // Initial conv
@@ -381,6 +409,7 @@ export const TEMPLATES: Template[] = [
     year: 2015,
     paper: "Ronneberger et al., 2015",
     trainingDefaults: { optimizer: { type: "Adam", lr: 1e-4, weightDecay: 0 }, loss: "BCEWithLogitsLoss", epochs: 50, batchSize: 8, dataset: { type: "ImageFolder", root: "./data" } },
+    groups: [{ name: "Encoder 1", match: /^enc1_/ }, { name: "Encoder 2", match: /^enc2_/ }, { name: "Bridge", match: /^bridge/ }, { name: "Decoder 2", match: /^(up2|skip2|dec2_)/ }, { name: "Decoder 1", match: /^(up1|skip1|dec1_)/ }],
     build() {
       _id = 0;
       // Encoder
@@ -480,6 +509,7 @@ export const TEMPLATES: Template[] = [
     year: 2022,
     paper: "Karpathy, 2022",
     trainingDefaults: { optimizer: { type: "AdamW", lr: 3e-4, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 20, batchSize: 64, dataset: { type: "TinyShakespeare", root: "./data" } },
+    groups: [{ name: "Transformer blocks (6)", match: /^block_/ }],
     build() {
       _id = 0;
       const nodes = [
@@ -505,6 +535,7 @@ export const TEMPLATES: Template[] = [
     year: 2018,
     paper: "Devlin et al., 2018",
     trainingDefaults: { optimizer: { type: "AdamW", lr: 2e-5, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 16, dataset: { type: "AGNews", root: "./data" } },
+    groups: [{ name: "Embeddings", match: /^embed_|^token_embed$/ }, { name: "Encoder (12 layers)", match: /^encoder_/ }],
     build() {
       _id = 0;
       // Encoder output [B,T,768] → pool to [B,768] → classify
@@ -566,6 +597,7 @@ export const TEMPLATES: Template[] = [
     year: 2022,
     paper: "Radford et al., 2022",
     trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 30, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data" } },
+    groups: [{ name: "Conv front end", match: /^(conv|gelu)\d$/ }, { name: "Encoder (4 layers)", match: /^encoder_/ }],
     build() {
       _id = 0;
       // Input: mel spectrogram [B, 80, 100] from SpeechCommands
@@ -596,6 +628,7 @@ export const TEMPLATES: Template[] = [
     year: 2016,
     paper: "van den Oord et al., 2016",
     trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 30, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data" } },
+    groups: [{ name: "Residual layer 1", match: /^(dilated_1|tanh_1|1x1_1|residual_1)$/ }, { name: "Residual layer 2", match: /^(dilated_2|tanh_2|1x1_2|residual_2)$/ }, { name: "Residual layer 3", match: /^(dilated_4|tanh_3|1x1_3|residual_3)$/ }],
     build() {
       _id = 0;
       // Adapted for SpeechCommands mel spectrograms [B, 80, 100]
@@ -746,6 +779,7 @@ export const TEMPLATES: Template[] = [
     year: 2017,
     paper: "Huang et al., 2017",
     trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 64, dataset: { type: "CIFAR10", root: "./data" } },
+    groups: [{ name: "Stem", match: /^init_/ }, { name: "Dense block", match: /^(dense|cat)\d/ }, { name: "Transition", match: /^transition/ }],
     build() {
       _id = 0;
       const init_conv = makeNode("Conv2d", { in_channels: 3, out_channels: 64, kernel_size: 3, padding: 1 }, "init_conv");

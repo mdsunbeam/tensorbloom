@@ -1,10 +1,11 @@
 import { create } from "zustand";
+import { IS_WEB } from "../lib/platform";
 
 /**
  * The Python environment that training and code import run in. The editor works without it;
  * it's checked at startup and set up from a card on the canvas when someone wants to train.
  */
-export type PythonStatus = "checking" | "ready" | "missing" | "installing" | "failed";
+export type PythonStatus = "checking" | "ready" | "missing" | "installing" | "failed" | "web";
 
 interface EnvStatus {
   ready: boolean;
@@ -62,6 +63,11 @@ export const usePythonStore = create<PythonState>((set, get) => ({
   justInstalled: false,
 
   check: async () => {
+    // The web version has no Python; training and code import point to the desktop app instead
+    if (IS_WEB) {
+      set({ status: "web" });
+      return;
+    }
     let invoke: typeof import("@tauri-apps/api/core").invoke;
     try {
       ({ invoke } = await import("@tauri-apps/api/core"));

@@ -6,7 +6,7 @@
 
 import type { JsonRpcResponse } from "./types";
 import type { EnvironmentInfo } from "../store/training-store";
-import { requirePython } from "../store/python-store";
+import { requirePython, usePythonStore } from "../store/python-store";
 
 let requestId = 0;
 let sidecarStarted = false;
@@ -170,7 +170,9 @@ function needsPythonReason(method: string): string {
 
 export async function sidecarCall<T = unknown>(method: string, params: unknown = {}): Promise<T> {
   if (!requirePython(needsPythonReason(method))) {
-    throw new Error("Python isn't set up yet. Set it up from the card at the top right of the canvas.");
+    throw new Error(usePythonStore.getState().status === "web"
+      ? "This needs the TensorBloom desktop app, which runs Python. The web version builds and checks models."
+      : "Python isn't set up yet. Set it up from the card at the top right of the canvas.");
   }
   const ready = await ensureSidecar();
   if (!ready) {
