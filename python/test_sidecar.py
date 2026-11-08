@@ -59,6 +59,26 @@ try:
 except ValueError as e:
     check("unknown layer gives a clear error", "NotARealLayer" in str(e), str(e))
 
+# --- Devices ---
+print("Devices")
+_real_cuda, _real_mps = torch.cuda.is_available, sc._mps_available
+torch.cuda.is_available = lambda: False
+sc._mps_available = lambda: True
+check("auto picks MPS on an Apple Silicon Mac", sc._get_device("auto").type == "mps")
+check("the GPU is named on a Mac", sc._gpu_name() == "Apple GPU (MPS)")
+sc._mps_available = lambda: False
+check("auto falls back to CPU", sc._get_device("auto").type == "cpu")
+for dev, needle in [("cuda:0", "no CUDA GPU"), ("mps", "Apple Silicon")]:
+    try:
+        sc._get_device(dev)
+        check(f"{dev} without hardware gives a clear error", False)
+    except ValueError as e:
+        check(f"{dev} without hardware gives a clear error", needle in str(e), str(e))
+torch.cuda.is_available, sc._mps_available = _real_cuda, _real_mps
+check("cpu float64 data is left alone", sc._to_device(torch.zeros(2, dtype=torch.float64), torch.device("cpu")).dtype == torch.float64)
+env = sc._system_environment({})
+check("environment reports MPS", isinstance(env.get("mpsAvailable"), bool), str(env))
+
 # --- OneCycleLR ---
 print("Schedulers")
 opt = torch.optim.SGD([torch.nn.Parameter(torch.zeros(1))], lr=0.1)
