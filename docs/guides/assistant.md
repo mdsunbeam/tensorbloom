@@ -40,6 +40,20 @@ The assistant's changes show on the canvas as a preview while it works: added la
 
 While a preview is showing, the canvas can't be edited and undo is off. The assistant checks every layer type and setting against the catalog, and fixes the shape errors its changes cause before it hands them over. Opening another project or template keeps pending changes as an undo step.
 
+## Tutoring a lesson
+
+While a [guided lesson](lessons.md) is open, the assistant acts as its tutor. It knows the lesson's goal, the step you're on, whether the step passes yet and which hints you've seen. It answers questions and explains ideas, but it nudges you toward the step rather than doing it for you. When you need more, it reveals the lesson's next hint in the lesson panel, so the panel and the chat stay in step. Ask it to just do the step and it will, then explain why it works.
+
+**Ask the tutor** on the lesson panel opens the chat with a question about the step, which you can edit before sending.
+
+A few things work differently during a lesson:
+
+- A step the assistant's changes would complete only counts once you apply them.
+- It won't replace the whole model or import code, since that would replace the lesson's model. Leave the lesson first.
+- It doesn't start training unless you ask, because running it is part of the lesson.
+
+Without a lesson open, ask it to teach you something ("I want to understand overfitting") and it can suggest a lesson that covers it and open it once you agree. Opening a lesson replaces the canvas, so it asks first.
+
 ## Code it runs
 
 Custom layers, importing code and training run Python on your computer, with the same access to your files as TensorBloom. So before any of them, the assistant shows a card with exactly what will run (the full code for a custom layer or an import, the settings for a training run) and waits. **Don't run** declines, and the assistant won't retry the same thing. A custom layer you approve is then previewed like any other change.
