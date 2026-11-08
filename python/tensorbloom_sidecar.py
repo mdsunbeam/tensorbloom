@@ -2901,6 +2901,7 @@ def _system_environment(params: dict) -> dict:
 
 
 METHODS.update(tensorbloom_llm.METHODS)
+tensorbloom_llm.notify = send_notification
 
 
 def main():

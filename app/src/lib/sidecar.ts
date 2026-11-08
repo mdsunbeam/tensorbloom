@@ -25,6 +25,17 @@ export function setTrainProgressCallback(cb: ProgressCallback | null) {
   onTrainProgress = cb;
 }
 
+type NotificationListener = (params: unknown) => void;
+const notificationListeners = new Map<string, Set<NotificationListener>>();
+
+/** Calls `listener` with each notification the sidecar sends for `method`. Returns a function that stops listening. */
+export function onSidecarNotification(method: string, listener: NotificationListener): () => void {
+  let set = notificationListeners.get(method);
+  if (!set) notificationListeners.set(method, (set = new Set()));
+  set.add(listener);
+  return () => { set.delete(listener); };
+}
+
 type LogCallback = (params: { text: string; stream: "stdout" | "stderr" }) => void;
 let onTrainLog: LogCallback | null = null;
 
@@ -57,6 +68,9 @@ function handleStdoutLine(line: string) {
       }
       if (msg.method === "train.log" && onTrainLog) {
         onTrainLog(msg.params as { text: string; stream: "stdout" | "stderr" });
+      }
+      if (msg.method) {
+        for (const listener of notificationListeners.get(msg.method) ?? []) listener(msg.params);
       }
       return;
     }

@@ -55,3 +55,7 @@ jobs:
         run: python python/test_sidecar.py
       - name: Run LLM tests
         run: python python/test_llm.py
+      - name: Install LLM packages
+        run: pip install transformers accelerate peft huggingface_hub datasets
+      - name: Run LLM runtime tests (a tiny model built locally)
+        run: python python/test_llm_runtime.py
