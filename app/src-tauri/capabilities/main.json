@@ -34,6 +34,8 @@
     {
       "identifier": "fs:allow-read-text-file",
       "allow": [{ "path": "**" }]
-    }
+    },
+    "updater:default",
+    "process:allow-restart"
   ]
 }

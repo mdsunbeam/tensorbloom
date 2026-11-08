@@ -125,6 +125,11 @@ pub fn run() {
             sidecar_manager::stop_sidecar,
         ])
         .setup(|app| {
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             // Set the window icon from pre-decoded RGBA data
             if let Some(window) = app.get_webview_window("main") {
                 let icon = tauri::image::Image::new(
