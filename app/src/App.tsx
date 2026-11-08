@@ -7,6 +7,8 @@ import CodePanel from "./components/CodePanel";
 import TrainingCharts from "./components/TrainingCharts";
 import TrainingLogs from "./components/TrainingLogs";
 import RunsPanel from "./components/RunsPanel";
+import LLMPanel from "./components/LLMPanel";
+import { useLLMStore } from "./store/llm-store";
 import { useRunStore } from "./store/run-store";
 import Toolbar from "./components/Toolbar";
 import ToastContainer, { toast } from "./components/Toast";
@@ -22,6 +24,7 @@ import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
 const ImportDialog = lazy(() => import("./components/ImportDialog"));
+const ImportLLMDialog = lazy(() => import("./components/ImportLLMDialog"));
 const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
@@ -38,6 +41,7 @@ import { useTrainingStore } from "./store/training-store";
 import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
 import { TEMPLATES, templateGraph } from "./lib/templates";
+import { buildLLMGraph, type LLMSpec } from "./lib/llm";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
 import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
@@ -48,7 +52,7 @@ import Tabs from "./components/ui/Tabs";
 import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
-type BottomTab = "code" | "charts" | "runs" | "logs";
+type BottomTab = "code" | "charts" | "runs" | "logs" | "llm";
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -56,10 +60,14 @@ export default function App() {
   const canvasEmpty = useGraphStore((s) => s.nodes.length === 0);
   const logCount = useTrainingStore((s) => s.logs.length);
   const runCount = useRunStore((s) => s.runs.length);
-  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280 });
+  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280, llm: 320 });
   const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
   const [bottomTab, setBottomTab] = useState<BottomTab>("code");
+  const llmSpec = useLLMStore((s) => s.spec);
+  // The language model tab only exists for an imported model
+  useEffect(() => { if (!llmSpec && bottomTab === "llm") setBottomTab("code"); }, [llmSpec, bottomTab]);
   const [importOpen, setImportOpen] = useState(false);
+  const [importLLMOpen, setImportLLMOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [connectFrom, setConnectFrom] = useState<ConnectFromContext | null>(null);
@@ -253,6 +261,18 @@ export default function App() {
     }
   }, []);
 
+  const handleImportLLM = useCallback(async (spec: LLMSpec) => {
+    if (!(await confirmDiscardChanges("importing a language model"))) return false;
+    const { nodes, edges, groups, notes } = buildLLMGraph(spec);
+    replaceGraph(nodes, edges, spec.name.split("/").pop() || spec.name, groups, spec);
+    useDocumentStore.getState().markSaved(null);
+    for (const note of notes) toast.info(note);
+    toast.success(`Imported ${spec.name}`);
+    setBottomTab("llm");
+    setBottomPanelOpen(true);
+    return true;
+  }, []);
+
   const handleTemplate = useCallback(async (index: number) => {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
@@ -321,6 +341,7 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: "var(--bg-primary)" }}>
       <Toolbar
         onShowImport={() => setImportOpen(true)}
+        onShowImportLLM={() => setImportLLMOpen(true)}
         onShowTemplates={() => setTemplatesOpen(true)}
         onShowExport={() => setExportOpen(true)}
         onShowSpotlight={() => setSpotlightOpen(true)}
@@ -375,6 +396,7 @@ export default function App() {
                     onSelectTemplate={handleTemplate}
                     onShowTemplates={() => setTemplatesOpen(true)}
                     onShowImport={() => setImportOpen(true)}
+                    onShowImportLLM={() => setImportLLMOpen(true)}
                     onAddData={addDataNode}
                     onShowGettingStarted={() => setGettingStartedOpen(true)}
                   />
@@ -433,6 +455,7 @@ export default function App() {
                   { id: "charts", label: "Charts", live: trainingStatus === "running" || trainingStatus === "starting" },
                   { id: "runs", label: "Runs", badge: runCount > 0 ? runCount : undefined },
                   { id: "logs", label: "Logs", badge: logCount > 0 ? logCount : undefined },
+                  ...(llmSpec ? [{ id: "llm" as const, label: "Language model" }] : []),
                 ]}
               />
             </div>
@@ -450,6 +473,7 @@ export default function App() {
               {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={setTryRunId} />}
               {bottomTab === "runs" && <RunsPanel onTryModel={setTryRunId} />}
               {bottomTab === "logs" && <TrainingLogs />}
+              {bottomTab === "llm" && <LLMPanel />}
             </div>
           )}
         </div>
@@ -476,6 +500,7 @@ export default function App() {
 
       <Suspense fallback={null}>
         {importOpen && <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />}
+        {importLLMOpen && <ImportLLMDialog open={importLLMOpen} onClose={() => setImportLLMOpen(false)} onImport={handleImportLLM} />}
         {templatesOpen && <TemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} onSelect={handleTemplate} />}
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}

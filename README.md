@@ -50,6 +50,10 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - A "?" next to every layer parameter and training setting explains what it does
 - Each layer links to its PyTorch documentation
 
+**Language Models**
+- Import an LLM from Hugging Face or a `.gguf`/`.safetensors` file without downloading it, and see its architecture as a graph
+- See the memory it needs to run, LoRA fine-tune, or fully fine-tune at 16, 8 and 4 bits, against your GPU or Mac
+
 **Code Generation & Export**
 - Live PyTorch code generation — see the equivalent `nn.Module` as you build
 - Import existing PyTorch code into the graph editor
@@ -208,6 +212,7 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Code Blocks](docs/guides/code-blocks.md) — Write custom forward() logic
 - [Training Guide](docs/guides/training.md) — Training settings, the run flow, comparing runs, and trying a model
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
+- [Language Models](docs/guides/language-models.md) — Import an LLM and size it for your computer
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures
 - [Architecture](docs/guides/architecture.md) — Technical internals for contributors
 - [Roadmap](ROADMAP.md) — Planned features and development direction

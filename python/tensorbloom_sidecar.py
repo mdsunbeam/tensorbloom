@@ -23,6 +23,10 @@ import torch
 import torch.nn as nn
 import torch.fx
 
+import os as _os
+sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import tensorbloom_llm  # noqa: E402  (shipped next to this file)
+
 # Preserve real stdout before any redirection — all JSON-RPC goes through this
 _real_stdout = sys.stdout
 
@@ -147,7 +151,11 @@ SPECIAL_CONSTRUCTORS = {
     "TransformerDecoderLayer": lambda p: _TransformerDecoderSelfAttn(
         nn.TransformerDecoderLayer(**{k: v for k, v in p.items() if v is not None})
     ),
+    "DecoderBlock": tensorbloom_llm.build_decoder_block,
 }
+
+# Layers that aren't in torch.nn: generated code defines them itself
+LOCAL_MODULES = {"DecoderBlock": tensorbloom_llm.DECODER_BLOCK_SOURCE}
 
 
 def build_module(module_type: str, params: dict) -> nn.Module:
@@ -393,7 +401,8 @@ def decompile_graph(graph_json: dict) -> str:
             mt = n["moduleType"]
             params = n.get("params", {})
             param_str = format_constructor_args(mt, params)
-            init_lines.append(f"        self.{name} = nn.{mt}({param_str})")
+            prefix = "" if mt in LOCAL_MODULES else "nn."
+            init_lines.append(f"        self.{name} = {prefix}{mt}({param_str})")
 
     # Build forward lines with handle-aware variable resolution
     forward_lines = []
@@ -484,6 +493,10 @@ def decompile_graph(graph_json: dict) -> str:
         "import torch.nn as nn",
         "",
     ]
+
+    for mt, source in LOCAL_MODULES.items():
+        if any(n.get("moduleType") == mt for n in module_nodes):
+            helper_classes[:0] = [source]
 
     if helper_classes:
         code_lines.append("")
@@ -2885,6 +2898,9 @@ def _system_environment(params: dict) -> dict:
         "platform": platform.platform(),
         "gpuName": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
     }
+
+
+METHODS.update(tensorbloom_llm.METHODS)
 
 
 def main():

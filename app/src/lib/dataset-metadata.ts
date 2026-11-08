@@ -364,7 +364,7 @@ export function checkDatasetCompatibility(
 export type ModelDomain = "vision" | "text" | "audio" | "general";
 
 const VISION_MODULES = new Set(["Conv2d", "Conv3d", "ConvTranspose2d", "MaxPool2d", "AvgPool2d", "AdaptiveAvgPool2d", "BatchNorm2d"]);
-const TEXT_MODULES = new Set(["Embedding", "LSTM", "GRU", "TransformerEncoderLayer", "TransformerDecoderLayer", "MultiheadAttention"]);
+const TEXT_MODULES = new Set(["Embedding", "LSTM", "GRU", "TransformerEncoderLayer", "TransformerDecoderLayer", "DecoderBlock", "MultiheadAttention"]);
 const AUDIO_MODULES = new Set(["Conv1d", "ConvTranspose1d", "BatchNorm1d"]);
 
 export function inferModelDomain(nodes: Node<NodeData>[]): ModelDomain {

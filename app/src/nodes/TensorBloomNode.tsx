@@ -10,6 +10,7 @@ import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
 import { CategoryBadge, tint } from "../lib/category-icons";
+import { useLLMStore } from "../store/llm-store";
 
 type TLNodeProps = NodeProps<Node<NodeData>>;
 
@@ -280,6 +281,8 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
 }
 
 function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
+  // An imported language model is fed tokens, not the training panel's dataset
+  const isLLM = useLLMStore((s) => s.spec !== null);
   const nodes = useGraphStore((s) => s.nodes);
 
   // Find the Data node in the graph — prefer it over training store default
@@ -313,6 +316,8 @@ function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
     try { shape = JSON.parse(raw.replace(/\(/g, "[").replace(/\)/g, "]")); } catch { return null; }
     return JSON.stringify(shape) === JSON.stringify(info.inputShape);
   }, [nodeParams.shape, info?.inputShape]);
+
+  if (isLLM) return null;
 
   if (match === null && info.inputShape === null) {
     // Custom dataset with unknown shape — show name only

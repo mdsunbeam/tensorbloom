@@ -7,6 +7,7 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
 import type { ShapeMap } from "./shape-inference";
 import { isDatasetNode } from "./dataset-metadata";
+import { DECODER_BLOCK_SOURCE } from "./llm-block";
 
 interface DecompileResult {
   code: string;
@@ -15,6 +16,14 @@ interface DecompileResult {
 
 /** Functional ops that don't need __init__ */
 const FUNCTIONAL_OPS = new Set(["Add", "Concatenate", "MatMul"]);
+
+/** Layers that aren't in torch.nn: generated code defines them itself, from this source */
+const LOCAL_MODULES: Record<string, string> = { DecoderBlock: DECODER_BLOCK_SOURCE };
+
+/** How a layer's class is written in generated code: nn.Linear, or DecoderBlock for TensorBloom's own */
+function moduleClass(moduleType: string): string {
+  return moduleType in LOCAL_MODULES ? moduleType : `nn.${moduleType}`;
+}
 
 /**
  * Forward lines for a TransformerDecoderLayer used as a causal (GPT-style) block.
@@ -132,7 +141,7 @@ export function generateNodeSnippet(
       initCode = `self.${myVar} = ${node.data.customCode}`;
     } else {
       const args = formatCtorArgs(mt, node.data.params);
-      initCode = `self.${myVar} = nn.${mt}(${args})`;
+      initCode = `self.${myVar} = ${moduleClass(mt)}(${args})`;
     }
   }
 
@@ -244,6 +253,9 @@ export function decompileGraph(
 
   // Collect code block helper class definitions
   const helperClasses: string[] = [];
+  for (const [mt, source] of Object.entries(LOCAL_MODULES)) {
+    if (sorted.some((n) => n.data.moduleType === mt && !n.data.customCode)) helperClasses.push(source);
+  }
   const codeBlockNodes = sorted.filter((n) => n.data.codeBlock);
 
   for (const n of codeBlockNodes) {
@@ -283,7 +295,7 @@ export function decompileGraph(
       initLines.push(`        self.${name} = ${n.data.customCode}`);
     } else {
       const args = formatCtorArgs(n.data.moduleType, n.data.params);
-      initLines.push(`        self.${name} = nn.${n.data.moduleType}(${args})`);
+      initLines.push(`        self.${name} = ${moduleClass(n.data.moduleType)}(${args})`);
     }
   }
 
@@ -488,6 +500,7 @@ export function formatCtorArgs(moduleType: string, params: Record<string, unknow
     MultiheadAttention: { dropout: 0.0, bias: true, batch_first: true },
     TransformerEncoderLayer: { dim_feedforward: 2048, dropout: 0.1, activation: "relu", batch_first: true, norm_first: false },
     TransformerDecoderLayer: { dim_feedforward: 2048, dropout: 0.1, activation: "relu", batch_first: true, norm_first: false },
+    DecoderBlock: { head_dim: 0, mlp: "swiglu", norm: "rmsnorm", norm_eps: 1e-5, rope_theta: 10000, bias: "none", n_experts: 0, experts_per_token: 2 },
     CrossEntropyLoss: { reduction: "mean", label_smoothing: 0.0 },
     MSELoss: { reduction: "mean" },
     BCEWithLogitsLoss: { reduction: "mean" },
