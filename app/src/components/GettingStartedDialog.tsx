@@ -24,10 +24,11 @@ const STEPS: { title: string; body: React.ReactNode }[] = [
   },
 ];
 
-export default function GettingStartedDialog({ open, onClose, onShowTemplates }: {
+export default function GettingStartedDialog({ open, onClose, onShowTemplates, onShowLessons }: {
   open: boolean;
   onClose: () => void;
   onShowTemplates: () => void;
+  onShowLessons: () => void;
 }) {
   return (
     <Dialog
@@ -39,6 +40,7 @@ export default function GettingStartedDialog({ open, onClose, onShowTemplates }:
       footer={
         <>
           <Button onClick={onClose}>Close</Button>
+          <Button onClick={() => { onClose(); onShowLessons(); }}>Try a guided lesson</Button>
           <Button variant="primary" onClick={() => { onClose(); onShowTemplates(); }}>Browse templates</Button>
         </>
       }
