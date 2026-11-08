@@ -10,6 +10,7 @@ import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
 import { CategoryBadge, tint } from "../lib/category-icons";
+import { useExperimentStore } from "../store/experiment-store";
 
 type TLNodeProps = NodeProps<Node<NodeData>>;
 
@@ -50,6 +51,9 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const [hovered, setHovered] = useState(false);
+  // In a "change one thing" experiment: whether this layer is new or changed since the starting run
+  const mark = useExperimentStore((s) => s.marks.get(id));
+  const markColor = mark === "added" ? "var(--success)" : mark === "changed" ? "var(--warning)" : null;
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -89,12 +93,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         width: nodeWidth,
         minHeight: nodeMinHeight,
         background: "var(--bg-secondary)",
-        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
+        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : markColor ?? (hovered ? "var(--bg-elevated)" : "var(--border)")}`,
         boxShadow: selected
           ? `var(--node-shadow-hover), 0 0 0 3px ${tint(rootError ? "var(--danger)" : color, 20)}`
-          : hovered
-            ? "var(--node-shadow-hover)"
-            : "var(--node-shadow)",
+          : markColor
+            ? `var(--node-shadow), 0 0 0 3px ${tint(markColor, 25)}`
+            : hovered
+              ? "var(--node-shadow-hover)"
+              : "var(--node-shadow)",
         transition: "border-color 0.15s ease, box-shadow 0.2s ease",
       }}
     >
@@ -127,6 +133,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             >
               {data.label}
             </span>
+            {mark && !compact && (
+              <span
+                className={`ml-auto flex-shrink-0 text-[11px] font-medium px-1.5 rounded ${mark === "added" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"}`}
+                title="Different from the run this experiment started from"
+              >
+                {mark === "added" ? "New" : "Changed"}
+              </span>
+            )}
             {isCodeBlock && (
               <span
                 className="text-[11px] px-1 py-0.5 rounded font-mono flex-shrink-0"

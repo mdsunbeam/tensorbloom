@@ -16,6 +16,8 @@ import { buildSidecarGraph } from "./sidecar-graph";
 import { requirePython } from "../store/python-store";
 import { useRunStore, epochSummary, architectureKey, graphSnapshot, type RunRecord } from "../store/run-store";
 import { computeModelSummary } from "./model-summary";
+import { useExperimentStore, runDiff } from "../store/experiment-store";
+import { changeSummary } from "./experiment-diff";
 
 export async function startTraining() {
   const store = useGraphStore.getState();
@@ -279,7 +281,7 @@ function recordRun(start: RunStart, status: RunRecord["status"], error?: string)
   const epochs = epochSummary(ts.metrics);
   if (status !== "failed" && epochs.length === 0) return;
   const { runs, addRun } = useRunStore.getState();
-  addRun({
+  const run: RunRecord = {
     ...start,
     id: `run_${Date.now().toString(36)}`,
     number: (runs[runs.length - 1]?.number ?? 0) + 1,
@@ -288,7 +290,19 @@ function recordRun(start: RunStart, status: RunRecord["status"], error?: string)
     error,
     results: status === "failed" ? undefined : ts.trainingResults ?? undefined,
     epochs,
-  });
+  };
+  // A "change one thing" experiment: name what changed, and put the run next to the one it started from
+  const baseRunId = useExperimentStore.getState().baseRunId;
+  const base = baseRunId ? runs.find((r) => r.id === baseRunId) : undefined;
+  if (base) {
+    run.baseRunId = base.id;
+    run.change = changeSummary(runDiff(base, run));
+  }
+  addRun(run);
+  if (base) {
+    useRunStore.getState().setCompare([base.id, run.id]);
+    useExperimentStore.getState().end();
+  }
 }
 
 export async function stopTraining() {
