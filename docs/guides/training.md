@@ -230,6 +230,10 @@ The quickest way to learn what a setting does is to change only that setting and
 
 With two runs checked in the Runs tab, **Curves** shows **What changed** beside the charts: how the headline result moved (for example "97.1% → 97.8% (+0.7 points)"), each change to the layers, connections, and training settings, and a small map of the graph with new layers in green, changed ones in amber, and removed ones dashed in red. Click a layer's name to find it on the canvas.
 
+![The canvas during an experiment, with one change](../screenshot-change-one-thing-canvas.png)
+
+![Two runs compared, with what changed beside the curves](../screenshot-change-one-thing.png)
+
 ## Trying a Trained Model
 
 **Try it** in the run summary, or **Try** on a run in the Runs tab, opens a grid of 12 predictions on validation samples the model didn't train on. Each card shows the input, the top three guesses as bars, and "Right" or "Wrong, it's X". The header shows the score, such as "9 of 12 right".
