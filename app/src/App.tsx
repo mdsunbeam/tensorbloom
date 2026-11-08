@@ -295,11 +295,10 @@ export default function App() {
   // From the welcome card: a Data node to build from, selected so its source can be picked
   const addDataNode = useCallback(() => {
     const graph = useGraphStore.getState();
-    graph.addNode("Data", { x: 300, y: 60 });
-    const added = useGraphStore.getState().nodes[useGraphStore.getState().nodes.length - 1];
-    if (!added) return;
-    graph.onNodesChange([{ type: "select", id: added.id, selected: true }]);
-    graph.setSelectedNodeId(added.id);
+    const id = graph.addNode("Data", { x: 300, y: 60 });
+    if (!id) return;
+    graph.onNodesChange([{ type: "select", id, selected: true }]);
+    graph.setSelectedNodeId(id);
   }, []);
 
   const handleSpotlightSelect = useCallback((moduleType: string) => {

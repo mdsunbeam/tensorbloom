@@ -80,3 +80,12 @@ describe("configDiff", () => {
     expect(configDiff({ a: 1, b: { c: 2, d: 3 } } as never, { a: 1, b: { c: 5, d: 3 } } as never)).toEqual(["b.c: 2 → 5"]);
   });
 });
+
+import { friendlyDiff } from "./describe";
+describe("friendlyDiff", () => {
+  it("names layers and leaves out the connections that come with them", () => {
+    const after = [nodes[1], { ...nodes[2], data: { ...nodes[2].data, label: "fc1", params: { ...nodes[2].data.params, out_features: 500 } } }, nodes[0], node("n5", "Dropout", {}, 150), nodes[3]];
+    const diff = friendlyDiff({ nodes, edges }, { nodes: after, edges: [edge("n1", "n2"), edge("n2", "n5"), edge("n5", "n3"), edge("n3", "n4")] });
+    expect(diff).toEqual(["Rename Linear to fc1", "fc1: out_features 512 → 500", "Add Dropout after fc1"]);
+  });
+});

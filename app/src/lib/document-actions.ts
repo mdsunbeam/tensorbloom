@@ -3,6 +3,7 @@
  * dialogs, so each one checks for unsaved changes the same way.
  */
 
+import { settlePendingChanges } from "./assistant/change-set";
 import type { Node, Edge } from "@xyflow/react";
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
@@ -47,6 +48,7 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
 
 /** Replaces the graph with a different project. Undo can still bring the old graph back. */
 export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string, groups: LayerGroup[] = []) {
+  settlePendingChanges();
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().loadGraph(nodes, edges, groups);
   useGraphStore.getState().setProjectName(projectName);
@@ -54,6 +56,7 @@ export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName
 
 export async function newProject() {
   if (!(await confirmDiscardChanges("starting a new project"))) return;
+  settlePendingChanges();
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().clearGraph();
   useGraphStore.getState().setProjectName("Untitled");

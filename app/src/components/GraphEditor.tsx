@@ -23,6 +23,9 @@ import { canvasView, groupRect, GROUP_NODE_TYPE } from "../lib/groups";
 import { CanvasViewContext } from "./canvas-view";
 import ShapeEdge from "./ShapeEdge";
 import ContextMenu from "./ContextMenu";
+import ChangeSetReview from "./assistant/ChangeSetReview";
+import { useChangeSetStore } from "../lib/assistant/change-set";
+import { previewMarks } from "../lib/assistant/preview-marks";
 import type { Node, Edge, Connection, NodeChange } from "@xyflow/react";
 import type { ConnectFromContext } from "./SpotlightDialog";
 
@@ -290,8 +293,15 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
     return edges.map((e) => ({ ...e, animated: true }));
   }, [edges, trainingStatus]);
 
-  // What's drawn: the graph plus a frame or card per group
-  const view = useMemo(() => canvasView(nodes, displayEdges, groups), [nodes, displayEdges, groups]);
+  // The assistant's pending changes, marked on the canvas until they're applied or discarded
+  const previewBase = useChangeSetStore((s) => s.base);
+  const previewing = previewBase !== null;
+
+  // What's drawn: the graph plus a frame or card per group, and the preview's marks
+  const view = useMemo(() => {
+    const v = canvasView(nodes, displayEdges, groups);
+    return previewBase ? previewMarks(v, previewBase, nodes, edges) : v;
+  }, [nodes, displayEdges, groups, previewBase, edges]);
 
   // Debounced shape inference
   useEffect(() => {
@@ -485,7 +495,11 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
           markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: "var(--edge-color)" },
         }}
         proOptions={{ hideAttribution: true }}
-        deleteKeyCode="Delete"
+        // While the assistant's changes are previewed, the canvas can be looked at but not edited
+        nodesDraggable={!previewing}
+        nodesConnectable={!previewing}
+        edgesReconnectable={!previewing}
+        deleteKeyCode={previewing ? null : "Delete"}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} color="var(--bg-dot)" />
         <Controls showInteractive={false} />
@@ -502,6 +516,12 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
           onClose={() => setCtxMenu(null)}
           onShowSpotlight={() => onShowSpotlight()}
         />
+      )}
+
+      {previewing && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20">
+          <ChangeSetReview variant="canvas" />
+        </div>
       )}
 
       {/* Batch size display toggle */}

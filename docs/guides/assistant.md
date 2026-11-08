@@ -27,7 +27,16 @@ The assistant can look at:
 - A trained run's predictions on validation samples, including the mistakes (needs Python)
 - Dataset statistics: sizes, sample shape, classes, input mean and range (needs Python)
 
-It can't change your model, its settings or start training yet. When a change would help, it says which layer and parameter to change and to what.
+And it can change the model when you ask: add, remove and connect layers, change their settings, apply shape fixes, group layers, tidy the layout, and change training settings. Try "add dropout after each Linear layer" or "make fc2 smaller and fix the shapes".
+
+## Reviewing its changes
+
+The assistant's changes show on the canvas as a preview while it works: added layers and connections in green, changed layers in amber, and removed ones as faded red outlines. A bar at the bottom of the canvas, and a card above the message box, list the changes and any new shape errors.
+
+- **Apply** keeps them. All of them together are one undo step, so **Ctrl+Z** takes them back.
+- **Discard** puts the model and training settings back exactly as they were.
+
+While a preview is showing, the canvas can't be edited and undo is off. The assistant checks every layer type and setting against the catalog, and fixes the shape errors its changes cause before it hands them over. Opening another project or template keeps pending changes as an undo step.
 
 ## What's sent
 

@@ -206,7 +206,7 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Getting Started](docs/guides/getting-started.md) — Build and train your first model
 - [Custom Data Guide](docs/guides/custom-data.md) — Load your own datasets
 - [Code Blocks](docs/guides/code-blocks.md) — Write custom forward() logic
-- [The Assistant](docs/guides/assistant.md) — Ask about your model, shape errors and runs
+- [The Assistant](docs/guides/assistant.md) — Ask about your model and runs, or have it make changes you review
 - [Training Guide](docs/guides/training.md) — Training settings, the run flow, comparing runs, and trying a model
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures

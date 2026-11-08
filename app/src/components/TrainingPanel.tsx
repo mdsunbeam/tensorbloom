@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useMemo, useRef, useEffect, useId } from "react";
+import { OPTIMIZERS, SCHEDULERS, LOSSES, DEVICES } from "../lib/training-options";
 import { useReactFlow } from "@xyflow/react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
@@ -16,16 +17,12 @@ import {
   isDatasetNode,
 } from "../lib/dataset-metadata";
 
-const OPTIMIZERS = ["SGD", "Adam", "AdamW", "RMSprop", "Adadelta", "Adagrad"];
-const SCHEDULERS = ["None", "StepLR", "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "ExponentialLR"];
-const LOSSES = ["CrossEntropyLoss", "MSELoss", "BCEWithLogitsLoss", "L1Loss", "NLLLoss", "HuberLoss"];
 const DATASETS = [
   "CIFAR10", "CIFAR100", "MNIST", "FashionMNIST",
   "TinyShakespeare", "WikiText2", "IMDB", "AGNews",
   "SpeechCommands",
   "ImageFolder", "Custom CSV", "HuggingFace",
 ];
-const DEVICES = ["auto", "cpu", "cuda:0", "cuda:1"];
 const WEIGHT_INITS = ["default", "xavier_uniform", "xavier_normal", "kaiming_uniform", "kaiming_normal", "orthogonal"];
 
 export default function TrainingPanel() {

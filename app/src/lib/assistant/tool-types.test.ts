@@ -26,3 +26,12 @@ describe("closestNames", () => {
     expect(closestNames("Convolution2D", ["Linear", "Conv2d", "ReLU"])[0]).toBe("Conv2d");
   });
 });
+
+describe("validateInput with several types", () => {
+  it("accepts any of them", () => {
+    const s = { type: "object", properties: { clip: { type: ["number", "null"] } } };
+    expect(validateInput(s, { clip: null })).toBeNull();
+    expect(validateInput(s, { clip: 1.5 })).toBeNull();
+    expect(validateInput(s, { clip: "x" })).toBe("input.clip must be a number, or input.clip must be null");
+  });
+});
