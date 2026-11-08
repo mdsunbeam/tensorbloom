@@ -5,7 +5,8 @@
  */
 
 import { create } from "zustand";
-import type { LLMSpec, LLMDevice, Precision } from "../lib/llm";
+import type { LLMSpec, LLMDevice, Precision, FinetuneSettings } from "../lib/llm";
+import { DEFAULT_FINETUNE } from "../lib/llm";
 
 export interface LoadedModel {
   name: string;
@@ -50,6 +51,10 @@ interface LLMState {
   systemPrompt: string;
   maxNewTokens: number;
   temperature: number;
+  /** Dataset and LoRA settings for fine-tuning, saved with the project */
+  finetune: FinetuneSettings;
+  /** Which part of the Language model tab is showing */
+  view: "overview" | "chat" | "finetune";
 
   setSpec: (spec: LLMSpec | null) => void;
   setHfToken: (token: string) => void;
@@ -70,9 +75,11 @@ export const useLLMStore = create<LLMState>((set) => ({
   systemPrompt: "",
   maxNewTokens: 512,
   temperature: 0.7,
+  finetune: DEFAULT_FINETUNE,
+  view: "overview",
 
   // A different model starts a fresh chat
-  setSpec: (spec) => set((s) => (s.spec?.name === spec?.name ? { spec } : { spec, chat: [], loadError: null })),
+  setSpec: (spec) => set((s) => (s.spec?.name === spec?.name ? { spec } : { spec, chat: [], loadError: null, finetune: DEFAULT_FINETUNE, view: "overview" })),
   setHfToken: (hfToken) => set({ hfToken }),
   setDevice: (device) => set({ device }),
 }));
