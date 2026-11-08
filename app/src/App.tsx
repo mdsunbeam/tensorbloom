@@ -19,6 +19,8 @@ import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
 import AssistantPanel from "./components/assistant/AssistantPanel";
+import LessonPanel from "./components/LessonPanel";
+import { useLessonStore } from "./store/lesson-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -29,6 +31,7 @@ const ExportDialog = lazy(() => import("./components/ExportDialog"));
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
 const TryModelDialog = lazy(() => import("./components/TryModelDialog"));
 const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
+const LessonsDialog = lazy(() => import("./components/LessonsDialog"));
 const AboutDialog = lazy(() => import("./components/AboutDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
@@ -69,6 +72,7 @@ export default function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
+  const [lessonsOpen, setLessonsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
@@ -245,6 +249,7 @@ export default function App() {
     if (!(await confirmDiscardChanges("importing this code"))) return false;
     try {
       const { nodes, edges } = compiledToGraph(await sidecarCall<CompiledGraph>("compile", { code }));
+      useLessonStore.getState().exit();
       replaceGraph(nodes, edges, "Imported Model");
       useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
@@ -264,6 +269,7 @@ export default function App() {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
+    useLessonStore.getState().exit();
     const { nodes, edges } = templateGraph(tpl);
     replaceGraph(nodes, edges, tpl.name);
     if (tpl.trainingDefaults) {
@@ -334,6 +340,7 @@ export default function App() {
         onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
         onShowShortcuts={() => setShortcutsOpen(true)}
         onShowGettingStarted={() => setGettingStartedOpen(true)}
+        onShowLessons={() => setLessonsOpen(true)}
         onShowAbout={() => setAboutOpen(true)}
         gpuInfo={gpuInfo}
       />
@@ -361,6 +368,7 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
             <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
+            <LessonPanel onShowLessons={() => setLessonsOpen(true)} />
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
               {recovered && (
@@ -383,6 +391,7 @@ export default function App() {
                     onShowImport={() => setImportOpen(true)}
                     onAddData={addDataNode}
                     onShowGettingStarted={() => setGettingStartedOpen(true)}
+                    onShowLessons={() => setLessonsOpen(true)}
                   />
                 </div>
               )}
@@ -506,7 +515,8 @@ export default function App() {
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
-        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} />}
+        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} onShowLessons={() => setLessonsOpen(true)} />}
+        {lessonsOpen && <LessonsDialog open={lessonsOpen} onClose={() => setLessonsOpen(false)} />}
         {aboutOpen && <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} gpuInfo={gpuInfo} />}
         {customBlockOpen && <CustomBlockDialog open={customBlockOpen} onClose={() => setCustomBlockOpen(false)} />}
         {compareOpen && compareModel && <CompareDialog open={compareOpen} onClose={() => setCompareOpen(false)}
