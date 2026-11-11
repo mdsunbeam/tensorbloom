@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { trackTryItOpened } from "../lib/usage-milestones";
 import Dialog from "./ui/Dialog";
 import Button from "./ui/Button";
 import Segmented from "./ui/Segmented";
@@ -51,6 +52,8 @@ export default function TryModelDialog({ runId, onClose }: { runId: string | nul
   const request = useRef(0);
 
   const weights = run ? runWeights(run, liveRunId) : null;
+
+  useEffect(() => trackTryItOpened(), []);
 
   const predict = useCallback(async (extra: Record<string, unknown>) => {
     if (!run || !weights) throw new Error("This run's weights weren't kept.");

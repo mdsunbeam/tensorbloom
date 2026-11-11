@@ -10,7 +10,9 @@ import { newProject, openProject, saveProject, groupSelection, ungroupSelection 
 import { useEscapeKey } from "../lib/use-escape-key";
 import RunControls from "./RunControls";
 import { openExternal } from "../lib/open-external";
-import { LINKS } from "../lib/links";
+import { LINKS, feedbackUrl } from "../lib/links";
+import { osName } from "../lib/usage";
+import { version } from "../../package.json";
 import ProblemsButton from "./ProblemsButton";
 import { IconButton } from "./ui/Button";
 import { LogoMark, Wordmark } from "./ui/Logo";
@@ -113,6 +115,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { type: "separator" },
         { label: "TensorBloom Docs", external: true, action: () => void openExternal(LINKS.docs) },
         { label: "PyTorch Layer Reference", external: true, action: () => void openExternal(LINKS.pytorchReference) },
+        { label: "Send Feedback", external: true, action: () => void openExternal(feedbackUrl(version, osName())) },
         { label: "Report a Problem", external: true, action: () => void openExternal(LINKS.newIssue) },
         { type: "separator" },
         { label: "Check for Updates…", action: () => void useUpdateStore.getState().check({ manual: true }) },

@@ -22,6 +22,8 @@ import LessonPanel from "./components/LessonPanel";
 import { useLessonStore } from "./store/lesson-store";
 import UpdateBanner from "./components/UpdateBanner";
 import { useUpdateStore } from "./store/update-store";
+import UsageConsentBanner from "./components/UsageConsentBanner";
+import { startUsageMilestones } from "./lib/usage-milestones";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -100,6 +102,8 @@ export default function App() {
   useEffect(() => {
     void useUpdateStore.getState().check();
   }, []);
+  // Opt-in usage events; nothing is sent unless the user said yes
+  useEffect(() => startUsageMilestones(), []);
 
   // Check for Python in the background. The editor doesn't wait for it; training does.
   useEffect(() => {
@@ -378,6 +382,7 @@ export default function App() {
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
               <UpdateBanner />
+              <UsageConsentBanner />
               {recovered && (
                 <RecoveryBanner
                   data={recovered}
