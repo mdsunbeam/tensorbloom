@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, useRef, useEffect, useId } from "react";
-import { OPTIMIZERS, SCHEDULERS, LOSSES, DEVICES } from "../lib/training-options";
+import { OPTIMIZERS, SCHEDULERS, LOSSES } from "../lib/training-options";
 import { useReactFlow } from "@xyflow/react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
