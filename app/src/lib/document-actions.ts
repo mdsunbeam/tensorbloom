@@ -15,6 +15,8 @@ import { normalizeGroups, type LayerGroup } from "./groups";
 import type { LLMSpec } from "./llm";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
 import { clearAutoSave, type AutoSaveData } from "./auto-save";
+import { templateGraph, templateGroups, type Template } from "./templates";
+import { useTrainingStore } from "../store/training-store";
 import { askToSaveChanges } from "../components/ConfirmDialog";
 import { toast } from "../components/Toast";
 
@@ -45,7 +47,7 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
   }
   useDocumentStore.getState().markSaved(result.path);
   clearAutoSave();
-  toast.success("Project saved");
+  toast.success(result.path ? "Project saved" : "Project downloaded as a .tbloom file");
   return true;
 }
 
@@ -57,6 +59,27 @@ export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName
   useLLMStore.getState().setSpec(llm);
   useGraphStore.getState().loadGraph(nodes, edges, groups);
   useGraphStore.getState().setProjectName(projectName);
+}
+
+/** Opens a template in place of the graph, with its stages as collapsed groups and its training defaults. Doesn't ask first. */
+export function applyTemplate(tpl: Template) {
+  const { nodes, edges } = templateGraph(tpl);
+  const groups = templateGroups(tpl, nodes);
+  replaceGraph(nodes, edges, tpl.name, groups);
+  // Collapse after loading, so each fold moves the layers below it up
+  for (const g of groups) useGraphStore.getState().setGroupCollapsed(g.id, true);
+  if (tpl.trainingDefaults) {
+    const d = tpl.trainingDefaults;
+    useTrainingStore.getState().applyTemplateDefaults(tpl.name, {
+      ...(d.optimizer && { optimizer: { ...useTrainingStore.getState().config.optimizer, ...d.optimizer } }),
+      ...(d.loss && { loss: d.loss }),
+      ...(d.epochs != null && { epochs: d.epochs }),
+      ...(d.batchSize != null && { batchSize: d.batchSize }),
+      ...(d.dataset && { dataset: d.dataset }),
+    });
+  }
+  // A fresh template has nothing to lose until it's edited
+  useDocumentStore.getState().markSaved(null);
 }
 
 export async function newProject() {

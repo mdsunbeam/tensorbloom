@@ -15,7 +15,7 @@ export default function AboutDialog({ open, onClose, gpuInfo }: { open: boolean;
 
   const rows: [string, string][] = [
     ["Version", version],
-    ["Python", env?.pythonVersion || (pythonStatus === "ready" ? "Installed" : "Not set up")],
+    ["Python", env?.pythonVersion || (pythonStatus === "ready" ? "Installed" : pythonStatus === "web" ? "Desktop app only" : "Not set up")],
     ["PyTorch", env?.torchVersion || "–"],
     ["CUDA", env ? (env.cudaVersion ?? "None") : "–"],
     ["GPU", env?.gpuName ?? gpuInfo ?? "–"],

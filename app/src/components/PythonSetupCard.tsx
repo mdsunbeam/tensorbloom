@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { usePythonStore, gpuUpgradeAvailable } from "../store/python-store";
 import { useGraphStore } from "../store/graph-store";
 import { startTraining } from "../lib/training";
+import { openExternal } from "../lib/open-external";
+import { saveProject } from "../lib/document-actions";
+import { LINKS } from "../lib/links";
 import Button, { IconButton } from "./ui/Button";
 
 function formatBytes(n: number): string {
@@ -49,7 +52,26 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
   let body: React.ReactNode;
   let actions: React.ReactNode;
 
-  if (view === "checking") {
+  if (view === "web") {
+    // The web version: no Python here, so whatever needed it points to the desktop app
+    // "Exporting needs Python." → "Exporting needs the desktop app"
+    title = reason ? reason.replace(/Python\.?$/, "the desktop app") : "Training runs in the desktop app";
+    body = (
+      <>
+        <p className="text-fg-secondary leading-relaxed">
+          This web version builds models, checks shapes and writes the PyTorch code, all in your browser.
+          To train, import code or export to ONNX, download TensorBloom for Windows, macOS or Linux.
+        </p>
+        {hasNodes && <p className="text-fg-muted mt-1.5">Save this model first, then open the file in the app.</p>}
+      </>
+    );
+    actions = (
+      <>
+        {hasNodes && <Button size="sm" onClick={() => void saveProject()}>Save model</Button>}
+        <Button size="sm" variant="primary" onClick={() => void openExternal(LINKS.releases)}>Download the app</Button>
+      </>
+    );
+  } else if (view === "checking") {
     title = "Checking for Python";
     body = <p className="text-fg-secondary">One moment…</p>;
     actions = null;
@@ -152,7 +174,7 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
 
   return (
     <section
-      aria-label="Python setup"
+      aria-label={status === "web" ? "Desktop app" : "Python setup"}
       className={`rounded-xl bg-surface border border-line text-[11px] overflow-hidden pointer-events-auto ${
         placement === "floating" ? "absolute top-3 right-3 z-20 w-[340px]" : "w-full max-w-[520px] flex-shrink-0"
       }`}

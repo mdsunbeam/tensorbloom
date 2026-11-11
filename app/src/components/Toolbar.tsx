@@ -11,6 +11,8 @@ import { useEscapeKey } from "../lib/use-escape-key";
 import RunControls from "./RunControls";
 import { openExternal } from "../lib/open-external";
 import { LINKS } from "../lib/links";
+import { copyShareLink } from "../lib/share";
+import { IS_WEB } from "../lib/platform";
 import ProblemsButton from "./ProblemsButton";
 import { IconButton } from "./ui/Button";
 import { LogoMark, Wordmark } from "./ui/Logo";
@@ -29,10 +31,13 @@ interface ToolbarProps {
   onShowGettingStarted: () => void;
   onShowLessons: () => void;
   onShowAbout: () => void;
+  /** Hides every panel, or brings them back */
+  onToggleFocus: () => void;
+  focused: boolean;
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates, onShowExport, onShowDiagram, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowLessons, onShowAbout, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates, onShowExport, onShowDiagram, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowLessons, onShowAbout, onToggleFocus, focused, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -73,6 +78,7 @@ export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates
         { label: "Open Project...", shortcut: "Ctrl+O", action: openProject },
         { label: "Save", shortcut: "Ctrl+S", action: () => saveProject() },
         { label: "Save As...", shortcut: "Ctrl+Shift+S", action: () => saveProject({ saveAs: true }) },
+        { label: "Copy Share Link", action: () => void copyShareLink() },
         { type: "separator" },
         { label: "Import PyTorch Code...", shortcut: "Ctrl+I", action: onShowImport },
         { label: "Import Language Model...", action: onShowImportLLM },
@@ -103,6 +109,7 @@ export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates
     {
       label: "View", id: "view", items: [
         { label: "Auto-Layout", shortcut: "Ctrl+L", action: handleAutoLayout },
+        { label: focused ? "Show Panels" : "Focus on Canvas", shortcut: "Ctrl+\\", action: onToggleFocus },
         { type: "separator" },
         { label: `${theme === "dark" ? "Light" : "Dark"} Theme`, action: toggleTheme },
       ],
@@ -196,6 +203,15 @@ export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates
             {/* The full name is in the tooltip; the vendor prefix only takes room */}
             <span className="text-[11px] tabular-nums whitespace-nowrap truncate text-fg-muted">{gpuInfo.replace(/^NVIDIA (GeForce )?|^AMD (Radeon )?/, "")}</span>
           </div>
+        )}
+        {IS_WEB && (
+          <button
+            onClick={() => void openExternal(LINKS.releases)}
+            className="px-2 h-7 text-[11px] rounded-md whitespace-nowrap text-fg-secondary hover:bg-surface-raised hover:text-fg transition-colors"
+            title="This web version builds and checks models. The desktop app also trains them."
+          >
+            Get the desktop app
+          </button>
         )}
         <RunControls onShowRun={onShowRun} />
         <IconButton label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} onClick={toggleTheme} className="text-fg-muted">

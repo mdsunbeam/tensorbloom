@@ -1,6 +1,6 @@
 # TensorBloom
 
-**[tensorbloom.org](https://tensorbloom.org)** · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
+**[tensorbloom.org](https://tensorbloom.org)** · [Try it in your browser](https://tensorbloom.org/app/) · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
 
 Build, train, and export PyTorch neural networks visually. Drag-and-drop layers, connect them, train on real datasets with GPU acceleration, and export to ONNX or TorchScript — all without writing boilerplate code.
 
@@ -232,6 +232,17 @@ npx tauri build
 ```
 
 Produces platform-specific installers in `app/src-tauri/target/release/bundle/`.
+
+### Web version
+
+The same app runs in a plain browser with no install. Building, shape checking, code generation, saving (as a download) and share links work there; training, code import and ONNX export point to the desktop app, because they need Python.
+
+```bash
+cd app
+npm run build:web   # static files in app/dist-web, served from /app/
+```
+
+Links can open a model: `/app/?template=resnet-18` opens a template (its name in lowercase, with dashes), and File > Copy Share Link packs the current model into the link's `#m=` fragment, so nothing is stored on a server.
 
 ## Contributing
 

@@ -47,10 +47,11 @@ import { useHistoryStore, startHistoryTracking } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
 import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
-import { TEMPLATES, templateGraph } from "./lib/templates";
+import { TEMPLATES } from "./lib/templates";
+import { packedModelFromHash, decodeModel, templateSlug } from "./lib/share";
 import { buildLLMGraph, type LLMSpec } from "./lib/llm";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
-import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
+import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection, applyTemplate } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
 import { compiledToGraph, type CompiledGraph } from "./lib/compiled-graph";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
@@ -70,7 +71,7 @@ export default function App() {
   const logCount = useTrainingStore((s) => s.logs.length);
   const runCount = useRunStore((s) => s.runs.length);
   const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280, llm: 320 });
-  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(() => readLayout().bottom);
   const [bottomTab, setBottomTab] = useState<BottomTab>("code");
   const llmSpec = useLLMStore((s) => s.spec);
   // The language model tab only exists for an imported model
@@ -89,8 +90,10 @@ export default function App() {
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [tryRunId, setTryRunId] = useState<string | null>(null);
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(() => readLayout().left);
+  const [rightPanelOpen, setRightPanelOpen] = useState(() => readLayout().right);
+  // Focus on the canvas: every panel hidden, and the layout from before it to go back to
+  const [focusRestore, setFocusRestore] = useState<{ left: boolean; right: boolean; bottom: boolean } | null>(null);
   const [rightView, setRightView] = useState<RightView>("properties");
   const rightWidth = rightPanelOpen ? RIGHT_WIDTH[rightView] : 36;
   const [minimapVisible, setMinimapVisible] = useState(true);
@@ -103,6 +106,21 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Remember which panels are open, so the canvas keeps the room it was given (not while focusing)
+  useEffect(() => {
+    if (!focusRestore) writeLayout({ left: leftPanelOpen, right: rightPanelOpen, bottom: bottomPanelOpen });
+  }, [leftPanelOpen, rightPanelOpen, bottomPanelOpen, focusRestore]);
+
+  const toggleFocus = useCallback(() => {
+    if (focusRestore) {
+      setLeftPanelOpen(focusRestore.left); setRightPanelOpen(focusRestore.right); setBottomPanelOpen(focusRestore.bottom);
+      setFocusRestore(null);
+    } else {
+      setFocusRestore({ left: leftPanelOpen, right: rightPanelOpen, bottom: bottomPanelOpen });
+      setLeftPanelOpen(false); setRightPanelOpen(false); setBottomPanelOpen(false);
+    }
+  }, [focusRestore, leftPanelOpen, rightPanelOpen, bottomPanelOpen]);
 
   // Restore custom blocks from localStorage on startup
   useEffect(() => {
@@ -146,6 +164,34 @@ export default function App() {
     const stopDirty = startDirtyTracking();
     const stopAutoSave = startAutoSave();
     return () => { stopHistory(); stopDirty(); stopAutoSave(); };
+  }, []);
+
+  // A link can open a model: "#m=…" from Share Link, or "?template=resnet-18" from the website
+  useEffect(() => {
+    void (async () => {
+      const packed = packedModelFromHash(location.hash);
+      if (packed) {
+        const model = await decodeModel(packed);
+        if (model) {
+          replaceGraph(model.nodes, model.edges, model.name, model.groups);
+          if (model.training) useTrainingStore.getState().updateConfig(model.training);
+          useDocumentStore.getState().markSaved(null);
+          setRecovered(null);
+        } else {
+          toast.warning("This link's model couldn't be read. It may have been cut short when it was copied.");
+        }
+        // Edits aren't written back to the link, so drop it to keep a reload from undoing them
+        history.replaceState(null, "", location.pathname + location.search);
+        return;
+      }
+      const slug = new URLSearchParams(location.search).get("template");
+      const tpl = slug ? TEMPLATES.find((t) => templateSlug(t.name) === slug) : undefined;
+      if (tpl) {
+        applyTemplate(tpl);
+        setRecovered(null);
+        history.replaceState(null, "", location.pathname + location.hash);
+      }
+    })();
   }, []);
 
   // Window title, with a dot while there are unsaved changes
@@ -246,6 +292,7 @@ export default function App() {
         setRightView((v) => (v === "assistant" ? "properties" : "assistant"));
       }
       else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
+      else if (ctrl && key === "\\") { e.preventDefault(); toggleFocus(); }
       else if (ctrl && key === "enter") {
         // Not while typing or while a dialog is open, where Enter belongs to the field or the dialog
         if (editable || document.querySelector('[aria-modal="true"]')) return;
@@ -255,7 +302,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [toggleFocus]);
 
   const handleAutoLayout = useCallback(() => {
     const { nodes, edges } = useGraphStore.getState();
@@ -318,20 +365,7 @@ export default function App() {
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
     useLessonStore.getState().exit();
-    const { nodes, edges } = templateGraph(tpl);
-    replaceGraph(nodes, edges, tpl.name);
-    if (tpl.trainingDefaults) {
-      const d = tpl.trainingDefaults;
-      useTrainingStore.getState().applyTemplateDefaults(tpl.name, {
-        ...(d.optimizer && { optimizer: { ...useTrainingStore.getState().config.optimizer, ...d.optimizer } }),
-        ...(d.loss && { loss: d.loss }),
-        ...(d.epochs != null && { epochs: d.epochs }),
-        ...(d.batchSize != null && { batchSize: d.batchSize }),
-        ...(d.dataset && { dataset: d.dataset }),
-      });
-    }
-    // A fresh template has nothing to lose until it's edited
-    useDocumentStore.getState().markSaved(null);
+    applyTemplate(tpl);
   }, []);
 
   // From the welcome card: a Data node to build from, selected so its source can be picked
@@ -392,6 +426,8 @@ export default function App() {
         onShowGettingStarted={() => setGettingStartedOpen(true)}
         onShowLessons={() => setLessonsOpen(true)}
         onShowAbout={() => setAboutOpen(true)}
+        onToggleFocus={toggleFocus}
+        focused={focusRestore !== null}
         gpuInfo={gpuInfo}
       />
 
@@ -646,3 +682,25 @@ function CollapsedSideBar({ label, side, onClick }: { label: string; side: "left
   );
 }
 
+
+const LAYOUT_KEY = "tensorbloom-layout";
+
+/** Which panels start open. The canvas comes first: the layer list and the bottom dock start closed (Ctrl+K adds layers). */
+function readLayout(): { left: boolean; right: boolean; bottom: boolean } {
+  const fallback = { left: false, right: true, bottom: false };
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
+    if (!raw || typeof raw !== "object") return fallback;
+    return {
+      left: typeof raw.left === "boolean" ? raw.left : fallback.left,
+      right: typeof raw.right === "boolean" ? raw.right : fallback.right,
+      bottom: typeof raw.bottom === "boolean" ? raw.bottom : fallback.bottom,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLayout(layout: { left: boolean; right: boolean; bottom: boolean }) {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* storage off; the default layout is fine */ }
+}
