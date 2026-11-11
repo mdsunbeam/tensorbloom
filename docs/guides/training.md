@@ -205,6 +205,31 @@ Detailed per-epoch output including:
 
 Lines from stderr have a warning mark in the gutter.
 
+## Training on the Graph
+
+While a model trains, the graph shows what training is doing to each layer. Every 50 batches the app records each layer's outputs and the gradient flowing back into it, and colors the layers on the canvas. The **Training on the graph** card at the top left of the canvas picks what the color shows:
+
+- **Gradients**: how big the gradient reaching each layer is, on a log scale from the smallest to the largest across the model. Each layer reads, for example, "grad 3.1e-4".
+- **Activations**: how spread out each layer's outputs are (their standard deviation, σ). Activation layers also show how many of their units are dead.
+- **Off** hides it all.
+
+Layers whose numbers look wrong get a warning mark and a line saying what's wrong:
+
+| Mark | Means |
+|---|---|
+| **NaN or infinity** | The layer's outputs or gradients hold NaN or infinite values: training has broken down. |
+| **N% dead** | That share of an activation layer's units gave zero for every sample in the batch, so they pass no gradient back and stop learning. Marked from 25%. |
+| **Vanishing gradient** | The gradient reaching the layer is under 1/100 of the typical layer's (the median across the model), or zero. |
+| **Exploding gradient** | The gradient reaching the layer is over 100 times the typical layer's. |
+
+The card lists every marked layer; click one to jump to it. A collapsed group counts the marked layers inside it.
+
+**Hover a layer** for its details: what each warning means and what to try, the gradient over the run so far, a histogram of its outputs for one batch, and, for layers whose output is an image (convolutions and the like), the first 8 feature maps for one validation sample, next to that sample. Feature maps are taken at the end of every epoch.
+
+![Each layer colored by its gradient, with conv2's details on hover](../screenshot-layer-stats.png)
+
+Each run keeps its last stats and each layer's history, so they come back when the project is opened again or the run is restored. Feature maps last until the app closes. When the model has changed since the run, the card says so.
+
 ## Comparing Runs
 
 Every run that gets through at least one epoch is kept, and so is a run that fails. Each record holds the run's per-epoch loss and accuracy, its results, its training settings, and the graph it trained. The last 30 runs are saved in the project file and the auto-save.
