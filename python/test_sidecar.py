@@ -226,6 +226,37 @@ except ValueError as e:
     check("trying with no trained weights is refused", "No trained weights" in str(e), str(e))
 sc._load_dataset = _real_load
 
+# --- Causal decoder blocks (nanoGPT) ---
+print("Causal decoder")
+torch.manual_seed(0)
+dec = sc.build_module("TransformerDecoderLayer", {"d_model": 16, "nhead": 2, "dim_feedforward": 32,
+                                                  "dropout": 0.0, "batch_first": True, "norm_first": True})
+dec.eval()
+x = torch.randn(1, 6, 16)
+x_changed = x.clone()
+x_changed[:, 4:] = torch.randn(1, 2, 16)
+with torch.no_grad():
+    y, y_changed = dec(x), dec(x_changed)
+check("changing later tokens leaves earlier outputs alone", torch.allclose(y[:, :4], y_changed[:, :4], atol=1e-6))
+check("later outputs still change", not torch.allclose(y[:, 4:], y_changed[:, 4:]))
+memory = torch.randn(1, 3, 16)
+with torch.no_grad():
+    check("a connected memory is attended to", not torch.allclose(dec(x, memory), dec(x, torch.randn(1, 3, 16))))
+code = sc.decompile_graph({
+    "nodes": [{"id": "inp", "type": "placeholder", "moduleType": "Input", "label": "Input", "params": {}},
+              {"id": "b", "type": "call_module", "moduleType": "TransformerDecoderLayer", "label": "block",
+               "params": {"d_model": 16, "nhead": 2, "dim_feedforward": 32, "dropout": 0.0, "batch_first": True, "norm_first": True}},
+              {"id": "out", "type": "output", "moduleType": "Output", "label": "Output", "params": {}}],
+    "edges": [{"source": "inp", "target": "b"}, {"source": "b", "target": "out"}],
+})
+ns = {}
+exec(code, ns)
+gen = ns["Model"]()
+gen.block.load_state_dict(dec.layer.state_dict())
+gen.eval()
+with torch.no_grad():
+    check("generated code matches the trained model", torch.allclose(gen(x), y, atol=1e-5))
+
 print()
 if failures:
     print(f"{len(failures)} failed: {', '.join(failures)}")

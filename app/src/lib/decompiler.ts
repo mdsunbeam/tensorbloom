@@ -16,6 +16,19 @@ interface DecompileResult {
 /** Functional ops that don't need __init__ */
 const FUNCTIONAL_OPS = new Set(["Add", "Concatenate", "MatMul"]);
 
+/**
+ * Forward lines for a TransformerDecoderLayer used as a causal (GPT-style) block.
+ * Matches the sidecar: self-attention is always causal (position t only attends
+ * to positions <= t). With no memory connected, the input is also the memory and
+ * cross-attention gets the same mask.
+ */
+export function causalDecoderLines(myVar: string, x: string, params: Record<string, unknown>, memory?: string): string[] {
+  const seqDim = params.batch_first === false ? 0 : -2;
+  const maskLine = `${myVar}_mask = torch.ones(${x}.size(${seqDim}), ${x}.size(${seqDim}), dtype=torch.bool, device=${x}.device).triu(1)`;
+  if (memory) return [maskLine, `${myVar} = self.${myVar}(${x}, ${memory}, tgt_mask=${myVar}_mask)`];
+  return [maskLine, `${myVar} = self.${myVar}(${x}, ${x}, tgt_mask=${myVar}_mask, memory_mask=${myVar}_mask)`];
+}
+
 /** Edge with handle info for code block awareness */
 interface IncomingEdge {
   sourceNodeId: string;
@@ -135,6 +148,13 @@ export function generateNodeSnippet(
   } else if (mt === "MatMul") {
     const vars = inputVars.length >= 2 ? inputVars : ["x", "y"];
     forwardExpr = `${myVar} = torch.matmul(${vars[0]}, ${vars[1]})`;
+  } else if (mt === "TransformerDecoderLayer") {
+    const incoming = edges.filter((e) => e.target === node.id);
+    const xEdge = incoming.find((e) => e.targetHandle !== "memory");
+    const memEdge = incoming.find((e) => e.targetHandle === "memory");
+    const xVar = xEdge ? varNames.get(xEdge.source) ?? "x" : "x";
+    const memVar = memEdge ? varNames.get(memEdge.source) : undefined;
+    forwardExpr = causalDecoderLines(myVar, xVar, node.data.params, memVar).join("\n");
   } else {
     const inputStr = inputVars.length > 0 ? inputVars.join(", ") : "x";
     forwardExpr = `${myVar} = self.${myVar}(${inputStr})`;
@@ -323,6 +343,14 @@ export function decompileGraph(
     } else if (mt === "MatMul") {
       if (inputVars.length >= 2) {
         forwardLines.push(`        ${myVar} = torch.matmul(${inputVars[0]}, ${inputVars[1]})`);
+      }
+    } else if (mt === "TransformerDecoderLayer") {
+      const xEdge = incomingEdges.find((e) => e.targetHandle !== "memory");
+      const memEdge = incomingEdges.find((e) => e.targetHandle === "memory");
+      const xVar = xEdge ? resolveInputVar(xEdge) : "x";
+      const memVar = memEdge ? resolveInputVar(memEdge) : undefined;
+      for (const line of causalDecoderLines(myVar, xVar, n.data.params, memVar)) {
+        forwardLines.push(`        ${line}`);
       }
     } else {
       const inputStr = inputVars.length > 0 ? inputVars.join(", ") : "x";

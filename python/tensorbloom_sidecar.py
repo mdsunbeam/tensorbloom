@@ -99,12 +99,25 @@ class _LSTMExtract(nn.Module):
         return out
 
 class _TransformerDecoderSelfAttn(nn.Module):
-    """Wraps TransformerDecoderLayer for self-attention (uses input as both tgt and memory)."""
+    """Wraps TransformerDecoderLayer as a GPT-style causal block.
+
+    The input is used as both tgt and memory, so both attention steps get the
+    same causal mask: position t may only attend to positions <= t. Without it
+    the layer sees future tokens and a language model trained on it cannot
+    generate text.
+    """
     def __init__(self, layer):
         super().__init__()
         self.layer = layer
-    def forward(self, x):
-        return self.layer(x, x)
+        self.batch_first = getattr(layer.self_attn, "batch_first", False)
+    def forward(self, x, memory=None):
+        seq_dim = 1 if (x.dim() == 3 and self.batch_first) else 0
+        t = x.size(seq_dim)
+        mask = torch.triu(torch.ones(t, t, dtype=torch.bool, device=x.device), diagonal=1)
+        if memory is not None:
+            # Encoder-decoder use: causal self-attention, full cross-attention to the encoder output
+            return self.layer(x, memory, tgt_mask=mask)
+        return self.layer(x, x, tgt_mask=mask, memory_mask=mask)
 
 SPECIAL_CONSTRUCTORS = {
     "AdaptiveAvgPool2d": lambda p: nn.AdaptiveAvgPool2d(
@@ -292,6 +305,19 @@ def _qualified_name(fn) -> str:
 # Decompiler: graph JSON -> PyTorch code
 # ---------------------------------------------------------------------------
 
+def _causal_decoder_lines(var_name: str, x: str, params: dict, memory: str | None = None) -> list[str]:
+    """Forward lines for a TransformerDecoderLayer, matching _TransformerDecoderSelfAttn.
+
+    Self-attention is always causal (position t only sees positions <= t). With no
+    memory connected, the input is also the memory and cross-attention gets the same mask.
+    """
+    seq_dim = 0 if params.get("batch_first") is False else -2
+    mask_line = f"        {var_name}_mask = torch.ones({x}.size({seq_dim}), {x}.size({seq_dim}), dtype=torch.bool, device={x}.device).triu(1)"
+    if memory:
+        return [mask_line, f"        {var_name} = self.{var_name}({x}, {memory}, tgt_mask={var_name}_mask)"]
+    return [mask_line, f"        {var_name} = self.{var_name}({x}, {x}, tgt_mask={var_name}_mask, memory_mask={var_name}_mask)"]
+
+
 def decompile_graph(graph_json: dict) -> str:
     """Convert visual graph JSON to clean PyTorch code."""
     nodes = graph_json["nodes"]
@@ -435,6 +461,12 @@ def decompile_graph(graph_json: dict) -> str:
                 forward_lines.append(f"        {var_name} = torch.matmul({input_vars[0]}, {input_vars[1]})")
             else:
                 forward_lines.append(f"        {var_name} = {', '.join(input_vars) if input_vars else 'x'}")
+        elif mt == "TransformerDecoderLayer":
+            x_edge = next((d for d in detail if d["targetHandle"] != "memory"), None)
+            mem_edge = next((d for d in detail if d["targetHandle"] == "memory"), None)
+            x_var = _resolve_var(x_edge["source"], x_edge["sourceHandle"]) if x_edge else "x"
+            mem_var = _resolve_var(mem_edge["source"], mem_edge["sourceHandle"]) if mem_edge else None
+            forward_lines.extend(_causal_decoder_lines(var_name, x_var, n.get("params", {}), mem_var))
         else:
             input_vars = [_resolve_var(d["source"], d["sourceHandle"]) for d in detail]
             input_str = ", ".join(input_vars) if input_vars else "x"
@@ -791,6 +823,8 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
         # Standard nodes
         inputs = []
         detail = adj_detailed.get(nid, [])
+        # A decoder layer's memory input is its second argument, whatever order the edges were drawn in
+        detail = sorted(detail, key=lambda d: d["targetHandle"] == "memory")
         for d in detail:
             src_id = d["source"]
             src_handle = d["sourceHandle"]
