@@ -36,6 +36,13 @@ export function onSidecarNotification(method: string, listener: NotificationList
   return () => { set.delete(listener); };
 }
 
+let onTrainLayers: ProgressCallback | null = null;
+
+/** Per-layer stats and feature maps from the run in progress */
+export function setTrainLayersCallback(cb: ProgressCallback | null) {
+  onTrainLayers = cb;
+}
+
 type LogCallback = (params: { text: string; stream: "stdout" | "stderr" }) => void;
 let onTrainLog: LogCallback | null = null;
 
@@ -65,6 +72,9 @@ function handleStdoutLine(line: string) {
       }
       if (msg.method === "train.progress" && onTrainProgress) {
         onTrainProgress(msg.params);
+      }
+      if (msg.method === "train.layers" && onTrainLayers) {
+        onTrainLayers(msg.params);
       }
       if (msg.method === "train.log" && onTrainLog) {
         onTrainLog(msg.params as { text: string; stream: "stdout" | "stderr" });

@@ -11,7 +11,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - **See your architecture** — No more debugging invisible dimension mismatches in code. The graph shows every layer, every connection, and every tensor shape.
 - **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection.
 - **See what changed** — Every run is kept, so you can compare runs side by side and try a trained model on samples it never saw.
-- **Learn by doing** — 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
+- **Learn by doing** — 7 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
 - **Real PyTorch underneath** — Every graph generates real `nn.Module` code. Export your model and use it anywhere.
 
 ## Features
@@ -32,6 +32,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 **Training**
 - One-click training (Ctrl+Enter) with a live status in the toolbar: download, epoch progress, and the result
 - Live loss/accuracy charts with a hover readout, and a summary card when the run ends
+- Training shows on the graph: each layer is colored by its gradient size or output spread, flags dead ReLUs and vanishing or exploding gradients, and shows its output histogram and feature maps on hover
 - Plain-language error panel with hints for shape mismatches, out-of-memory, bad labels, missing packages, and more
 - Pre-flight fixes are listed for review (Fix and train, Train without changes, or Cancel) instead of being applied silently
 - 10+ built-in datasets: MNIST, CIFAR-10/100, TinyShakespeare, WikiText-2, IMDB, AG News, SpeechCommands
@@ -43,10 +44,12 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Every run is kept with its curves, settings, and model, saved in the project file
 - The **Runs** tab overlays runs on shared charts and puts their results and settings side by side, highlighting what differs
 - **Restore** brings back a run's graph and settings
+- **Change one thing** starts from a run, tracks what you change, and puts the new run next to it with the graph diff beside the curves
 - **Try it** runs a trained model on validation samples it didn't train on, shows its top guesses, filters to mistakes, or tries your own image
 
 **Help Built In**
 - A welcome card with starter models, a Getting Started guide, and a Help menu
+- Guided lessons (**Help > Lessons**): fix a shape error, find a learning rate, stop overfitting, add BatchNorm, and more. Each starts from a real model and checks each step with hints when you're stuck
 - A "?" next to every layer parameter and training setting explains what it does
 - Each layer links to its PyTorch documentation
 
@@ -120,7 +123,7 @@ Grab the latest installer from the [releases page](https://github.com/mdsunbeam/
 - **Windows** — `.exe` installer or `.msi`
 - **Linux** — `.deb`, `.rpm`, or `.AppImage`
 
-**Requirement:** Python 3.9+ must be installed. The editor opens right away; if PyTorch isn't set up yet, a card on the canvas offers to install it and shows its progress while you keep building.
+Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download.
 
 ### Building from Source
 
@@ -133,7 +136,7 @@ npm install
 npx tauri dev
 ```
 
-Requires Node.js 18+, [Rust](https://rustup.rs/), and Python 3.9+.
+Requires Node.js 18+ and [Rust](https://rustup.rs/). `npx tauri dev` and `npx tauri build` download the [uv](https://github.com/astral-sh/uv) binary that the app bundles to install Python (`app/scripts/fetch-uv.mjs`). Python 3.10+ is only needed to run the Python tests.
 **Windows:** also needs [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 **Linux:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
@@ -212,10 +215,12 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Getting Started](docs/guides/getting-started.md) — Build and train your first model
 - [Custom Data Guide](docs/guides/custom-data.md) — Load your own datasets
 - [Code Blocks](docs/guides/code-blocks.md) — Write custom forward() logic
+- [The Assistant](docs/guides/assistant.md) — Ask about your model and runs, or have it make changes you review
 - [Training Guide](docs/guides/training.md) — Training settings, the run flow, comparing runs, and trying a model
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
 - [Language Models](docs/guides/language-models.md) — Import an LLM, size it for your computer, chat with it, and fine-tune it with LoRA
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures
+- [Lessons](docs/guides/lessons.md) — The guided lessons, and the lesson format for adding your own
 - [Architecture](docs/guides/architecture.md) — Technical internals for contributors
 - [Roadmap](ROADMAP.md) — Planned features and development direction
 

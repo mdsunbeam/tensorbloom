@@ -20,6 +20,11 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
+import AssistantPanel from "./components/assistant/AssistantPanel";
+import LessonPanel from "./components/LessonPanel";
+import { useLessonStore } from "./store/lesson-store";
+import UpdateBanner from "./components/UpdateBanner";
+import { useUpdateStore } from "./store/update-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -32,6 +37,7 @@ const DiagramExportDialog = lazy(() => import("./components/DiagramExportDialog"
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
 const TryModelDialog = lazy(() => import("./components/TryModelDialog"));
 const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
+const LessonsDialog = lazy(() => import("./components/LessonsDialog"));
 const AboutDialog = lazy(() => import("./components/AboutDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
@@ -46,14 +52,16 @@ import { buildLLMGraph, type LLMSpec } from "./lib/llm";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
 import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
-import { MODULE_REGISTRY } from "./lib/registry";
+import { compiledToGraph, type CompiledGraph } from "./lib/compiled-graph";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
-import type { NodeCategory } from "./lib/types";
 import Tabs from "./components/ui/Tabs";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
 type BottomTab = "code" | "charts" | "runs" | "logs" | "llm";
+type RightView = "properties" | "assistant";
+
+const RIGHT_WIDTH: Record<RightView, number> = { properties: 288, assistant: 360 };
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -76,12 +84,15 @@ export default function App() {
   const [diagramOpen, setDiagramOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
+  const [lessonsOpen, setLessonsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [tryRunId, setTryRunId] = useState<string | null>(null);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightView, setRightView] = useState<RightView>("properties");
+  const rightWidth = rightPanelOpen ? RIGHT_WIDTH[rightView] : 36;
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [recovered, setRecovered] = useState<AutoSaveData | null>(null);
   const [gpuInfo, setGpuInfo] = useState<string | null>(null);
@@ -98,6 +109,11 @@ export default function App() {
     restoreCustomBlocks();
   }, []);
 
+  // Look for a newer release in the background; the banner offers it
+  useEffect(() => {
+    void useUpdateStore.getState().check();
+  }, []);
+
   // Check for Python in the background. The editor doesn't wait for it; training does.
   useEffect(() => {
     void usePythonStore.getState().check();
@@ -110,6 +126,7 @@ export default function App() {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke<{ name: string; memory_total_mb: number } | null>("detect_gpu");
         if (result) {
+          usePythonStore.setState({ nvidiaGpu: result.name });
           const mem = result.memory_total_mb ? ` ${Math.round(result.memory_total_mb / 1024)}GB` : "";
           setGpuInfo(`${result.name}${mem}`);
         } else {
@@ -174,6 +191,13 @@ export default function App() {
     return () => { unlisten?.(); window.removeEventListener("beforeunload", onBeforeUnload); };
   }, []);
 
+  // "Ask the assistant" buttons elsewhere open it with their question ready
+  useEffect(() => {
+    const open = () => { setRightView("assistant"); setRightPanelOpen(true); };
+    window.addEventListener("tensorbloom:open-assistant", open);
+    return () => window.removeEventListener("tensorbloom:open-assistant", open);
+  }, []);
+
   // Show the Charts tab when a run starts, or when it can't start
   useEffect(() => {
     if (trainingStatus === "running" || trainingStatus === "starting" || trainingStatus === "error") {
@@ -215,6 +239,12 @@ export default function App() {
       else if (ctrl && key === "a") { e.preventDefault(); useGraphStore.getState().selectAll(); }
       else if (ctrl && key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
       else if (ctrl && key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
+      else if (ctrl && key === "j") {
+        e.preventDefault();
+        // Opens the assistant, or goes back to Properties when it's already showing
+        setRightPanelOpen(true);
+        setRightView((v) => (v === "assistant" ? "properties" : "assistant"));
+      }
       else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
       else if (ctrl && key === "enter") {
         // Not while typing or while a dialog is open, where Enter belongs to the field or the dialog
@@ -237,19 +267,9 @@ export default function App() {
   const handleImport = useCallback(async (code: string) => {
     if (!(await confirmDiscardChanges("importing this code"))) return false;
     try {
-      const result = await sidecarCall<{
-        nodes: Array<{ id: string; type: string; moduleType?: string; label: string; position: { x: number; y: number }; params: Record<string, unknown> }>;
-        edges: Array<{ id: string; source: string; target: string; sourceHandle: string; targetHandle: string }>;
-      }>("compile", { code });
-
-      const nodes: Node<NodeData>[] = result.nodes.map((n) => {
-        const mt = n.moduleType ?? "Identity";
-        const def = MODULE_REGISTRY[mt];
-        return { id: n.id, type: "tensorLabNode", position: n.position,
-          data: { moduleType: mt, label: n.label, category: (def?.category ?? "linear") as NodeCategory, params: n.params } };
-      });
-      const edges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
-      replaceGraph(autoLayout(nodes, edges), edges, "Imported Model");
+      const { nodes, edges } = compiledToGraph(await sidecarCall<CompiledGraph>("compile", { code }));
+      useLessonStore.getState().exit();
+      replaceGraph(nodes, edges, "Imported Model");
       useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
       return true;
@@ -297,6 +317,7 @@ export default function App() {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
+    useLessonStore.getState().exit();
     const { nodes, edges } = templateGraph(tpl);
     replaceGraph(nodes, edges, tpl.name);
     if (tpl.trainingDefaults) {
@@ -316,11 +337,10 @@ export default function App() {
   // From the welcome card: a Data node to build from, selected so its source can be picked
   const addDataNode = useCallback(() => {
     const graph = useGraphStore.getState();
-    graph.addNode("Data", { x: 300, y: 60 });
-    const added = useGraphStore.getState().nodes[useGraphStore.getState().nodes.length - 1];
-    if (!added) return;
-    graph.onNodesChange([{ type: "select", id: added.id, selected: true }]);
-    graph.setSelectedNodeId(added.id);
+    const id = graph.addNode("Data", { x: 300, y: 60 });
+    if (!id) return;
+    graph.onNodesChange([{ type: "select", id, selected: true }]);
+    graph.setSelectedNodeId(id);
   }, []);
 
   const handleSpotlightSelect = useCallback((moduleType: string) => {
@@ -370,6 +390,7 @@ export default function App() {
         onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
         onShowShortcuts={() => setShortcutsOpen(true)}
         onShowGettingStarted={() => setGettingStartedOpen(true)}
+        onShowLessons={() => setLessonsOpen(true)}
         onShowAbout={() => setAboutOpen(true)}
         gpuInfo={gpuInfo}
       />
@@ -397,8 +418,10 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
             <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
+            <LessonPanel onShowLessons={() => setLessonsOpen(true)} />
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
+              <UpdateBanner />
               {recovered && (
                 <RecoveryBanner
                   data={recovered}
@@ -420,6 +443,7 @@ export default function App() {
                     onShowImportLLM={() => setImportLLMOpen(true)}
                     onAddData={addDataNode}
                     onShowGettingStarted={() => setGettingStartedOpen(true)}
+                    onShowLessons={() => setLessonsOpen(true)}
                   />
                 </div>
               )}
@@ -503,13 +527,33 @@ export default function App() {
         <div
           className="flex-shrink-0 relative"
           style={{
-            width: rightPanelOpen ? 288 : 36,
+            width: rightWidth,
             transition: "width 0.2s ease-out",
           }}
         >
-          <div className="h-full overflow-hidden" style={{ borderLeft: "1px solid var(--border)" }}>
-            {rightPanelOpen ? <PropertyPanel /> : (
-              <CollapsedSideBar label="Properties" side="right" onClick={() => setRightPanelOpen(true)} />
+          <div className="h-full overflow-hidden flex flex-col" style={{ borderLeft: "1px solid var(--border)" }}>
+            {rightPanelOpen ? (
+              <>
+                <div className="flex-shrink-0 h-8 px-2" style={{ background: "var(--bg-secondary)", borderBottom: "1px solid var(--border)" }}>
+                  <Tabs
+                    label="Right panel"
+                    className="h-full"
+                    value={rightView}
+                    onChange={setRightView}
+                    items={[
+                      { id: "properties", label: "Properties" },
+                      { id: "assistant", label: "Assistant" },
+                    ]}
+                  />
+                </div>
+                <div className="flex-1 min-h-0">
+                  {/* Both stay mounted so switching keeps scroll position and a reply in progress */}
+                  <div className="h-full" hidden={rightView !== "properties"}><PropertyPanel /></div>
+                  <div className="h-full" hidden={rightView !== "assistant"}><AssistantPanel /></div>
+                </div>
+              </>
+            ) : (
+              <CollapsedSideBar label={rightView === "assistant" ? "Assistant" : "Properties"} side="right" onClick={() => setRightPanelOpen(true)} />
             )}
           </div>
           {rightPanelOpen && (
@@ -527,7 +571,8 @@ export default function App() {
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {diagramOpen && <DiagramExportDialog open={diagramOpen} onClose={() => setDiagramOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
-        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} />}
+        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} onShowLessons={() => setLessonsOpen(true)} />}
+        {lessonsOpen && <LessonsDialog open={lessonsOpen} onClose={() => setLessonsOpen(false)} />}
         {aboutOpen && <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} gpuInfo={gpuInfo} />}
         {customBlockOpen && <CustomBlockDialog open={customBlockOpen} onClose={() => setCustomBlockOpen(false)} />}
         {compareOpen && compareModel && <CompareDialog open={compareOpen} onClose={() => setCompareOpen(false)}
@@ -536,7 +581,7 @@ export default function App() {
         />}
         {tryRunId && <TryModelDialog runId={tryRunId} onClose={() => setTryRunId(null)} />}
       </Suspense>
-      <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
+      <ToastContainer rightOffset={rightWidth + 16} />
       <DragOverlay />
       <ConfirmDialog />
       <PreflightDialog />
