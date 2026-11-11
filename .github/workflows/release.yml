@@ -68,9 +68,23 @@ jobs:
         run: npm ci
         working-directory: app
 
+      # Installed apps only accept updates signed with this key (see
+      # plugins.updater.pubkey in tauri.conf.json)
+      - name: Check the updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY secret (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) so the build can sign updates."
+            exit 1
+          fi
+        shell: bash
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
           tagName: ${{ github.ref_name }}
@@ -79,6 +93,8 @@ jobs:
             Download the installer for your platform below.
 
             **Requirements:** Python 3.9+ (PyTorch is installed automatically on first launch).
+
+            **macOS:** builds are for Apple Silicon (M1 and later). If macOS says it can't open TensorBloom, open System Settings → Privacy & Security and click Open Anyway.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
