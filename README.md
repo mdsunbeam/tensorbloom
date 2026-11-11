@@ -11,7 +11,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - **See your architecture** — No more debugging invisible dimension mismatches in code. The graph shows every layer, every connection, and every tensor shape.
 - **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection.
 - **See what changed** — Every run is kept, so you can compare runs side by side and try a trained model on samples it never saw.
-- **Learn by doing** — 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
+- **Learn by doing** — 7 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
 - **Real PyTorch underneath** — Every graph generates real `nn.Module` code. Export your model and use it anywhere.
 
 ## Features
@@ -49,6 +49,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 
 **Help Built In**
 - A welcome card with starter models, a Getting Started guide, and a Help menu
+- Guided lessons (**Help > Lessons**): fix a shape error, find a learning rate, stop overfitting, add BatchNorm, and more. Each starts from a real model and checks each step with hints when you're stuck
 - A "?" next to every layer parameter and training setting explains what it does
 - Each layer links to its PyTorch documentation
 
@@ -212,6 +213,7 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Training Guide](docs/guides/training.md) — Training settings, the run flow, comparing runs, and trying a model
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures
+- [Lessons](docs/guides/lessons.md) — The guided lessons, and the lesson format for adding your own
 - [Architecture](docs/guides/architecture.md) — Technical internals for contributors
 - [Roadmap](ROADMAP.md) — Planned features and development direction
 
