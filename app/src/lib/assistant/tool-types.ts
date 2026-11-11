@@ -17,7 +17,7 @@ export interface AssistantTool<I = Record<string, unknown>> {
 export class ToolError extends Error {}
 
 type Schema = {
-  type?: string;
+  type?: string | string[];
   properties?: Record<string, Schema>;
   required?: string[];
   enum?: unknown[];
@@ -29,6 +29,11 @@ type Schema = {
  * readable error instead of misbehaving.
  */
 export function validateInput(schema: Schema, value: unknown, path = "input"): string | null {
+  if (Array.isArray(schema.type)) {
+    // Any one of the types will do, e.g. ["number", "null"]
+    const errors = schema.type.map((t) => (t === "null" ? (value === null ? null : `${path} must be null`) : validateInput({ ...schema, type: t }, value, path)));
+    return errors.includes(null) ? null : errors.join(", or ");
+  }
   if (schema.enum && !schema.enum.some((e) => JSON.stringify(e) === JSON.stringify(value))) {
     return `${path} must be one of ${schema.enum.map((e) => JSON.stringify(e)).join(", ")}`;
   }

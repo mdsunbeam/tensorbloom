@@ -228,3 +228,40 @@ export function graphDiff(a: { nodes: Node<NodeData>[]; edges: Edge[] }, b: { no
   for (const k of ae) if (!be.has(k)) out.push(`disconnected ${k}`);
   return out;
 }
+
+/** What changed, worded for the person reviewing it: layers by their names, connections as a count */
+export function friendlyDiff(a: { nodes: Node<NodeData>[]; edges: Edge[] }, b: { nodes: Node<NodeData>[]; edges: Edge[] }): string[] {
+  const out: string[] = [];
+  const am = new Map(a.nodes.map((n) => [n.id, n]));
+  const bm = new Map(b.nodes.map((n) => [n.id, n]));
+  const name = (n: Node<NodeData>) => (n.data.label && n.data.label !== n.data.moduleType ? `${n.data.label} (${n.data.moduleType})` : n.data.moduleType);
+  for (const [id, n] of bm) {
+    const o = am.get(id);
+    if (!o) {
+      const into = b.edges.find((e) => e.target === id);
+      const from = into ? bm.get(into.source) : undefined;
+      out.push(`Add ${name(n)}${from ? ` after ${from.data.label}` : ""}`);
+      continue;
+    }
+    if (o.data.label !== n.data.label) out.push(`Rename ${o.data.label} to ${n.data.label}`);
+    const op = visibleParams(o.data.params), np = visibleParams(n.data.params);
+    const changed = [...new Set([...Object.keys(op), ...Object.keys(np)])].filter((k) => JSON.stringify(op[k]) !== JSON.stringify(np[k]));
+    if (changed.length) out.push(`${n.data.label}: ${changed.map((k) => `${k} ${formatValue(op[k])} → ${formatValue(np[k])}`).join(", ")}`);
+    if (JSON.stringify(o.data.codeBlock ?? null) !== JSON.stringify(n.data.codeBlock ?? null)) out.push(`${n.data.label}: new code`);
+  }
+  for (const [id, n] of am) if (!bm.has(id)) out.push(`Remove ${name(n)}`);
+  const key = (e: Edge) => `${e.source}:${e.sourceHandle ?? "out"}>${e.target}:${e.targetHandle ?? "in"}`;
+  const ae = new Set(a.edges.map(key)), be = new Set(b.edges.map(key));
+  const rewired = [...be].filter((k) => !ae.has(k)).length + [...ae].filter((k) => !be.has(k)).length;
+  // Connections that come with added or removed layers go without saying; say only when others changed
+  const implied = (k: string) => { const [s, t] = k.split(">").map((x) => x.split(":")[0]); return !am.has(s) || !am.has(t) || !bm.has(s) || !bm.has(t); };
+  // A connection replaced by a layer inserted into it goes without saying too
+  const ends = (k: string) => k.split(">").map((x) => x.split(":")[0]);
+  const bridged = (k: string) => {
+    const [s, t] = ends(k);
+    return [...bm.keys()].some((x) => !am.has(x) && [...be].some((e) => ends(e)[0] === s && ends(e)[1] === x) && [...be].some((e) => ends(e)[0] === x && ends(e)[1] === t));
+  };
+  const other = [...be].filter((k) => !ae.has(k) && !implied(k)).length + [...ae].filter((k) => !be.has(k) && !implied(k) && !bridged(k)).length;
+  if (rewired && other) out.push(`${other} ${other === 1 ? "connection" : "connections"} changed`);
+  return out;
+}

@@ -6,12 +6,14 @@ import { openExternal } from "../../lib/open-external";
 import Button from "../ui/Button";
 import Select from "../ui/Select";
 import Markdown from "./Markdown";
+import ChangeSetReview from "./ChangeSetReview";
 
 const SUGGESTIONS = [
   "Explain this model, layer by layer",
   "Why is this shape wrong?",
   "Where do most of the parameters go?",
   "How did my last run go, and what should I try next?",
+  "Add dropout after each Linear layer",
 ];
 
 /** The assistant: a chat that can read the model, its runs and its data */
@@ -129,6 +131,7 @@ function Settings({ onDone }: { onDone: () => void }) {
       <section className="space-y-2">
         <h3 className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">What's sent</h3>
         <p>
+          Changes the assistant makes are previewed on the canvas until you apply or discard them, and applying is one undo step.
           Each message sends your question with the model's layers and settings, shape problems, training settings and a summary of recent runs.
           When the assistant asks for more, the app sends the generated code, run curves, predicted classes and dataset statistics.
           Dataset contents such as images and text stay on this computer.
@@ -155,7 +158,7 @@ function Chat() {
         {items.length === 0 ? (
           <div className="space-y-3 pt-2">
             <p className="text-xs text-fg-secondary leading-relaxed">
-              Ask about the model on the canvas, a shape error, or how a run went. The assistant can read the graph, its code, runs, predictions and dataset statistics.
+              Ask about the model on the canvas, a shape error, or how a run went. Or ask it to change the model: its changes show on the canvas for you to apply or discard.
             </p>
             <div className="flex flex-col gap-1.5">
               {SUGGESTIONS.map((s) => (
@@ -169,6 +172,7 @@ function Chat() {
         ) : items.map((item) => <Item key={item.id} item={item} />)}
         {busy && <div className="text-[11px] text-fg-muted animate-pulse">Thinking…</div>}
       </div>
+      <ChangeSetReview variant="panel" />
       <Composer />
     </>
   );

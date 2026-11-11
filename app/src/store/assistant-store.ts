@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { DEFAULT_MODEL, MODELS, keyStatus, type KeyStatus, type MessageParam } from "../lib/assistant/api";
 import { runTurn, type TurnOutcome } from "../lib/assistant/agent";
 import { READ_TOOLS } from "../lib/assistant/read-tools";
+import { EDIT_TOOLS } from "../lib/assistant/edit-tools";
+import { takeDecision } from "../lib/assistant/change-set";
 import type { AssistantTool } from "../lib/assistant/tool-types";
 
 export interface ToolActivity {
@@ -51,7 +53,7 @@ let generation = 0;
 
 /** The tools available to the assistant. Later phases add more. */
 export function assistantTools(): AssistantTool[] {
-  return READ_TOOLS;
+  return [...READ_TOOLS, ...EDIT_TOOLS];
 }
 
 function outcomeNotice(outcome: TurnOutcome): ChatItem | null {
@@ -92,7 +94,7 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
     // Tool calls of one step share a row; a new step starts a new row
     let toolRow: string | null = null;
     try {
-      const outcome = await runTurn(trimmed, { model: get().model, tools: assistantTools(), transcript }, {
+      const turn = runTurn(trimmed, { model: get().model, tools: assistantTools(), transcript }, {
         cancelled: () => gen !== generation,
         onText: (t) => { toolRow = null; push({ id: nextId(), kind: "assistant", text: t }); },
         onTool: (call) => {
@@ -110,6 +112,9 @@ export const useAssistantStore = create<AssistantState>((set, get) => ({
           }
         },
       });
+      // The message above told the assistant what the user did with its last changes; say it only once
+      takeDecision();
+      const outcome = await turn;
       if (gen !== generation) return;
       const notice = outcomeNotice(outcome);
       set({ transcript, ...(notice ? { items: [...get().items, notice] } : {}) });
