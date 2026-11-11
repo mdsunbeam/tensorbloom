@@ -10,7 +10,7 @@ import { useRunStore, type RunRecord } from "../store/run-store";
 import { useGraphStore } from "../store/graph-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
 import { useLLMStore } from "../store/llm-store";
-import type { LLMSpec } from "./llm";
+import type { LLMSpec, FinetuneSettings } from "./llm";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -44,6 +44,8 @@ export interface ProjectFile {
   groups?: LayerGroup[];
   /** The pretrained LLM this project was imported from */
   llm?: LLMSpec;
+  /** Dataset and LoRA settings for fine-tuning it */
+  llmFinetune?: FinetuneSettings;
 }
 
 export function serializeProject(
@@ -82,6 +84,7 @@ export function serializeProject(
     runs: useRunStore.getState().runs,
     groups: useGraphStore.getState().groups,
     llm: useLLMStore.getState().spec ?? undefined,
+    llmFinetune: useLLMStore.getState().spec ? useLLMStore.getState().finetune : undefined,
   };
 }
 

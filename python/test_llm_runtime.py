@@ -1,4 +1,4 @@
-"""End-to-end tests for running a language model, on a tiny random Llama built locally.
+"""End-to-end tests for running and fine-tuning a language model, on a tiny random Llama built locally.
 
 Needs transformers, peft and accelerate (pip install -r python/requirements-llm.txt); skipped without them.
 Nothing is downloaded: the model and its tokenizer are made here.
@@ -90,7 +90,54 @@ try:
 finally:
     llm.runtime.release()
 
-print("Unload")
+print("Fine-tune")
+data_path = os.path.join(tmp, "chats.jsonl")
+with open(data_path, "w") as f:
+    for _ in range(40):
+        f.write(json.dumps({"messages": [{"role": "user", "content": "hello how are you"},
+                                         {"role": "assistant", "content": "i am fine thank you"}]}) + "\n")
+texts = llm.load_texts({"kind": "file", "path": data_path}, llm.runtime.tokenizer)
+check("chats are written in the model's chat format", texts[0].startswith("<|user|> hello") and "<|assistant|> i am fine" in texts[0], texts[0])
+blocks = llm.pack_tokens(texts, llm.runtime.tokenizer, 16)
+check("text is packed into equal blocks", blocks.dim() == 2 and blocks.shape[1] == 16 and blocks.shape[0] > 4)
+alpaca = llm._row_text({"instruction": "say hi", "input": "politely", "output": "hello"}, None, llm.runtime.tokenizer)
+check("instruction rows become a chat", "say hi" in alpaca and "politely" in alpaca and "hello" in alpaca)
+
+events.clear()
+llm.llm_finetune_start({"source": spec["source"], "local_path": spec["local_path"], "precision": "bf16",
+                        "dataset": {"kind": "file", "path": data_path}, "lora": {"rank": 8, "alpha": 16, "dropout": 0.0},
+                        "max_length": 16, "epochs": 3, "batch_size": 4, "lr": 3e-3, "seed": 0})
+end = wait_for("train.progress", lambda p: p.get("status") in ("complete", "error"), timeout=600)
+check("fine-tunes", end["status"] == "complete", end.get("error", ""))
+epochs = [p for m, p in events if m == "train.progress" and "val_loss" in p]
+check("reports each epoch like graph training", len(epochs) == 3 and all(p["train_loss"] > 0 for p in epochs))
+check("the loss goes down", epochs[-1]["train_loss"] < epochs[0]["train_loss"] * 0.8, [round(p["train_loss"], 3) for p in epochs])
+steps = [p for m, p in events if m == "train.progress" and "total_steps" in p]
+check("reports steps within an epoch", len(steps) > 0 and steps[0]["total_steps"] > 0)
+adapter = end.get("adapter")
+check("saves the adapter", adapter and os.path.exists(os.path.join(adapter, "adapter_config.json")), adapter)
+check("chat uses the fine-tuned adapter", llm.runtime.info["adapter"] == adapter)
+llm.llm_generate({"id": 3, "messages": [{"role": "user", "content": "hello how are you"}], "max_new_tokens": 6, "temperature": 0})
+reply = wait_for("llm.done", lambda p: p.get("id") == 3)
+check("the fine-tuned model learned its answer", reply.get("text", "").strip().startswith("i am fine"), reply)
+
+print("Stop")
+events.clear()
+llm.llm_finetune_start({"source": spec["source"], "local_path": spec["local_path"], "precision": "bf16",
+                        "dataset": {"kind": "file", "path": data_path}, "max_length": 16, "epochs": 50, "batch_size": 1, "lr": 1e-4})
+wait_for("train.progress", lambda p: "total_steps" in p)
+llm.llm_stop({})
+end = wait_for("train.progress", lambda p: p.get("status") in ("complete", "error"), timeout=120)
+check("stopping ends fine-tuning early", end["status"] == "complete" and llm.runtime.busy is None)
+epochs_run = [p for m, p in events if m == "train.progress" and "val_loss" in p]
+check("…without running every epoch", len(epochs_run) < 50)
+
+print("Errors")
+events.clear()
+llm.llm_finetune_start({"source": spec["source"], "local_path": spec["local_path"], "precision": "bf16",
+                        "dataset": {"kind": "file", "path": os.path.join(tmp, "missing.jsonl")}})
+err = wait_for("train.progress", lambda p: p.get("status") == "error")
+check("a missing dataset is reported", "No such file" in err["error"], err["error"])
 llm.llm_unload({})
 check("unloads", llm.runtime.model is None and llm.llm_status({})["loaded"] is None)
 

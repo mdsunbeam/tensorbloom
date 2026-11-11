@@ -300,3 +300,46 @@ export function formatBytes(bytes: number): string {
   if (bytes >= GiB) return `${(bytes / GiB).toFixed(bytes >= 100 * GiB ? 0 : 1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
 }
+
+// ─── Fine-tuning ────────────────────────────────────────────────────────────
+
+export type FinetuneDataset =
+  | { kind: "hf"; name: string; split: string; config?: string; column?: string }
+  | { kind: "file"; path: string; column?: string };
+
+export interface FinetuneSettings {
+  dataset: FinetuneDataset;
+  /** bf16 is LoRA on 16-bit weights; nf4 is QLoRA */
+  precision: "bf16" | "nf4";
+  rank: number;
+  alpha: number;
+  dropout: number;
+  /** Tokens per training example */
+  maxLength: number;
+  /** Examples read from the dataset, at most */
+  maxSamples: number;
+  gradAccum: number;
+}
+
+export const DEFAULT_FINETUNE: FinetuneSettings = {
+  dataset: { kind: "hf", name: "", split: "train" },
+  precision: "bf16",
+  rank: 16,
+  alpha: 32,
+  dropout: 0.05,
+  maxLength: 512,
+  maxSamples: 2000,
+  gradAccum: 1,
+};
+
+/** Why fine-tuning can't start with these settings, or null when it can */
+export function finetuneProblem(spec: LLMSpec, ft: FinetuneSettings): string | null {
+  if (spec.loadable === false || !spec.source) {
+    return spec.quantization?.method === "gguf"
+      ? "GGUF models can't be fine-tuned in PyTorch. Import the original model from Hugging Face to fine-tune it."
+      : "This model can't be loaded for fine-tuning: it needs its config.json next to the weights.";
+  }
+  if (ft.dataset.kind === "hf" && !ft.dataset.name.trim()) return "Pick a dataset to fine-tune on in the Language model tab.";
+  if (ft.dataset.kind === "file" && !ft.dataset.path.trim()) return "Pick a dataset file to fine-tune on in the Language model tab.";
+  return null;
+}

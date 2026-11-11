@@ -2277,6 +2277,8 @@ def train_start(params: dict) -> dict:
 
 def train_stop(params: dict) -> dict:
     _train_stop_event.set()
+    if tensorbloom_llm.runtime.busy == "training":
+        tensorbloom_llm.runtime.stop.set()
     return {"status": "stopping"}
 
 

@@ -284,10 +284,27 @@ export default function App() {
     }
   }, []);
 
+  // A fine-tuned language model is tried in its chat; other models in the Try it dialog
+  const tryModel = useCallback((runId: string) => {
+    if (useLLMStore.getState().spec) {
+      useLLMStore.setState({ view: "chat" });
+      setBottomTab("llm");
+      setBottomPanelOpen(true);
+    } else {
+      setTryRunId(runId);
+    }
+  }, []);
+
   const handleImportLLM = useCallback(async (spec: LLMSpec) => {
     if (!(await confirmDiscardChanges("importing a language model"))) return false;
     const { nodes, edges, groups, notes } = buildLLMGraph(spec);
     replaceGraph(nodes, edges, spec.name.split("/").pop() || spec.name, groups, spec);
+    // Training this project fine-tunes it with LoRA: settings that suit that
+    useTrainingStore.getState().applyTemplateDefaults(spec.name, {
+      optimizer: { ...useTrainingStore.getState().config.optimizer, type: "AdamW", lr: 2e-4, weightDecay: 0 },
+      epochs: 1,
+      batchSize: 4,
+    });
     useDocumentStore.getState().markSaved(null);
     for (const note of notes) toast.info(note);
     toast.success(`Imported ${spec.name}`);
@@ -498,10 +515,10 @@ export default function App() {
           {bottomPanelOpen && (
             <div className="flex-shrink-0 overflow-hidden" style={{ height: tabHeights[bottomTab], background: "var(--bg-secondary)" }}>
               {bottomTab === "code" && <CodePanel />}
-              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={setTryRunId} />}
-              {bottomTab === "runs" && <RunsPanel onTryModel={setTryRunId} />}
+              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={tryModel} />}
+              {bottomTab === "runs" && <RunsPanel onTryModel={tryModel} />}
               {bottomTab === "logs" && <TrainingLogs />}
-              {bottomTab === "llm" && <LLMPanel />}
+              {bottomTab === "llm" && <LLMPanel onShowCharts={() => setBottomTab("charts")} />}
             </div>
           )}
         </div>

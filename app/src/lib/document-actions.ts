@@ -80,6 +80,7 @@ export async function openProject() {
   useLessonStore.getState().exit();
   const { nodes, edges, groups, warnings } = deserializeProject(project);
   replaceGraph(nodes, edges, project.name, groups, project.llm ?? null);
+  if (project.llm && project.llmFinetune) useLLMStore.setState({ finetune: { ...useLLMStore.getState().finetune, ...project.llmFinetune } });
   useDocumentStore.getState().markSaved(path);
   clearAutoSave();
   for (const w of warnings) toast.warning(w);

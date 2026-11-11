@@ -1,6 +1,6 @@
 # Language Models
 
-TensorBloom can open a pretrained large language model (LLM), show its architecture and what it takes to run on your computer, and chat with it.
+TensorBloom can open a pretrained large language model (LLM), show its architecture and what it takes to run on your computer, chat with it, and fine-tune it with LoRA.
 
 The models that fit are the ones that fit on one machine. As a rough guide for the weights alone:
 
@@ -39,10 +39,26 @@ for 16-bit, 8-bit and 4-bit weights. Each cell is marked green (fits), amber (ti
 
 8-bit and 4-bit loading uses bitsandbytes, which needs an NVIDIA GPU. On a Mac, models run at 16 bits on the GPU.
 
-GGUF files are made for llama.cpp. TensorBloom reads and sizes them, but to chat with the model here, import the original model from Hugging Face.
+GGUF files are made for llama.cpp. TensorBloom reads and sizes them, but to chat with or fine-tune the model here, import the original model from Hugging Face.
 
 ## Chat
 
 The **Chat** view downloads the weights (once, into the Hugging Face cache) and loads them at the precision you pick. The first time, it offers to install the packages it needs (transformers, accelerate, peft, datasets, and bitsandbytes on NVIDIA GPUs) into TensorBloom's Python.
 
 Replies stream in as they're generated, with their speed. **Settings** has a system prompt, the reply length and the temperature (0 always picks the likeliest token). **Unload** frees the memory.
+
+## Fine-tuning
+
+The **Fine-tune** view trains a LoRA adapter on your data: small extra matrices on every linear layer, while the model's own weights stay frozen. With **QLoRA** the frozen weights are loaded at 4 bits, which fits an 8B model on a 16 GB GPU.
+
+**Data** is a Hugging Face dataset (name and split) or a `.jsonl`, `.json` or `.txt` file. Rows are used as they are when they have:
+
+- `messages` (or `conversations`): a chat, written in the model's own chat format
+- `instruction` and `output` (with an optional `input`), or `prompt` and `completion`: turned into a one-turn chat
+- `text`: plain text
+
+Name a column to use another one. Examples are joined and cut into blocks of **Tokens / example**, and 5% are held out for the validation loss.
+
+**Rank** sets the adapters' size (8 to 64 is usual), **Alpha** their strength (often twice the rank). The learning rate, epochs and batch size come from the **Training** panel, which importing a model sets to suit LoRA (AdamW, 2e-4, 1 epoch, batch size 4).
+
+**Fine-tune** (or **Train**) starts it. The loss shows in **Charts** like any training run, and the run is kept in **Runs**. The adapter is saved after each epoch, in `llm-adapters` under TensorBloom's data folder. When it finishes, the loaded model uses the adapter, so **Try it** in the run summary opens the chat to see what changed.

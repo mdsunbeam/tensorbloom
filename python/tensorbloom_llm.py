@@ -744,7 +744,7 @@ def llm_device(params: dict) -> dict:
 notify = lambda method, params=None: None  # noqa: E731
 
 # What running and fine-tuning need beyond torch. bitsandbytes (8/4-bit) is added on NVIDIA GPUs only.
-LLM_PACKAGES = ["transformers>=4.45", "accelerate>=0.34", "peft>=0.13", "huggingface_hub>=0.25"]
+LLM_PACKAGES = ["transformers>=4.45", "accelerate>=0.34", "peft>=0.13", "huggingface_hub>=0.25", "datasets>=2.20"]
 BNB_PACKAGE = "bitsandbytes>=0.43"
 
 
@@ -780,7 +780,7 @@ def _has(pkg: str) -> bool:
 
 
 def missing_packages(precision: str = "bf16") -> list[str]:
-    missing = [p for p in ("transformers", "accelerate", "peft", "huggingface_hub") if not _has(p)]
+    missing = [p for p in ("transformers", "accelerate", "peft", "huggingface_hub", "datasets") if not _has(p)]
     if precision in ("int8", "nf4") and not _has("bitsandbytes"):
         missing.append("bitsandbytes")
     return missing
@@ -1082,7 +1082,242 @@ def llm_stop(params: dict) -> dict:
     return {"stopping": runtime.busy}
 
 
+# ---------------------------------------------------------------------------
+# Fine-tuning with LoRA (QLoRA when the model is loaded in 4-bit)
+# ---------------------------------------------------------------------------
+
+def _row_text(row: dict, column: str | None, tok) -> str | None:
+    """One training example as text: a chat (in the model's own format), a prompt and answer, or plain text."""
+    def chat(messages):
+        if getattr(tok, "chat_template", None):
+            return tok.apply_chat_template(messages, tokenize=False)
+        return "\n\n".join(f"{m['role']}: {m['content']}" for m in messages)
+
+    if column:
+        v = row.get(column)
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            return chat([{"role": m.get("role") or m.get("from"), "content": m.get("content") or m.get("value", "")} for m in v])
+        return str(v) if v is not None else None
+    for key in ("messages", "conversations", "conversation"):
+        v = row.get(key)
+        if isinstance(v, list) and v and isinstance(v[0], dict):
+            roles = {"human": "user", "gpt": "assistant"}
+            return chat([{"role": roles.get(m.get("role") or m.get("from"), m.get("role") or m.get("from")),
+                          "content": m.get("content") or m.get("value", "")} for m in v])
+    prompt = row.get("instruction") or row.get("prompt") or row.get("question")
+    answer = row.get("output") or row.get("completion") or row.get("response") or row.get("answer")
+    if prompt is not None and answer is not None:
+        if row.get("input"):
+            prompt = f"{prompt}\n\n{row['input']}"
+        return chat([{"role": "user", "content": str(prompt)}, {"role": "assistant", "content": str(answer)}])
+    v = row.get("text") or row.get("content")
+    return str(v) if v is not None else None
+
+
+def load_texts(dataset: dict, tok, max_samples: int = 5000) -> list[str]:
+    """Training texts from a Hugging Face dataset or a .txt/.jsonl/.json file."""
+    kind = dataset.get("kind")
+    column = dataset.get("column") or None
+    rows: list[dict] = []
+    if kind == "file":
+        path = os.path.expanduser(dataset.get("path", ""))
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"No such file: {path}")
+        if path.endswith(".txt") or path.endswith(".md"):
+            text = open(path, encoding="utf-8", errors="replace").read()
+            # Plain text is split into paragraphs-ish pieces and packed back together for training
+            return [p for p in text.split("\n\n") if p.strip()] or [text]
+        if path.endswith(".jsonl"):
+            with open(path, encoding="utf-8") as f:
+                rows = [json.loads(line) for line in f if line.strip()]
+        elif path.endswith(".json"):
+            data = json.load(open(path, encoding="utf-8"))
+            rows = data if isinstance(data, list) else data.get("data", [])
+        else:
+            raise ValueError("Use a .txt, .md, .jsonl or .json file")
+    elif kind == "hf":
+        if not _has("datasets"):
+            raise RuntimeError("Hugging Face datasets need the 'datasets' package. Install it from the Language model tab.")
+        from datasets import load_dataset
+        name = dataset.get("name", "").strip()
+        if not name:
+            raise ValueError("Enter a Hugging Face dataset name")
+        split = dataset.get("split") or "train"
+        ds = load_dataset(name, dataset.get("config") or None, split=f"{split}[:{max_samples}]")
+        rows = list(ds)
+    else:
+        raise ValueError("Pick a dataset to fine-tune on")
+    texts = [t for t in (_row_text(r, column, tok) for r in rows[:max_samples]) if t and t.strip()]
+    if not texts:
+        cols = ", ".join(rows[0].keys()) if rows else "none"
+        raise ValueError(f"Couldn't find text in the dataset (columns: {cols}). Name the column to train on.")
+    return texts
+
+
+def pack_tokens(texts: list[str], tok, block: int) -> torch.Tensor:
+    """Tokenizes the texts, joins them with end-of-text tokens, and cuts the stream into equal blocks."""
+    eos = tok.eos_token_id
+    stream: list[int] = []
+    for t in texts:
+        stream.extend(tok(t, add_special_tokens=False)["input_ids"])
+        if eos is not None:
+            stream.append(eos)
+    n = len(stream) // block
+    if n == 0:
+        # Too little data for one full block: train on what there is
+        return torch.tensor([stream], dtype=torch.long)
+    return torch.tensor(stream[: n * block], dtype=torch.long).view(n, block)
+
+
+def _adapter_dir(name: str) -> str:
+    base = os.environ.get("TENSORBLOOM_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".tensorbloom")
+    safe = "".join(c if c.isalnum() or c in "-_." else "-" for c in name.split("/")[-1])
+    return os.path.join(base, "llm-adapters", f"{safe}-{time.strftime('%Y%m%d-%H%M%S')}")
+
+
+def _finetune(params: dict):
+    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
+
+    progress = lambda p: notify("train.progress", p)  # noqa: E731
+    log = lambda text: notify("train.log", {"text": text, "stream": "stdout"})  # noqa: E731
+    precision = params.get("precision", "bf16")
+    if runtime.model is None or (runtime.info or {}).get("precision") != precision:
+        progress({"status": "downloading", "dataset": params["source"].get("model_id") or "the model"})
+        _unload()
+        load_model(params)
+    model, tok = runtime.model, runtime.tokenizer
+    if isinstance(model, PeftModel):
+        # Fine-tune the base model again rather than stacking adapters
+        model = model.unload()
+    device = next(model.parameters()).device
+    seed = params.get("seed")
+    if seed is not None:
+        torch.manual_seed(int(seed))
+
+    log(f"Loading dataset…")
+    texts = load_texts(params["dataset"], tok, int(params.get("max_samples", 5000)))
+    blocks = pack_tokens(texts, tok, int(params.get("max_length", 512)))
+    perm = torch.randperm(len(blocks))
+    n_val = max(1, int(len(blocks) * float(params.get("val_split", 0.05)))) if len(blocks) > 4 else 0
+    val, train = blocks[perm[:n_val]], blocks[perm[n_val:]]
+    log(f"{len(texts)} examples → {len(train)} training blocks and {len(val)} validation blocks of {blocks.shape[1]} tokens")
+
+    quantized = precision in ("int8", "nf4")
+    if quantized:
+        model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
+    else:
+        model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()
+    model.config.use_cache = False
+    lora = params.get("lora", {})
+    model = get_peft_model(model, LoraConfig(
+        r=int(lora.get("rank", 16)), lora_alpha=int(lora.get("alpha", 32)), lora_dropout=float(lora.get("dropout", 0.05)),
+        target_modules="all-linear", task_type="CAUSAL_LM"))
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    log(f"{'QLoRA' if precision == 'nf4' else 'LoRA'}: training {trainable:,} of {total:,} parameters ({100 * trainable / total:.2f}%)")
+
+    batch_size = max(1, int(params.get("batch_size", 4)))
+    accum = max(1, int(params.get("grad_accum", 1)))
+    epochs = max(1, int(params.get("epochs", 1)))
+    steps_per_epoch = max(1, (len(train) + batch_size - 1) // batch_size)
+    total_updates = max(1, epochs * steps_per_epoch // accum)
+    warmup = max(1, int(0.03 * total_updates))
+    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=float(params.get("lr", 2e-4)),
+                            weight_decay=float(params.get("weight_decay", 0.0)))
+    import math
+    sched = torch.optim.lr_scheduler.LambdaLR(opt, lambda u: min(1.0, (u + 1) / warmup) * 0.5 * (1 + math.cos(math.pi * min(1.0, u / total_updates))))
+    autocast = torch.autocast("cuda", dtype=_compute_dtype("cuda")) if device.type == "cuda" else torch.autocast("cpu", enabled=False)
+    out_dir = _adapter_dir((runtime.info or {}).get("name", "model"))
+
+    def evaluate() -> float | None:
+        if len(val) == 0:
+            return None
+        model.eval()
+        losses = []
+        with torch.no_grad(), autocast:
+            for i in range(0, min(len(val), 50 * batch_size), batch_size):
+                b = val[i:i + batch_size].to(device)
+                losses.append(model(input_ids=b, labels=b).loss.float().item())
+        model.train()
+        return sum(losses) / len(losses)
+
+    model.train()
+    update = 0
+    for epoch in range(1, epochs + 1):
+        order = torch.randperm(len(train))
+        running, count = 0.0, 0
+        for step in range(steps_per_epoch):
+            if runtime.stop.is_set():
+                break
+            b = train[order[step * batch_size:(step + 1) * batch_size]].to(device)
+            with autocast:
+                loss = model(input_ids=b, labels=b).loss
+            (loss / accum).backward()
+            running += loss.float().item()
+            count += 1
+            if (step + 1) % accum == 0 or step == steps_per_epoch - 1:
+                torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+                opt.step()
+                sched.step()
+                opt.zero_grad(set_to_none=True)
+                update += 1
+            if step % 5 == 0 or step == steps_per_epoch - 1:
+                progress({"epoch": epoch, "step": step + 1, "total_steps": steps_per_epoch,
+                          "train_loss": loss.float().item(), "lr": opt.param_groups[0]["lr"]})
+        if count == 0:
+            break
+        val_loss = evaluate()
+        gpu = None
+        if device.type == "cuda":
+            gpu = {"allocated_mb": torch.cuda.memory_allocated() / 2**20, "reserved_mb": torch.cuda.memory_reserved() / 2**20,
+                   "max_allocated_mb": torch.cuda.max_memory_allocated() / 2**20}
+        log(f"Epoch {epoch}/{epochs}  train_loss={running / count:.4f}" + (f"  val_loss={val_loss:.4f}  perplexity={math.exp(min(val_loss, 50)):.1f}" if val_loss is not None else ""))
+        progress({"epoch": epoch, "step": count, "train_loss": running / count, "val_loss": val_loss,
+                  "lr": opt.param_groups[0]["lr"], "gpu": gpu})
+        model.save_pretrained(out_dir)
+        tok.save_pretrained(out_dir)
+        progress({"status": "checkpoint", "path": out_dir, "epoch": epoch})
+        if runtime.stop.is_set():
+            break
+
+    model.eval()
+    model.config.use_cache = True
+    runtime.model = model
+    if runtime.info is not None:
+        runtime.info["adapter"] = out_dir if os.path.isdir(out_dir) else None
+    notify("llm.progress", {"status": "loaded", "info": runtime.info})
+    log(f"Adapter saved to {out_dir}")
+    progress({"status": "complete", "adapter": out_dir})
+
+
+def llm_finetune_start(params: dict) -> dict:
+    """RPC: LoRA fine-tune the model in the background, reporting train.progress like graph training does."""
+    missing = missing_packages(params.get("precision", "bf16"))
+    if params.get("dataset", {}).get("kind") == "hf" and not _has("datasets"):
+        missing.append("datasets")
+    if missing:
+        raise RuntimeError(f"Fine-tuning needs {', '.join(missing)}. Install them from the Language model tab.")
+    runtime.claim("training")
+
+    def run():
+        try:
+            _finetune(params)
+        except Exception as e:  # noqa: BLE001
+            import traceback
+            notify("train.log", {"text": traceback.format_exc(), "stream": "stderr"})
+            notify("train.progress", {"status": "error", "error": _friendly_error(e)})
+        finally:
+            if runtime.model is not None:
+                runtime.model.config.use_cache = True
+            runtime.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True}
+
+
 METHODS = {
+    "llm.finetune.start": llm_finetune_start,
     "llm.inspect": llm_inspect,
     "llm.device": llm_device,
     "llm.install": llm_install,
