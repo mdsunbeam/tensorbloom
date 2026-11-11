@@ -1288,7 +1288,7 @@ def _finetune(params: dict):
         runtime.info["adapter"] = out_dir if os.path.isdir(out_dir) else None
     notify("llm.progress", {"status": "loaded", "info": runtime.info})
     log(f"Adapter saved to {out_dir}")
-    progress({"status": "complete", "adapter": out_dir})
+    return out_dir
 
 
 def llm_finetune_start(params: dict) -> dict:
@@ -1301,8 +1301,9 @@ def llm_finetune_start(params: dict) -> dict:
     runtime.claim("training")
 
     def run():
+        adapter = None
         try:
-            _finetune(params)
+            adapter = _finetune(params)
         except Exception as e:  # noqa: BLE001
             import traceback
             notify("train.log", {"text": traceback.format_exc(), "stream": "stderr"})
@@ -1311,6 +1312,9 @@ def llm_finetune_start(params: dict) -> dict:
             if runtime.model is not None:
                 runtime.model.config.use_cache = True
             runtime.release()
+        # Only after the release, so a chat sent the moment training ends isn't refused as busy
+        if adapter is not None:
+            notify("train.progress", {"status": "complete", "adapter": adapter})
 
     threading.Thread(target=run, daemon=True).start()
     return {"started": True}
