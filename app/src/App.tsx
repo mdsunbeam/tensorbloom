@@ -18,6 +18,8 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
+import UpdateBanner from "./components/UpdateBanner";
+import { useUpdateStore } from "./store/update-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -25,6 +27,7 @@ const ImportDialog = lazy(() => import("./components/ImportDialog"));
 const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
+const DiagramExportDialog = lazy(() => import("./components/DiagramExportDialog"));
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
 const TryModelDialog = lazy(() => import("./components/TryModelDialog"));
 const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
@@ -64,6 +67,7 @@ export default function App() {
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [connectFrom, setConnectFrom] = useState<ConnectFromContext | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [diagramOpen, setDiagramOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -86,6 +90,11 @@ export default function App() {
   // Restore custom blocks from localStorage on startup
   useEffect(() => {
     restoreCustomBlocks();
+  }, []);
+
+  // Look for a newer release in the background; the banner offers it
+  useEffect(() => {
+    void useUpdateStore.getState().check();
   }, []);
 
   // Check for Python in the background. The editor doesn't wait for it; training does.
@@ -188,6 +197,7 @@ export default function App() {
       else if (ctrl && key === "y") { e.preventDefault(); useHistoryStore.getState().redo(); }
       else if (ctrl && (key === "/" || key === "?")) { e.preventDefault(); setShortcutsOpen(true); }
       else if (ctrl && key === "s" && e.shiftKey) { e.preventDefault(); saveProject({ saveAs: true }); }
+      else if (ctrl && key === "e" && e.shiftKey) { e.preventDefault(); setDiagramOpen(true); }
       // Other Ctrl+Shift combos stay with the webview (e.g. Ctrl+Shift+I opens devtools)
       else if (e.shiftKey) return;
       else if (ctrl && key === "s") { e.preventDefault(); saveProject(); }
@@ -324,6 +334,7 @@ export default function App() {
         onShowImport={() => setImportOpen(true)}
         onShowTemplates={() => setTemplatesOpen(true)}
         onShowExport={() => setExportOpen(true)}
+        onShowDiagram={() => setDiagramOpen(true)}
         onShowSpotlight={() => setSpotlightOpen(true)}
         onShowCustomBlock={() => setCustomBlockOpen(true)}
         onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
@@ -358,6 +369,7 @@ export default function App() {
             <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
+              <UpdateBanner />
               {recovered && (
                 <RecoveryBanner
                   data={recovered}
@@ -480,6 +492,7 @@ export default function App() {
         {templatesOpen && <TemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} onSelect={handleTemplate} />}
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
+        {diagramOpen && <DiagramExportDialog open={diagramOpen} onClose={() => setDiagramOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
         {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} />}
         {aboutOpen && <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} gpuInfo={gpuInfo} />}

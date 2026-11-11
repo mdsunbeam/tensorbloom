@@ -14,6 +14,7 @@ Handles:
 import sys
 import io
 import json
+import math
 import traceback
 import importlib
 import platform
@@ -99,12 +100,25 @@ class _LSTMExtract(nn.Module):
         return out
 
 class _TransformerDecoderSelfAttn(nn.Module):
-    """Wraps TransformerDecoderLayer for self-attention (uses input as both tgt and memory)."""
+    """Wraps TransformerDecoderLayer as a GPT-style causal block.
+
+    The input is used as both tgt and memory, so both attention steps get the
+    same causal mask: position t may only attend to positions <= t. Without it
+    the layer sees future tokens and a language model trained on it cannot
+    generate text.
+    """
     def __init__(self, layer):
         super().__init__()
         self.layer = layer
-    def forward(self, x):
-        return self.layer(x, x)
+        self.batch_first = getattr(layer.self_attn, "batch_first", False)
+    def forward(self, x, memory=None):
+        seq_dim = 1 if (x.dim() == 3 and self.batch_first) else 0
+        t = x.size(seq_dim)
+        mask = torch.triu(torch.ones(t, t, dtype=torch.bool, device=x.device), diagonal=1)
+        if memory is not None:
+            # Encoder-decoder use: causal self-attention, full cross-attention to the encoder output
+            return self.layer(x, memory, tgt_mask=mask)
+        return self.layer(x, x, tgt_mask=mask, memory_mask=mask)
 
 SPECIAL_CONSTRUCTORS = {
     "AdaptiveAvgPool2d": lambda p: nn.AdaptiveAvgPool2d(
@@ -292,6 +306,19 @@ def _qualified_name(fn) -> str:
 # Decompiler: graph JSON -> PyTorch code
 # ---------------------------------------------------------------------------
 
+def _causal_decoder_lines(var_name: str, x: str, params: dict, memory: str | None = None) -> list[str]:
+    """Forward lines for a TransformerDecoderLayer, matching _TransformerDecoderSelfAttn.
+
+    Self-attention is always causal (position t only sees positions <= t). With no
+    memory connected, the input is also the memory and cross-attention gets the same mask.
+    """
+    seq_dim = 0 if params.get("batch_first") is False else -2
+    mask_line = f"        {var_name}_mask = torch.ones({x}.size({seq_dim}), {x}.size({seq_dim}), dtype=torch.bool, device={x}.device).triu(1)"
+    if memory:
+        return [mask_line, f"        {var_name} = self.{var_name}({x}, {memory}, tgt_mask={var_name}_mask)"]
+    return [mask_line, f"        {var_name} = self.{var_name}({x}, {x}, tgt_mask={var_name}_mask, memory_mask={var_name}_mask)"]
+
+
 def decompile_graph(graph_json: dict) -> str:
     """Convert visual graph JSON to clean PyTorch code."""
     nodes = graph_json["nodes"]
@@ -435,6 +462,12 @@ def decompile_graph(graph_json: dict) -> str:
                 forward_lines.append(f"        {var_name} = torch.matmul({input_vars[0]}, {input_vars[1]})")
             else:
                 forward_lines.append(f"        {var_name} = {', '.join(input_vars) if input_vars else 'x'}")
+        elif mt == "TransformerDecoderLayer":
+            x_edge = next((d for d in detail if d["targetHandle"] != "memory"), None)
+            mem_edge = next((d for d in detail if d["targetHandle"] == "memory"), None)
+            x_var = _resolve_var(x_edge["source"], x_edge["sourceHandle"]) if x_edge else "x"
+            mem_var = _resolve_var(mem_edge["source"], mem_edge["sourceHandle"]) if mem_edge else None
+            forward_lines.extend(_causal_decoder_lines(var_name, x_var, n.get("params", {}), mem_var))
         else:
             input_vars = [_resolve_var(d["source"], d["sourceHandle"]) for d in detail]
             input_str = ", ".join(input_vars) if input_vars else "x"
@@ -634,6 +667,34 @@ def _data_dir() -> str:
     return os.environ.get("TENSORBLOOM_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".tensorbloom")
 
 
+_LOSS_TYPES = {
+    "CrossEntropyLoss", "MSELoss", "BCEWithLogitsLoss", "BCELoss",
+    "L1Loss", "HuberLoss", "NLLLoss", "KLDivLoss",
+    "TripletMarginLoss", "CosineEmbeddingLoss", "CTCLoss",
+    "SmoothL1Loss",
+}
+# Graph nodes that don't become a submodule of the built model
+_FUNCTIONAL_OPS = {"Add", "Concatenate", "MatMul", "Input", "Output"} | _LOSS_TYPES
+
+
+def _module_names(nodes: list[dict]) -> dict[str, str]:
+    """Node id -> the submodule name the built model uses for it, made unique from the node's label."""
+    import re
+    used_names: set[str] = set()
+    id_to_name: dict[str, str] = {}
+    for n in nodes:
+        mt = n.get("moduleType", "")
+        if mt and mt not in _FUNCTIONAL_OPS:
+            base = re.sub(r"[^a-zA-Z0-9_]", "_", n.get("label") or n["id"])
+            name = base
+            i = 2
+            while name in used_names:
+                name = f"{base}_{i}"; i += 1
+            used_names.add(name)
+            id_to_name[n["id"]] = name
+    return id_to_name
+
+
 def _build_model_from_graph(graph_json: dict) -> nn.Module:
     """Build a runnable nn.Module from graph JSON."""
     import re
@@ -652,26 +713,9 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
             "targetHandle": e.get("targetHandle", "in"),
         })
 
-    # Build unique names from labels for readable module names
-    used_names: set[str] = set()
-    id_to_name: dict[str, str] = {}
-    LOSS_TYPES = {
-        "CrossEntropyLoss", "MSELoss", "BCEWithLogitsLoss", "BCELoss",
-        "L1Loss", "HuberLoss", "NLLLoss", "KLDivLoss",
-        "TripletMarginLoss", "CosineEmbeddingLoss", "CTCLoss",
-        "SmoothL1Loss",
-    }
-    functional_ops = {"Add", "Concatenate", "MatMul", "Input", "Output"} | LOSS_TYPES
-    for n in nodes:
-        mt = n.get("moduleType", "")
-        if mt and mt not in functional_ops:
-            base = re.sub(r"[^a-zA-Z0-9_]", "_", n.get("label") or n["id"])
-            name = base
-            i = 2
-            while name in used_names:
-                name = f"{base}_{i}"; i += 1
-            used_names.add(name)
-            id_to_name[n["id"]] = name
+    LOSS_TYPES = _LOSS_TYPES
+    functional_ops = _FUNCTIONAL_OPS
+    id_to_name = _module_names(nodes)
 
     # Track which nodes are code blocks
     code_block_nodes: set[str] = set()
@@ -791,6 +835,8 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
         # Standard nodes
         inputs = []
         detail = adj_detailed.get(nid, [])
+        # A decoder layer's memory input is its second argument, whatever order the edges were drawn in
+        detail = sorted(detail, key=lambda d: d["targetHandle"] == "memory")
         for d in detail:
             src_id = d["source"]
             src_handle = d["sourceHandle"]
@@ -815,10 +861,46 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
     return torch.fx.GraphModule(root, graph)
 
 
+def _mps_available() -> bool:
+    """True on Apple Silicon Macs where PyTorch can use the GPU through Metal (MPS)."""
+    mps = getattr(torch.backends, "mps", None)
+    try:
+        return bool(mps is not None and mps.is_available())
+    except Exception:
+        return False
+
+
+def _gpu_name() -> "str | None":
+    if torch.cuda.is_available():
+        return torch.cuda.get_device_name(0)
+    if _mps_available():
+        return "Apple GPU (MPS)"
+    return None
+
+
 def _get_device(device_str: str) -> torch.device:
     if device_str == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if _mps_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if device_str.startswith("cuda") and not torch.cuda.is_available():
+        raise ValueError(f"The device is set to {device_str}, but this computer has no CUDA GPU. "
+                         "Set Device to auto or cpu in the Training panel.")
+    if device_str == "mps" and not _mps_available():
+        raise ValueError("The device is set to mps, but Apple GPU support (MPS) isn't available here. "
+                         "It needs an Apple Silicon Mac. Set Device to auto or cpu in the Training panel.")
     return torch.device(device_str)
+
+
+def _to_device(t, device: torch.device):
+    """Move a batch to the device. MPS has no float64, so float64 data becomes float32 there."""
+    if isinstance(t, torch.Tensor):
+        if device.type == "mps" and t.dtype == torch.float64:
+            t = t.float()
+        return t.to(device)
+    return t.to(device)
 
 
 def _build_optimizer(config: dict, params) -> torch.optim.Optimizer:
@@ -1658,6 +1740,173 @@ def _compute_correct(output, target):
     return 0, 0
 
 
+class _LayerMonitor:
+    """Watches each layer of a model while it trains, so the graph can show what training does to it.
+
+    On the batches it's asked to capture, it records each layer's output (spread, dead units, a
+    histogram) and the size of the gradients flowing back into it, keyed by graph node id. At the
+    end of an epoch it can also run one fixed sample through the model and keep each image-like
+    layer's feature maps as small pictures.
+    """
+
+    HIST_BINS = 24
+    MAX_HIST_VALUES = 65536
+    MAX_MAPS = 8
+
+    def __init__(self, model: nn.Module, graph_json: dict):
+        names = _module_names(graph_json["nodes"])
+        types = {n["id"]: n.get("moduleType", "") for n in graph_json["nodes"]}
+        self.layers: list[tuple[str, nn.Module, str]] = []  # (node id, module, module type)
+        for nid, name in names.items():
+            mod = getattr(model, name, None)
+            if isinstance(mod, nn.Module):
+                self.layers.append((nid, mod, types.get(nid, "")))
+        self.capturing = False
+        self.stats: dict[str, dict] = {}
+        self._grads: dict[str, list[float]] = {}  # node id -> [sum of squares, count]
+        self._maps: dict[str, torch.Tensor] | None = None
+        self._handles = [mod.register_forward_hook(self._hook(nid)) for nid, mod, _ in self.layers]
+
+    def close(self):
+        for h in self._handles:
+            h.remove()
+        self._handles = []
+
+    @staticmethod
+    def _first_tensor(out):
+        if isinstance(out, torch.Tensor):
+            return out
+        if isinstance(out, (tuple, list)):
+            return next((o for o in out if isinstance(o, torch.Tensor)), None)
+        return None
+
+    def _hook(self, nid: str):
+        def hook(_module, _inputs, out):
+            t = self._first_tensor(out)
+            if t is None:
+                return
+            if self._maps is not None:
+                self._maps[nid] = t.detach()
+                return
+            if not self.capturing:
+                return
+            self.stats[nid] = self._activation_stats(t.detach())
+            if t.requires_grad:
+                acc = self._grads.setdefault(nid, [0.0, 0])
+
+                def grad_hook(g, acc=acc):
+                    g = g.detach().float()
+                    acc[0] += float((g * g).sum())
+                    acc[1] += g.numel()
+                t.register_hook(grad_hook)
+        return hook
+
+    def _activation_stats(self, t: torch.Tensor) -> dict:
+        x = t.float()
+        finite = torch.isfinite(x)
+        st: dict = {"nonfinite": bool((~finite).any())}
+        if st["nonfinite"]:
+            x = x[finite]
+            if x.numel() == 0:
+                return st
+        st["mean"] = float(x.mean())
+        st["std"] = float(x.std()) if x.numel() > 1 else 0.0
+        st["zero"] = float((x == 0).float().mean())
+        # Units that output zero for every sample in the batch, for layers whose outputs can't be negative
+        # (ReLU and the like). Channels for images, features for vectors, the last dim for sequences.
+        if not st["nonfinite"] and t.dim() >= 2 and float(x.min()) >= 0:
+            unit_dim = 1 if t.dim() in (2, 4, 5) else t.dim() - 1
+            per_unit = x.transpose(0, unit_dim).reshape(x.shape[unit_dim], -1).amax(dim=1)
+            st["dead"] = float((per_unit <= 0).float().mean())
+        flat = x.reshape(-1)
+        if flat.numel() > self.MAX_HIST_VALUES:
+            flat = flat[torch.randperm(flat.numel(), device=flat.device)[:self.MAX_HIST_VALUES]]
+        lo, hi = float(flat.min()), float(flat.max())
+        if hi <= lo:
+            hi = lo + 1e-6
+        st["hist"] = {"min": lo, "max": hi,
+                      "counts": [int(c) for c in torch.histc(flat, bins=self.HIST_BINS, min=lo, max=hi).tolist()]}
+        return st
+
+    def begin(self):
+        """Capture the next forward and backward pass."""
+        self.capturing = True
+        self.stats = {}
+        self._grads = {}
+
+    def end(self, grad_scale: float = 1.0) -> dict[str, dict]:
+        """Stops capturing and returns the stats, once the backward pass has run (before the optimizer step)."""
+        self.capturing = False
+        for nid, mod, _ in self.layers:
+            st = self.stats.setdefault(nid, {})
+            acc = self._grads.get(nid)
+            if acc and acc[1]:
+                st["grad"] = (acc[0] / acc[1]) ** 0.5 / grad_scale
+            params = [p for p in mod.parameters() if p.requires_grad]
+            if params:
+                st["weight_norm"] = float(torch.sqrt(sum((p.detach().float() ** 2).sum() for p in params)))
+                grads = [p.grad for p in params if p.grad is not None]
+                if grads:
+                    st["grad_norm"] = float(torch.sqrt(sum((g.detach().float() ** 2).sum() for g in grads))) / grad_scale
+            # NaN and infinity can't go over JSON: they become null, and the layer is marked
+            for key in ("mean", "std", "grad", "grad_norm", "weight_norm"):
+                v = st.get(key)
+                if v is not None and not math.isfinite(v):
+                    st[key] = None
+                    st["nonfinite"] = True
+        return {k: v for k, v in self.stats.items() if v}
+
+    def feature_maps(self, model: nn.Module, x: torch.Tensor, num_inputs: int, norm=None) -> dict:
+        """Runs one sample through the model and returns each image-like layer's first channels as small PNGs."""
+        self._maps = {}
+        was_training = model.training
+        model.eval()
+        try:
+            with torch.no_grad():
+                model(*((x.unsqueeze(0),) * num_inputs))
+            maps = {}
+            for nid, t in self._maps.items():
+                if t.dim() == 4 and t.shape[2] >= 2 and t.shape[3] >= 2:
+                    maps[nid] = self._map_payload(t[0])
+        finally:
+            self._maps = None
+            model.train(was_training)
+        sample = _image_payload(x, norm) if _is_image(x.cpu()) else None
+        return {"input": sample, "layers": maps}
+
+    def _map_payload(self, t: torch.Tensor) -> dict:
+        """The first channels of a [C, H, W] output, each scaled to its own range, as PNGs."""
+        import base64
+        from PIL import Image
+        t = t.detach().float().cpu()
+        # Small maps are blown up so they're visible, big ones shrunk so the payload stays small
+        h, w = t.shape[1], t.shape[2]
+        scale = max(1, 32 // max(h, w))
+        images = []
+        for c in range(min(self.MAX_MAPS, t.shape[0])):
+            ch = t[c]
+            lo, hi = float(ch.min()), float(ch.max())
+            arr = ((ch - lo) / (hi - lo) * 255).round().to(torch.uint8) if hi > lo else torch.zeros_like(ch, dtype=torch.uint8)
+            pil = Image.fromarray(arr.numpy())
+            if scale > 1:
+                pil = pil.resize((w * scale, h * scale), Image.NEAREST)
+            pil.thumbnail((64, 64))
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            images.append(base64.b64encode(buf.getvalue()).decode("ascii"))
+        return {"channels": t.shape[0], "size": [h, w], "png": images}
+
+
+def _send_layer_stats(monitor: _LayerMonitor, epoch: int, step: int, total_steps: int, grad_scale: float = 1.0):
+    try:
+        layers = monitor.end(grad_scale)
+    except Exception as e:
+        print(f"Couldn't read layer stats: {e}", file=sys.stderr)
+        return
+    if layers:
+        send_notification("train.layers", {"epoch": epoch, "step": step, "total_steps": total_steps, "layers": layers})
+
+
 def _train_loop(graph_json: dict, config: dict):
     """Runs in a separate thread. Captures stdout/stderr as train.log notifications."""
     global _train_stop_event, _last_trained_state
@@ -1696,9 +1945,12 @@ def _train_loop(graph_json: dict, config: dict):
         param_count = sum(p.numel() for p in model.parameters())
         print(f"Model: {param_count:,} parameters")
         print(f"Device: {device}")
-        if not torch.cuda.is_available():
-            print("WARNING: CUDA not available. Training on CPU (slow).", file=sys.stderr)
-            print("To enable GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126", file=sys.stderr)
+        if device.type == "cpu" and device_str == "auto":
+            if platform.system() == "Darwin":
+                print("WARNING: Apple GPU (MPS) not available. Training on CPU (slow).", file=sys.stderr)
+            else:
+                print("WARNING: CUDA not available. Training on CPU (slow).", file=sys.stderr)
+                print("To enable GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126", file=sys.stderr)
 
         # Detect multi-input models (e.g. encoder-decoder Transformer)
         num_inputs = sum(1 for n in graph_json["nodes"]
@@ -1763,7 +2015,22 @@ def _train_loop(graph_json: dict, config: dict):
                 torch.cuda.set_rng_state_all(ckpt["cuda_rng_state"])
             send_notification("train.progress", {"status": "checkpoint", "path": resume_path, "epoch": start_epoch - 1})
 
+        # Per-layer activations and gradients, shown on the graph while it trains
+        monitor = None
+        probe_x, probe_norm = None, None
+        if config.get("layer_stats", True):
+            try:
+                monitor = _LayerMonitor(model, graph_json)
+                probe_ds = (test_loader or train_loader).dataset
+                first = probe_ds[0][0]
+                if isinstance(first, torch.Tensor) and first.is_floating_point():
+                    probe_x, probe_norm = first, _find_normalize(probe_ds)
+            except Exception as e:
+                print(f"Layer stats are off for this run: {e}", file=sys.stderr)
+                monitor = None
+
         steps_per_epoch = len(train_loader)
+        mps_peak_mb = 0.0  # MPS has no peak-memory counter, so track it per epoch
         for epoch in range(start_epoch, epochs + 1):
             if _train_stop_event.is_set():
                 break
@@ -1776,19 +2043,24 @@ def _train_loop(graph_json: dict, config: dict):
                 if _train_stop_event.is_set():
                     break
 
-                data = data.to(device)
+                data = _to_device(data, device)
                 # Reconstruction: use input as target (Data.x → Loss.target)
-                target = data if is_reconstruction else target.to(device)
+                target = data if is_reconstruction else _to_device(target, device)
                 optimizer.zero_grad()
 
                 # For multi-input models (e.g. encoder-decoder), duplicate input
                 model_args = (data,) * num_inputs
+                capture = monitor is not None and batch_idx % 50 == 0
+                if capture:
+                    monitor.begin()
 
                 if use_amp and scaler:
                     with torch.amp.autocast(device_type=device.type):
                         output = model(*model_args)
                         loss = _compute_loss(criterion, output, target, data)
                     scaler.scale(loss).backward()
+                    if capture:
+                        _send_layer_stats(monitor, epoch, batch_idx, steps_per_epoch, float(scaler.get_scale()))
                     if clip_max_norm:
                         scaler.unscale_(optimizer)
                         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_max_norm)
@@ -1798,6 +2070,8 @@ def _train_loop(graph_json: dict, config: dict):
                     output = model(*model_args)
                     loss = _compute_loss(criterion, output, target, data)
                     loss.backward()
+                    if capture:
+                        _send_layer_stats(monitor, epoch, batch_idx, steps_per_epoch)
                     if clip_max_norm:
                         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_max_norm)
                     optimizer.step()
@@ -1835,7 +2109,7 @@ def _train_loop(graph_json: dict, config: dict):
                     for data_b, target_b in train_loader:
                         if _train_stop_event.is_set():
                             break
-                        data_b, target_b = data_b.to(device), target_b.to(device)
+                        data_b, target_b = _to_device(data_b, device), _to_device(target_b, device)
                         out_b = model(*((data_b,) * num_inputs))
                         c, t = _compute_correct(out_b, target_b)
                         correct += c
@@ -1858,8 +2132,8 @@ def _train_loop(graph_json: dict, config: dict):
                     for data_b, target_b in test_loader:
                         if _train_stop_event.is_set():
                             break
-                        data_b = data_b.to(device)
-                        target_b = data_b if is_reconstruction else target_b.to(device)
+                        data_b = _to_device(data_b, device)
+                        target_b = data_b if is_reconstruction else _to_device(target_b, device)
                         output_b = model(*((data_b,) * num_inputs))
                         total_val += _compute_loss(criterion, output_b, target_b, data_b).item()
                         n_val += 1
@@ -1871,6 +2145,16 @@ def _train_loop(graph_json: dict, config: dict):
                 if not is_reconstruction and v_total > 0:
                     val_acc = v_correct / v_total
 
+            # What each image-like layer makes of one fixed sample, after this epoch
+            if monitor is not None and probe_x is not None and not _train_stop_event.is_set():
+                try:
+                    maps = monitor.feature_maps(model, probe_x.to(device), num_inputs, probe_norm)
+                    if maps["layers"]:
+                        send_notification("train.layers", {"epoch": epoch, "maps": maps})
+                except Exception as e:
+                    print(f"Couldn't capture feature maps: {e}", file=sys.stderr)
+                    probe_x = None
+
             # GPU memory stats
             gpu_info = None
             if device.type == "cuda":
@@ -1880,6 +2164,14 @@ def _train_loop(graph_json: dict, config: dict):
                     "reserved_mb": round(torch.cuda.memory_reserved(device) / 1024 / 1024, 1),
                     "max_allocated_mb": round(torch.cuda.max_memory_allocated(device) / 1024 / 1024, 1),
                     "total_mb": round(props.total_memory / 1024 / 1024, 1),
+                }
+            elif device.type == "mps":
+                allocated_mb = round(torch.mps.current_allocated_memory() / 1024 / 1024, 1)
+                mps_peak_mb = max(mps_peak_mb, allocated_mb)
+                gpu_info = {
+                    "allocated_mb": allocated_mb,
+                    "reserved_mb": round(torch.mps.driver_allocated_memory() / 1024 / 1024, 1),
+                    "max_allocated_mb": mps_peak_mb,
                 }
 
             # Log epoch summary
@@ -1942,6 +2234,8 @@ def _train_loop(graph_json: dict, config: dict):
                         send_notification("train.progress", {"status": "early_stop", "epoch": epoch})
                         break
 
+        if monitor is not None:
+            monitor.close()
         _last_trained_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
         print("Training complete.")
@@ -1989,7 +2283,7 @@ def system_gpu_info(params: dict) -> dict:
                 "memory_free": props.total_memory - reserved,
                 "utilization_percent": round(allocated / props.total_memory * 100, 1) if props.total_memory > 0 else 0,
             })
-    return {"cuda_available": torch.cuda.is_available(), "gpus": gpus}
+    return {"cuda_available": torch.cuda.is_available(), "mps_available": _mps_available(), "gpus": gpus}
 
 
 def _apply_weight_init(model: nn.Module, init_type: str = "default"):
@@ -2219,7 +2513,7 @@ def model_predict(params: dict) -> dict:
 
         def run(xb: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
-                return model(*((xb.to(device),) * num_inputs)).float().cpu()
+                return model(*((_to_device(xb, device),) * num_inputs)).float().cpu()
 
         def describe(x: torch.Tensor, out: torch.Tensor, y) -> dict:
             label = _label_of(y) if y is not None else None
@@ -2867,7 +3161,8 @@ def _system_environment(params: dict) -> dict:
         "cudaVersion": torch.version.cuda if torch.cuda.is_available() else None,
         "pythonVersion": platform.python_version(),
         "platform": platform.platform(),
-        "gpuName": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpuName": _gpu_name(),
+        "mpsAvailable": _mps_available(),
     }
 
 
@@ -2877,7 +3172,8 @@ def main():
         "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
-        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpu_name": _gpu_name(),
+        "mps_available": _mps_available(),
     })
 
     for line in sys.stdin:

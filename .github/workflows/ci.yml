@@ -42,6 +42,18 @@ jobs:
       - run: cargo test
         working-directory: app/src-tauri
 
+  rust-macos:
+    name: Rust check (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # tauri-build needs the bundled uv binary to exist
+      - run: node scripts/fetch-uv.mjs
+        working-directory: app
+      - run: cargo check
+        working-directory: app/src-tauri
+
   python-tests:
     name: Python template tests
     runs-on: ubuntu-latest

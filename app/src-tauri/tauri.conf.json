@@ -28,6 +28,7 @@
     "active": true,
     "targets": "all",
     "externalBin": ["binaries/uv"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "../../python/tensorbloom_sidecar.py": "python/tensorbloom_sidecar.py",
       "../../python/requirements.txt": "python/requirements.txt"
@@ -43,6 +44,15 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/mdsunbeam/tensorbloom/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }
