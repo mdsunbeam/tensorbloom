@@ -13,6 +13,7 @@ import { formatDuration, timeAgo } from "../lib/format-time";
 import { formatLoss } from "./RunControls";
 import { useExperimentStore } from "../store/experiment-store";
 import RunChanges from "./RunChanges";
+import { useLayerStatsStore } from "../store/layer-stats-store";
 
 /** Each run keeps one color wherever it's drawn, picked by its number */
 export function runColor(run: RunRecord): string {
@@ -88,6 +89,7 @@ function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareI
     // The device is this computer's, not the run's
     const { device } = useTrainingStore.getState().config;
     useTrainingStore.getState().updateConfig({ ...run.config, device });
+    useLayerStatsStore.getState().showRun(run);
     toast.success(`Restored Run ${run.number}'s model and training settings. Ctrl+Z brings back your previous graph.`);
   };
 

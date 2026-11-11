@@ -7,6 +7,9 @@ import { formatShape } from "../lib/shape-inference";
 import { formatParamCount } from "../lib/model-summary";
 import { quickParamCount } from "../lib/node-summary";
 import { FRAME_HEADER, type GroupNodeData } from "../lib/groups";
+import { useLayerStatsStore } from "../store/layer-stats-store";
+import { overlayScale } from "../lib/use-layer-overlay";
+import { layerFlags } from "../lib/layer-health";
 
 /** A layer group: a titled frame behind its layers when open, a single card in their place when collapsed */
 function LayerGroupNode({ id, data }: NodeProps<Node<GroupNodeData>>) {
@@ -20,6 +23,8 @@ function LayerGroupNode({ id, data }: NodeProps<Node<GroupNodeData>>) {
   const showBatch = useGraphStore((s) => s.shapeDisplayBatch);
   const batchSize = useTrainingStore((s) => s.config.batchSize);
   const batch = showBatch ? batchSize : undefined;
+  const overlay = useLayerStatsStore((s) => s.overlay);
+  const snapshot = useLayerStatsStore((s) => s.snapshot);
 
   const info = useMemo(() => {
     const inside = new Set(group.nodeIds);
@@ -30,13 +35,18 @@ function LayerGroupNode({ id, data }: NodeProps<Node<GroupNodeData>>) {
     const inEdge = edges.find((e) => inside.has(e.target) && !inside.has(e.source));
     const outEdge = edges.find((e) => inside.has(e.source) && !inside.has(e.target));
     const problems = group.nodeIds.filter((n) => shapeErrors[n]?.type === "root").length;
+    // Layers inside whose training stats look wrong, so a collapsed group doesn't hide them
+    const { typicalGrad } = overlayScale(snapshot, overlay);
+    const trainingFlags = overlay === "off" || !snapshot ? 0 : nodes.filter((n) => inside.has(n.id)
+      && layerFlags(snapshot.layers[n.id], typicalGrad, n.data.category === "activation").length > 0).length;
     return {
+      trainingFlags,
       params,
       inShape: inEdge ? shapeOf(inEdge.source, inEdge.sourceHandle) : undefined,
       outShape: outEdge ? shapeOf(outEdge.source, outEdge.sourceHandle) : undefined,
       problems,
     };
-  }, [group.nodeIds, nodes, edges, shapeMap, shapeErrors]);
+  }, [group.nodeIds, nodes, edges, shapeMap, shapeErrors, overlay, snapshot]);
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -68,6 +78,11 @@ function LayerGroupNode({ id, data }: NodeProps<Node<GroupNodeData>>) {
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               {info.problems} problem{info.problems === 1 ? "" : "s"} inside
+            </span>
+          )}
+          {!info.problems && info.trainingFlags > 0 && (
+            <span className="ml-auto flex-shrink-0 text-warning font-medium" title="Open the group and hover these layers to see why">
+              {info.trainingFlags} layer{info.trainingFlags === 1 ? "" : "s"} to look at
             </span>
           )}
         </div>

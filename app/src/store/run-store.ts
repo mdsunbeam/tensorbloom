@@ -3,6 +3,8 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./graph-store";
 import type { TrainingConfig, TrainingMetrics, TrainingResults } from "./training-store";
 import type { LayerGroup } from "../lib/groups";
+import type { RunLayerStats } from "../lib/layer-health";
+import { showLatestRunLayers } from "./layer-stats-store";
 
 /** One epoch's numbers, as the last report of that epoch gave them */
 export interface EpochPoint {
@@ -37,6 +39,8 @@ export interface RunRecord {
   baseRunId?: string;
   /** What the experiment changed from that run, in a few words */
   change?: string;
+  /** What training did to each layer: the last captured batch and each layer's history */
+  layers?: RunLayerStats;
 }
 
 /** Projects keep this many runs; older ones are dropped */
@@ -68,7 +72,11 @@ export const useRunStore = create<RunState>((set, get) => ({
   },
   removeRun: (id) => set({ runs: get().runs.filter((r) => r.id !== id), compareIds: get().compareIds.filter((c) => c !== id) }),
   // Another project's runs: whatever weights Python holds aren't theirs
-  setRuns: (runs) => set({ runs: runs.slice(-MAX_RUNS), compareIds: runs.length ? [runs[runs.length - 1].id] : [], liveRunId: null }),
+  setRuns: (runs) => {
+    set({ runs: runs.slice(-MAX_RUNS), compareIds: runs.length ? [runs[runs.length - 1].id] : [], liveRunId: null });
+    // The graph shows what training did to the layers in this project's latest run
+    showLatestRunLayers(runs);
+  },
   toggleCompare: (id) => {
     const ids = get().compareIds;
     set({ compareIds: ids.includes(id) ? ids.filter((c) => c !== id) : [...ids, id] });
