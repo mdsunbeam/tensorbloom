@@ -118,7 +118,7 @@ Grab the latest installer from the [releases page](https://github.com/mdsunbeam/
 - **Windows** — `.exe` installer or `.msi`
 - **Linux** — `.deb`, `.rpm`, or `.AppImage`
 
-**Requirement:** Python 3.9+ must be installed. The editor opens right away; if PyTorch isn't set up yet, a card on the canvas offers to install it and shows its progress while you keep building.
+Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download.
 
 ### Building from Source
 
@@ -131,7 +131,7 @@ npm install
 npx tauri dev
 ```
 
-Requires Node.js 18+, [Rust](https://rustup.rs/), and Python 3.9+.
+Requires Node.js 18+ and [Rust](https://rustup.rs/). `npx tauri dev` and `npx tauri build` download the [uv](https://github.com/astral-sh/uv) binary that the app bundles to install Python (`app/scripts/fetch-uv.mjs`). Python 3.10+ is only needed to run the Python tests.
 **Windows:** also needs [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 **Linux:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
