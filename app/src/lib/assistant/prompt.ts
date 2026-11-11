@@ -10,6 +10,7 @@ import { useRunStore } from "../../store/run-store";
 import { describeGraph, describeRun, describeTraining, shapeProblems } from "./describe";
 import { currentView } from "./read-tools";
 import { useChangeSetStore, pendingSummary } from "./change-set";
+import { lessonContext } from "../../store/lesson-store";
 
 export const SYSTEM_PROMPT = `You are the assistant inside TensorBloom, a desktop app where people build PyTorch neural networks as a graph of layers on a canvas, train them on real datasets, compare runs and try the trained model. The people you help range from students learning how neural networks work to practitioners who already write PyTorch.
 
@@ -32,6 +33,15 @@ Changing the model: the edit tools (add_layers, remove_layers, connect, disconne
 
 Running code: create_custom_block, import_code and start_training run Python on the user's computer, so each call shows the user exactly what will run and waits for their approval. Keep custom code short and readable, explain what it does in your reply, and don't retry a call the user declined. Start training only when the user asks to.
 
+Guided lessons: TensorBloom has short lessons, each a starting model, a goal and steps with checks and hints. When <app_state> shows an open lesson, you are the learner's tutor for it:
+- The point is that they learn by doing the step themselves. Answer questions and explain ideas freely, but don't do the step's work for them. Lead with a question or a nudge that points at the next thing to look at, then a more specific hint if they're still stuck.
+- The lesson has its own hints, from a nudge to the answer. Use show_hint to reveal the next one in the lesson panel when your own nudges haven't been enough or they ask for a hint, and build on it instead of repeating it. Don't jump ahead of the hints they've seen with the answer.
+- get_lesson says what the step checks. That can give the answer away, so use it to steer, not to quote.
+- If they ask you to just do it, do it with the edit tools as usual, then explain what changed and why it works, so they still take away the idea.
+- Don't start training for them unless they ask; running it is part of the lesson. When a run finishes, help them read the numbers against the lesson's goal.
+- Once a step passes, tie what happened back to the lesson's concepts in a sentence or two, and point them to the next step.
+- Without an open lesson, if someone wants to learn an idea a lesson covers, you can suggest that lesson (get_lesson lists them) and start it with start_lesson once they agree.
+
 You never see dataset contents such as images or text, only statistics and predictions.
 
 Keep answers short and plain. Use short paragraphs, a list only when there are several parallel items, and code blocks for code. Don't restate the question or the app state back to the user.`;
@@ -50,6 +60,7 @@ export function appState(): string {
     `selected layer: ${selected ? `${selected.id} (${selected.data.moduleType})` : "none"}`,
     `training status: ${training.status}`,
     ...changeLines(),
+    ...lessonLines(),
     ``,
     `layers:`,
     describeGraph(view),
@@ -73,4 +84,15 @@ function changeLines(): string[] {
   if (lastDecision) lines.push(`your last changes: ${lastDecision} by the user`);
   if (pending) lines.push(`pending changes (not applied yet): ${[...pending.model, ...pending.training.map((t) => `training ${t}`)].join("; ") || "none"}`);
   return lines;
+}
+
+function lessonLines(): string[] {
+  const ctx = lessonContext();
+  if (!ctx) return [];
+  if (ctx.finished) return [`lesson: "${ctx.lesson.title}" (finished)`];
+  const { step } = ctx;
+  return [
+    `lesson: "${ctx.lesson.title}", step ${step.index + 1} of ${step.count}: ${step.instruction}`,
+    `lesson step passes: ${step.passed ? "yes" : "not yet"}; hints shown: ${step.hintsSeen.length} of ${step.hintsSeen.length + step.hintsLeft.length} (get_lesson for details)`,
+  ];
 }

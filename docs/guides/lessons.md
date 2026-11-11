@@ -98,7 +98,7 @@ A step stays done once it passes, even if later edits would make its check fail 
 - `evaluate(check, context)` checks a step against a graph, the training settings, and the lesson's runs.
 - `describeCheck(check)` puts a check in words, such as "in_features on fc2 is 512". It can give the answer away, so the panel shows labels instead.
 
-`lessonContext()` in `app/src/store/lesson-store.ts` returns the lesson in progress as plain data: the lesson's goal and concepts, the current step's instruction, what it checks, whether it passes, and which hints the learner has already seen and which are left. A tutor should work through the remaining hints in order before it gives an answer.
+`lessonContext()` in `app/src/store/lesson-store.ts` returns the lesson in progress as plain data: the lesson's goal and concepts, the current step's instruction, what it checks, whether it passes, and which hints the learner has already seen and which are left. A tutor should work through the remaining hints in order before it gives an answer. The assistant does this through its `get_lesson` and `show_hint` tools (`app/src/lib/assistant/lesson-tools.ts`); see [the assistant guide](assistant.md#tutoring-a-lesson).
 
 ## Adding a lesson
 

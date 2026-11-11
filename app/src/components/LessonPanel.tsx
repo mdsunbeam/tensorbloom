@@ -5,6 +5,8 @@ import { useTrainingStore } from "../store/training-store";
 import { useRunStore } from "../store/run-store";
 import { findLesson } from "../lib/lessons/catalog";
 import { evaluate } from "../lib/lessons/checks";
+import { useChangeSetStore } from "../lib/assistant/change-set";
+import { askAssistant } from "../store/assistant-store";
 import Button, { IconButton } from "./ui/Button";
 
 /** The lesson in progress, floating at the top left of the canvas: the goal, the current step, its checklist and hints */
@@ -15,6 +17,8 @@ export default function LessonPanel({ onShowLessons }: { onShowLessons: () => vo
   const edges = useGraphStore((s) => s.edges);
   const config = useTrainingStore((s) => s.config);
   const runs = useRunStore((s) => s.runs);
+  // The assistant's pending changes are only a preview: a step they'd complete counts once they're applied
+  const previewing = useChangeSetStore((s) => s.base !== null);
 
   const lesson = active ? findLesson(active.lessonId) : undefined;
   const step = lesson && active ? lesson.steps[active.stepIndex] : undefined;
@@ -33,8 +37,8 @@ export default function LessonPanel({ onShowLessons }: { onShowLessons: () => vo
   }, [active, step, nodes, edges, config, runs]);
 
   useEffect(() => {
-    if (step && result?.passed && !done) useLessonStore.getState().markDone(step.id);
-  }, [step, result?.passed, done]);
+    if (step && result?.passed && !done && !previewing) useLessonStore.getState().markDone(step.id);
+  }, [step, result?.passed, done, previewing]);
 
   if (!active || !lesson || !step) return null;
   const { exit, next, confirmStep, showHint, setCollapsed } = useLessonStore.getState();
@@ -131,10 +135,13 @@ export default function LessonPanel({ onShowLessons }: { onShowLessons: () => vo
 
           <div className="flex items-center justify-end gap-2 mt-3">
             {!done && active.hintsShown < step.hints.length && (
-              <Button size="sm" variant="ghost" onClick={showHint} className="mr-auto">
+              <Button size="sm" variant="ghost" onClick={showHint}>
                 {active.hintsShown === 0 ? "Show a hint" : "Another hint"}
               </Button>
             )}
+            <Button size="sm" variant="ghost" className="mr-auto" onClick={() => askAssistant(tutorQuestion(done, active.stepIndex))}>
+              Ask the tutor
+            </Button>
             {!done && step.check.kind === "manual" && (
               <Button size="sm" variant="primary" onClick={confirmStep}>{step.check.button ?? "Done"}</Button>
             )}
@@ -146,6 +153,13 @@ export default function LessonPanel({ onShowLessons }: { onShowLessons: () => vo
       )}
     </section>
   );
+}
+
+/** A starting question for the assistant, which the learner can edit before sending */
+function tutorQuestion(done: boolean, stepIndex: number): string {
+  return done
+    ? `Why did that work? Can you explain what step ${stepIndex + 1} showed?`
+    : `I'm stuck on step ${stepIndex + 1}. Can you help me work it out without just giving me the answer?`;
 }
 
 function CheckMark({ on }: { on: boolean }) {

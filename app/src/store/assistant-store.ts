@@ -4,6 +4,7 @@ import { runTurn, type TurnOutcome } from "../lib/assistant/agent";
 import { READ_TOOLS } from "../lib/assistant/read-tools";
 import { EDIT_TOOLS } from "../lib/assistant/edit-tools";
 import { CODE_TOOLS } from "../lib/assistant/code-tools";
+import { LESSON_TOOLS } from "../lib/assistant/lesson-tools";
 import { takeDecision } from "../lib/assistant/change-set";
 import type { AssistantTool, ApprovalRequest } from "../lib/assistant/tool-types";
 
@@ -65,7 +66,7 @@ function declineWaiting() {
 
 /** The tools available to the assistant. Later phases add more. */
 export function assistantTools(): AssistantTool[] {
-  return [...READ_TOOLS, ...EDIT_TOOLS, ...CODE_TOOLS];
+  return [...READ_TOOLS, ...LESSON_TOOLS, ...EDIT_TOOLS, ...CODE_TOOLS];
 }
 
 function outcomeNotice(outcome: TurnOutcome): ChatItem | null {

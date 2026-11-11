@@ -17,6 +17,7 @@ import { safePythonId, type CodeBlockDef, type HandleDef } from "../types";
 import { GraphOpError, addLayer, connect, createNode, insertAfter, freePosition, requireNode, type GraphDoc } from "../graph-ops";
 import { currentDoc, writeGraph, writeTraining, pendingSummary, hasPendingChanges } from "./change-set";
 import { requireModule } from "./read-tools";
+import { refuseDuringLesson } from "./lesson-tools";
 import { ToolError, type AssistantTool } from "./tool-types";
 
 const RUNS_CODE = "This runs Python on your computer with the same access to your files as TensorBloom. Approve only code you've read and trust.";
@@ -122,6 +123,7 @@ To design one, list every layer with a unique ref, then the connections between 
   },
   describe: (i) => (i.template ? `Opening the ${i.template} template` : `Building a ${i.layers?.length ?? 0}-layer model`),
   run: async ({ template, layers, connections = [], groups = [] }) => {
+    refuseDuringLesson("replacing the whole model");
     if (template && layers?.length) throw new ToolError("Give either a template or layers, not both.");
     if (template) {
       const tpl = TEMPLATES.find((t) => t.name === template);
@@ -257,13 +259,16 @@ const importCode: AssistantTool<{ code: string }> = {
     },
   },
   describe: () => "Importing code",
-  confirm: ({ code }) => ({
-    title: "Run this code to import the model?",
-    summary: "TensorBloom runs this code in Python to trace the model, then shows the result on the canvas for you to apply or discard.",
-    code,
-    warning: RUNS_CODE,
-    approveLabel: "Run and import",
-  }),
+  confirm: ({ code }) => {
+    refuseDuringLesson("importing code");
+    return {
+      title: "Run this code to import the model?",
+      summary: "TensorBloom runs this code in Python to trace the model, then shows the result on the canvas for you to apply or discard.",
+      code,
+      warning: RUNS_CODE,
+      approveLabel: "Run and import",
+    };
+  },
   run: async ({ code }) => {
     let compiled: CompiledGraph;
     try {
