@@ -26,6 +26,8 @@ import ContextMenu from "./ContextMenu";
 import ChangeSetReview from "./assistant/ChangeSetReview";
 import { useChangeSetStore } from "../lib/assistant/change-set";
 import { previewMarks } from "../lib/assistant/preview-marks";
+import ExperimentBanner from "./ExperimentBanner";
+import LayerOverlayControl from "./LayerOverlayControl";
 import type { Node, Edge, Connection, NodeChange } from "@xyflow/react";
 import type { ConnectFromContext } from "./SpotlightDialog";
 
@@ -526,6 +528,8 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
 
       {/* Batch size display toggle */}
       <BatchToggleButton />
+      <ExperimentBanner />
+      <LayerOverlayControl />
 
     </div>
   );

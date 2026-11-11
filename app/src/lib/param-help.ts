@@ -84,6 +84,7 @@ const PARAM_HELP: Record<string, string> = {
   // Data
   source: "Where the training data comes from: a built-in dataset or your own files.",
   val_split: "Share of the data held out to check the model on, e.g. 0.2 for 20%.",
+  max_samples: "Train on only this many samples, for quick experiments. Validation uses a fifth as many. 0 uses the whole dataset.",
 };
 
 /** Where a parameter name means something different for a particular layer */
@@ -127,7 +128,7 @@ const TRAINING_HELP: Record<string, string> = {
   Epochs: "How many full passes over the training data.",
   "Batch Size": "Samples per update. Larger batches use more memory and give fewer, smoother updates.",
   "Loss Function": "What training minimizes. Cross-entropy for picking a class, MSE for predicting numbers.",
-  Device: "Where training runs. Auto uses the GPU when there is one.",
+  Device: "Where training runs. Auto uses the GPU when there is one: an NVIDIA GPU (cuda) or, on Apple Silicon Macs, the built-in GPU (mps).",
   "Random Rotation (degrees)": "Turns each training image by a random angle up to this many degrees.",
   "Random Seed": "Makes runs repeatable: the same seed gives the same starting weights and data order. Left empty, a new one is picked and saved with the run.",
   "Deterministic Mode": "Makes GPU results exactly repeatable, at some cost in speed.",

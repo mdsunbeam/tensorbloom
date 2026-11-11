@@ -205,6 +205,31 @@ Detailed per-epoch output including:
 
 Lines from stderr have a warning mark in the gutter.
 
+## Training on the Graph
+
+While a model trains, the graph shows what training is doing to each layer. Every 50 batches the app records each layer's outputs and the gradient flowing back into it, and colors the layers on the canvas. The **Training on the graph** card at the top left of the canvas picks what the color shows:
+
+- **Gradients**: how big the gradient reaching each layer is, on a log scale from the smallest to the largest across the model. Each layer reads, for example, "grad 3.1e-4".
+- **Activations**: how spread out each layer's outputs are (their standard deviation, σ). Activation layers also show how many of their units are dead.
+- **Off** hides it all.
+
+Layers whose numbers look wrong get a warning mark and a line saying what's wrong:
+
+| Mark | Means |
+|---|---|
+| **NaN or infinity** | The layer's outputs or gradients hold NaN or infinite values: training has broken down. |
+| **N% dead** | That share of an activation layer's units gave zero for every sample in the batch, so they pass no gradient back and stop learning. Marked from 25%. |
+| **Vanishing gradient** | The gradient reaching the layer is under 1/100 of the typical layer's (the median across the model), or zero. |
+| **Exploding gradient** | The gradient reaching the layer is over 100 times the typical layer's. |
+
+The card lists every marked layer; click one to jump to it. A collapsed group counts the marked layers inside it.
+
+**Hover a layer** for its details: what each warning means and what to try, the gradient over the run so far, a histogram of its outputs for one batch, and, for layers whose output is an image (convolutions and the like), the first 8 feature maps for one validation sample, next to that sample. Feature maps are taken at the end of every epoch.
+
+![Each layer colored by its gradient, with conv2's details on hover](../screenshot-layer-stats.png)
+
+Each run keeps its last stats and each layer's history, so they come back when the project is opened again or the run is restored. Feature maps last until the app closes. When the model has changed since the run, the card says so.
+
 ## Comparing Runs
 
 Every run that gets through at least one epoch is kept, and so is a run that fails. Each record holds the run's per-epoch loss and accuracy, its results, its training settings, and the graph it trained. The last 30 runs are saved in the project file and the auto-save.
@@ -217,6 +242,22 @@ The **Runs** tab at the bottom lists runs newest first, each with its color, sta
 - **Delete** removes a run.
 
 ![Comparing two runs](../screenshot-runs.png)
+
+## Change One Thing
+
+The quickest way to learn what a setting does is to change only that setting and train again. **Change one thing** in the run summary, or on a run in the Runs tab, starts from that run: its model and training settings come back on the canvas (Ctrl+Z undoes that), and a card at the top of the canvas follows what you change.
+
+- Changed layers are marked **Changed** on the canvas, and new layers **New**.
+- The card lists each change, such as "Learning rate 0.001 → 0.01" or "fc1 out_features 120 → 64". Renaming a layer or moving it doesn't count.
+- With more than one change, the card warns that you won't be able to tell which one made the difference. **Train anyway** still trains.
+- **Train and compare** trains. The new run is named after its change ("vs Run 3: Learning rate 0.001 → 0.01") and is put next to the run it started from.
+- **Cancel** ends the experiment and keeps your edits.
+
+With two runs checked in the Runs tab, **Curves** shows **What changed** beside the charts: how the headline result moved (for example "97.1% → 97.8% (+0.7 points)"), each change to the layers, connections, and training settings, and a small map of the graph with new layers in green, changed ones in amber, and removed ones dashed in red. Click a layer's name to find it on the canvas.
+
+![The canvas during an experiment, with one change](../screenshot-change-one-thing-canvas.png)
+
+![Two runs compared, with what changed beside the curves](../screenshot-change-one-thing.png)
 
 ## Trying a Trained Model
 

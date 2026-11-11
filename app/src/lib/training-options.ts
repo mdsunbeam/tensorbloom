@@ -2,4 +2,5 @@
 export const OPTIMIZERS = ["SGD", "Adam", "AdamW", "RMSprop", "Adadelta", "Adagrad"];
 export const SCHEDULERS = ["None", "StepLR", "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "ExponentialLR"];
 export const LOSSES = ["CrossEntropyLoss", "MSELoss", "BCEWithLogitsLoss", "L1Loss", "NLLLoss", "HuberLoss"];
-export const DEVICES = ["auto", "cpu", "cuda:0", "cuda:1"];
+// Every device training accepts; the Training panel offers the ones that fit this computer (see devices.ts)
+export const DEVICES = ["auto", "cpu", "mps", "cuda:0", "cuda:1"];

@@ -1,3 +1,4 @@
+import { useUpdateStore } from "../store/update-store";
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useThemeStore } from "../store/theme-store";
 import { useGraphStore } from "../store/graph-store";
@@ -18,17 +19,19 @@ interface ToolbarProps {
   onShowImport: () => void;
   onShowTemplates: () => void;
   onShowExport: () => void;
+  onShowDiagram: () => void;
   onShowSpotlight: () => void;
   onShowCustomBlock: () => void;
   /** Opens the Charts tab, where the run's details are */
   onShowRun: () => void;
   onShowShortcuts: () => void;
   onShowGettingStarted: () => void;
+  onShowLessons: () => void;
   onShowAbout: () => void;
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowAbout, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, onShowDiagram, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowLessons, onShowAbout, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -72,6 +75,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { type: "separator" },
         { label: "Import PyTorch Code...", shortcut: "Ctrl+I", action: onShowImport },
         { label: "Export Model...", shortcut: "Ctrl+E", action: onShowExport },
+        { label: "Export Diagram...", shortcut: "Ctrl+Shift+E", action: onShowDiagram },
       ],
     },
     {
@@ -104,12 +108,14 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
     {
       label: "Help", id: "help", items: [
         { label: "Getting Started", action: onShowGettingStarted },
+        { label: "Lessons...", action: onShowLessons },
         { label: "Keyboard Shortcuts", shortcut: "Ctrl+/", action: onShowShortcuts },
         { type: "separator" },
         { label: "TensorBloom Docs", external: true, action: () => void openExternal(LINKS.docs) },
         { label: "PyTorch Layer Reference", external: true, action: () => void openExternal(LINKS.pytorchReference) },
         { label: "Report a Problem", external: true, action: () => void openExternal(LINKS.newIssue) },
         { type: "separator" },
+        { label: "Check for Updates…", action: () => void useUpdateStore.getState().check({ manual: true }) },
         { label: "About TensorBloom", action: onShowAbout },
       ],
     },
