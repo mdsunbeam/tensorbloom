@@ -8,6 +8,7 @@ import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
 import { useRunStore } from "../store/run-store";
+import { useLessonStore } from "../store/lesson-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
 import { clearAutoSave, type AutoSaveData } from "./auto-save";
@@ -54,6 +55,7 @@ export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName
 
 export async function newProject() {
   if (!(await confirmDiscardChanges("starting a new project"))) return;
+  useLessonStore.getState().exit();
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().clearGraph();
   useGraphStore.getState().setProjectName("Untitled");
@@ -67,6 +69,7 @@ export async function openProject() {
   const opened = await loadProjectFile();
   if (!opened) return;
   const { project, path } = opened;
+  useLessonStore.getState().exit();
   const { nodes, edges, groups, warnings } = deserializeProject(project);
   replaceGraph(nodes, edges, project.name, groups);
   useDocumentStore.getState().markSaved(path);
@@ -77,6 +80,7 @@ export async function openProject() {
 
 /** Brings back unsaved work from the last session. It stays unsaved until the user saves it. */
 export function restoreAutoSave(data: AutoSaveData) {
+  useLessonStore.getState().exit();
   replaceGraph(data.nodes, data.edges, data.projectName, normalizeGroups(data.groups));
   useRunStore.getState().setRuns(data.runs ?? []);
   useDocumentStore.getState().markSaved(data.filePath ?? null);
