@@ -59,6 +59,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Live PyTorch code generation — see the equivalent `nn.Module` as you build
 - Import existing PyTorch code into the graph editor
 - Export to ONNX (for deployment) or TorchScript (for PyTorch-native use)
+- Export a 3D architecture diagram for papers and slides as vector PDF, SVG or PNG (File > Export Diagram)
 
 <details>
 <summary>Compare training runs</summary>
