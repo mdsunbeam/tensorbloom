@@ -1,6 +1,6 @@
 # Language Models
 
-TensorBloom can open a pretrained large language model (LLM) and show its architecture and what it takes to run or fine-tune it on your computer.
+TensorBloom can open a pretrained large language model (LLM), show its architecture and what it takes to run on your computer, and chat with it.
 
 The models that fit are the ones that fit on one machine. As a rough guide for the weights alone:
 
@@ -39,4 +39,10 @@ for 16-bit, 8-bit and 4-bit weights. Each cell is marked green (fits), amber (ti
 
 8-bit and 4-bit loading uses bitsandbytes, which needs an NVIDIA GPU. On a Mac, models run at 16 bits on the GPU.
 
-GGUF files are made for llama.cpp. TensorBloom reads and sizes them; they can't be loaded into PyTorch.
+GGUF files are made for llama.cpp. TensorBloom reads and sizes them, but to chat with the model here, import the original model from Hugging Face.
+
+## Chat
+
+The **Chat** view downloads the weights (once, into the Hugging Face cache) and loads them at the precision you pick. The first time, it offers to install the packages it needs (transformers, accelerate, peft, datasets, and bitsandbytes on NVIDIA GPUs) into TensorBloom's Python.
+
+Replies stream in as they're generated, with their speed. **Settings** has a system prompt, the reply length and the temperature (0 always picks the likeliest token). **Unload** frees the memory.

@@ -20,6 +20,9 @@ from __future__ import annotations
 import json
 import os
 import struct
+import sys
+import threading
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -733,7 +736,359 @@ def llm_device(params: dict) -> dict:
     return device
 
 
+# ---------------------------------------------------------------------------
+# Running a model: download, load (optionally 8- or 4-bit), and chat
+# ---------------------------------------------------------------------------
+
+# Set by the sidecar to its JSON-RPC notification sender
+notify = lambda method, params=None: None  # noqa: E731
+
+# What running and fine-tuning need beyond torch. bitsandbytes (8/4-bit) is added on NVIDIA GPUs only.
+LLM_PACKAGES = ["transformers>=4.45", "accelerate>=0.34", "peft>=0.13", "huggingface_hub>=0.25"]
+BNB_PACKAGE = "bitsandbytes>=0.43"
+
+
+class _Runtime:
+    """The loaded model and what the sidecar is doing with it. One model at a time."""
+
+    def __init__(self):
+        self.model = None
+        self.tokenizer = None
+        self.info: dict | None = None
+        self.busy: str | None = None  # "installing" | "loading" | "generating" | "training"
+        self.stop = threading.Event()
+        self.lock = threading.Lock()
+
+    def claim(self, what: str):
+        with self.lock:
+            if self.busy:
+                raise RuntimeError(f"Busy {self.busy}. Wait for it to finish or stop it first.")
+            self.busy = what
+            self.stop.clear()
+
+    def release(self):
+        with self.lock:
+            self.busy = None
+
+
+runtime = _Runtime()
+
+
+def _has(pkg: str) -> bool:
+    import importlib.util
+    return importlib.util.find_spec(pkg) is not None
+
+
+def missing_packages(precision: str = "bf16") -> list[str]:
+    missing = [p for p in ("transformers", "accelerate", "peft", "huggingface_hub") if not _has(p)]
+    if precision in ("int8", "nf4") and not _has("bitsandbytes"):
+        missing.append("bitsandbytes")
+    return missing
+
+
+def _install_command(packages: list[str]) -> list[str]:
+    import shutil
+    if _has("pip"):
+        return [sys.executable, "-m", "pip", "install", "--upgrade", *packages]
+    uv = shutil.which("uv")
+    if uv:
+        # Environments made by uv have no pip of their own
+        return [uv, "pip", "install", "--python", sys.executable, "--upgrade", *packages]
+    raise RuntimeError("Can't install packages: this Python has no pip, and uv wasn't found.")
+
+
+def llm_install(params: dict) -> dict:
+    """RPC: install the packages for running and fine-tuning LLMs, reporting each line of output."""
+    import subprocess
+    packages = list(LLM_PACKAGES)
+    if torch.cuda.is_available() and sys.platform != "darwin":
+        packages.append(BNB_PACKAGE)
+    cmd = _install_command(packages)
+    runtime.claim("installing")
+
+    def run():
+        tail: list[str] = []
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            for line in proc.stdout:
+                line = line.rstrip()
+                if line:
+                    tail = (tail + [line])[-20:]
+                    notify("llm.install", {"status": "running", "line": line})
+            code = proc.wait()
+            import importlib
+            importlib.invalidate_caches()
+            if code == 0:
+                notify("llm.install", {"status": "done"})
+            else:
+                notify("llm.install", {"status": "error", "error": "\n".join(tail[-8:]) or f"pip exited with {code}"})
+        except Exception as e:  # noqa: BLE001
+            notify("llm.install", {"status": "error", "error": str(e)})
+        finally:
+            runtime.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True, "packages": packages}
+
+
+def _pick_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+
+def _compute_dtype(device: str):
+    if device == "cuda":
+        return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    if device == "mps":
+        return torch.float16
+    return torch.bfloat16
+
+
+def _folder_bytes(path: str) -> int:
+    total = 0
+    for root, _, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total
+
+
+def _download(model_id: str, revision: str, token: str | None, expected_bytes: int | None) -> str:
+    """Downloads the model's weights, config and tokenizer into the Hugging Face cache, reporting progress."""
+    from huggingface_hub import snapshot_download, constants
+    repo_dir = os.path.join(constants.HF_HUB_CACHE, "models--" + model_id.replace("/", "--"))
+    # Downloads over Xet land in its chunk cache before the files are written, so count that too
+    xet_dir = getattr(constants, "HF_XET_CACHE", os.path.join(constants.HF_HOME, "xet"))
+    done = threading.Event()
+
+    def size(path):
+        return _folder_bytes(path) if os.path.isdir(path) else 0
+
+    def watch():
+        xet_start = size(xet_dir)
+        while not done.wait(1.0):
+            have = size(repo_dir) + max(0, size(xet_dir) - xet_start)
+            notify("llm.progress", {"status": "downloading", "bytes": min(have, expected_bytes) if expected_bytes else have, "total": expected_bytes})
+
+    watcher = threading.Thread(target=watch, daemon=True)
+    watcher.start()
+    try:
+        return snapshot_download(
+            model_id, revision=revision, token=token,
+            # Weights as safetensors only (never pickled .bin files), plus config and tokenizer
+            allow_patterns=["*.json", "*.safetensors", "*.model", "*.txt", "*.tiktoken", "*.py"],
+            ignore_patterns=["original/*", "consolidated*"],
+        )
+    finally:
+        done.set()
+
+
+def load_model(params: dict):
+    """Loads a model for chat or fine-tuning. Blocking; reports progress as llm.progress notifications."""
+    precision = params.get("precision", "bf16")
+    missing = missing_packages(precision)
+    if missing:
+        raise RuntimeError(f"Running language models needs {', '.join(missing)}. Install them from the Language model tab.")
+    import transformers
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    device = _pick_device()
+    if precision in ("int8", "nf4") and device != "cuda":
+        raise RuntimeError("8-bit and 4-bit loading needs an NVIDIA GPU. Pick 16-bit instead.")
+    source = params["source"]
+    token = hf_token(params.get("token"))
+    if source.get("kind") == "hf":
+        path = _download(source["model_id"], source.get("revision", "main"), token, params.get("expected_bytes"))
+    else:
+        path = params.get("local_path") or source.get("path")
+        if path and os.path.isfile(path):
+            path = os.path.dirname(path)
+        if not path or not os.path.exists(os.path.join(path, "config.json")):
+            raise RuntimeError("Can't load this model: its folder needs a config.json next to the weights. GGUF files can't be loaded in PyTorch.")
+    if runtime.stop.is_set():
+        raise RuntimeError("Stopped")
+
+    notify("llm.progress", {"status": "loading"})
+    dtype = _compute_dtype(device)
+    kwargs: dict[str, Any] = {"low_cpu_mem_usage": True}
+    kwargs["dtype" if tuple(int(x) for x in transformers.__version__.split(".")[:2]) >= (4, 56) else "torch_dtype"] = (
+        torch.float32 if precision == "fp32" else dtype)
+    if precision in ("int8", "nf4"):
+        from transformers import BitsAndBytesConfig
+        kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_8bit=True) if precision == "int8" else BitsAndBytesConfig(
+            load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True, bnb_4bit_compute_dtype=dtype)
+    if device == "cuda":
+        kwargs["device_map"] = "auto"
+    model = AutoModelForCausalLM.from_pretrained(path, **kwargs)
+    if device != "cuda":
+        model.to(device)
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(path)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    runtime.model, runtime.tokenizer = model, tokenizer
+    used = torch.cuda.memory_allocated() if device == "cuda" else model.get_memory_footprint()
+    runtime.info = {
+        "name": source.get("model_id") or os.path.basename(os.path.normpath(path)),
+        "path": path, "precision": precision, "device": device,
+        "device_name": torch.cuda.get_device_name(0) if device == "cuda" else ("Apple silicon GPU" if device == "mps" else "CPU"),
+        "memory_used": used, "adapter": None,
+    }
+    return runtime.info
+
+
+def _unload():
+    runtime.model = runtime.tokenizer = runtime.info = None
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
+def llm_load(params: dict) -> dict:
+    """RPC: download (if needed) and load a model in the background. Reports llm.progress, then loaded or error."""
+    missing = missing_packages(params.get("precision", "bf16"))
+    if missing:
+        raise RuntimeError(f"Running language models needs {', '.join(missing)}. Install them first.")
+    runtime.claim("loading")
+
+    def run():
+        try:
+            _unload()
+            info = load_model(params)
+            notify("llm.progress", {"status": "loaded", "info": info})
+        except Exception as e:  # noqa: BLE001
+            _unload()
+            notify("llm.progress", {"status": "error", "error": _friendly_error(e)})
+        finally:
+            runtime.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True}
+
+
+def _friendly_error(e: Exception) -> str:
+    msg = str(e) or type(e).__name__
+    if isinstance(e, torch.cuda.OutOfMemoryError) or "out of memory" in msg.lower():
+        return "Ran out of GPU memory. Try a smaller precision (8-bit or 4-bit), a shorter context, or a smaller model."
+    if "401" in msg or "gated" in msg.lower() or "restricted" in msg.lower():
+        return "Hugging Face refused the download. This model is gated: accept its license on huggingface.co and add your token."
+    return msg
+
+
+def llm_unload(params: dict) -> dict:
+    if runtime.busy in ("generating", "training"):
+        raise RuntimeError(f"Can't unload while {runtime.busy}")
+    _unload()
+    return {"unloaded": True}
+
+
+def llm_status(params: dict) -> dict:
+    return {"loaded": runtime.info, "busy": runtime.busy, "missing": missing_packages("nf4" if torch.cuda.is_available() else "bf16")}
+
+
+def _prompt_ids(messages: list[dict], max_context: int):
+    tok = runtime.tokenizer
+    if getattr(tok, "chat_template", None):
+        enc = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+        ids, mask = enc["input_ids"], enc["attention_mask"]
+    else:
+        # A base model has no chat format: continue the text as written
+        text = "\n\n".join(m["content"] for m in messages if m.get("content"))
+        enc = tok(text, return_tensors="pt")
+        ids, mask = enc["input_ids"], enc["attention_mask"]
+    if ids.shape[1] > max_context:
+        ids, mask = ids[:, -max_context:], mask[:, -max_context:]
+    return ids, mask
+
+
+def llm_generate(params: dict) -> dict:
+    """RPC: reply to a conversation, streaming text as llm.token notifications and ending with llm.done."""
+    if runtime.model is None:
+        raise RuntimeError("Load the model first")
+    from transformers import TextIteratorStreamer, StoppingCriteria, StoppingCriteriaList
+    runtime.claim("generating")
+    rid = params.get("id")
+    max_new = int(params.get("max_new_tokens", 512))
+    temperature = float(params.get("temperature", 0.7))
+    max_context = int(params.get("max_context") or getattr(runtime.model.config, "max_position_embeddings", 4096) or 4096)
+
+    class _StopRequested(StoppingCriteria):
+        def __call__(self, input_ids, scores, **kwargs):
+            return runtime.stop.is_set()
+
+    def run():
+        try:
+            tok, model = runtime.tokenizer, runtime.model
+            ids, mask = _prompt_ids(params["messages"], max(256, max_context - max_new))
+            device = next(model.parameters()).device
+            streamer = TextIteratorStreamer(tok, skip_prompt=True, skip_special_tokens=True, timeout=600)
+            failure: list[Exception] = []
+
+            def generate():
+                try:
+                    with torch.no_grad():
+                        model.generate(
+                            input_ids=ids.to(device), attention_mask=mask.to(device), max_new_tokens=max_new,
+                            do_sample=temperature > 0, temperature=temperature if temperature > 0 else None,
+                            top_p=float(params.get("top_p", 0.95)) if temperature > 0 else None,
+                            streamer=streamer, stopping_criteria=StoppingCriteriaList([_StopRequested()]),
+                            pad_token_id=tok.pad_token_id,
+                        )
+                except Exception as e:  # noqa: BLE001
+                    failure.append(e)
+                    streamer.end()
+
+            start = time.time()
+            first_token_at = None
+            worker = threading.Thread(target=generate, daemon=True)
+            worker.start()
+            text = ""
+            for piece in streamer:
+                if piece:
+                    if first_token_at is None:
+                        first_token_at = time.time()
+                    text += piece
+                    notify("llm.token", {"id": rid, "text": piece})
+            worker.join()
+            if failure:
+                raise failure[0]
+            elapsed = time.time() - start
+            n = len(tok(text, add_special_tokens=False)["input_ids"]) if text else 0
+            gen_time = time.time() - (first_token_at or start)
+            notify("llm.done", {"id": rid, "text": text, "tokens": n, "seconds": round(elapsed, 2),
+                                "tokens_per_second": round(n / gen_time, 1) if gen_time > 0 and n > 1 else None,
+                                "prompt_tokens": int(ids.shape[1]), "stopped": runtime.stop.is_set()})
+        except Exception as e:  # noqa: BLE001
+            notify("llm.done", {"id": rid, "error": _friendly_error(e)})
+        finally:
+            runtime.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"started": True}
+
+
+def llm_stop(params: dict) -> dict:
+    """RPC: stop generating, loading or fine-tuning at the next chance."""
+    runtime.stop.set()
+    return {"stopping": runtime.busy}
+
+
 METHODS = {
     "llm.inspect": llm_inspect,
     "llm.device": llm_device,
+    "llm.install": llm_install,
+    "llm.status": llm_status,
+    "llm.load": llm_load,
+    "llm.unload": llm_unload,
+    "llm.generate": llm_generate,
+    "llm.stop": llm_stop,
 }
