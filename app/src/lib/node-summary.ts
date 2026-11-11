@@ -62,6 +62,11 @@ export function getParamSummary(data: NodeData): string {
     case "LSTM": case "GRU": return `${p.input_size} \u2192 ${p.hidden_size}, layers=${p.num_layers}`;
     case "MultiheadAttention": return `d=${p.embed_dim}, heads=${p.num_heads}`;
     case "TransformerEncoderLayer": case "TransformerDecoderLayer": return `d=${p.d_model}, heads=${p.nhead}`;
+    case "DecoderBlock": {
+      const kv = Number(p.n_kv_heads) !== Number(p.n_heads) ? `/${p.n_kv_heads}kv` : "";
+      const moe = Number(p.n_experts) ? `, ${p.n_experts} experts` : "";
+      return `d=${p.d_model}, heads=${p.n_heads}${kv}${moe}`;
+    }
     case "Flatten": return `dim ${p.start_dim} \u2192 ${p.end_dim}`;
     case "Softmax": return `dim=${p.dim}`;
     case "AdaptiveAvgPool2d": return `out=${JSON.stringify(p.output_size)}`;

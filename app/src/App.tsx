@@ -7,6 +7,8 @@ import CodePanel from "./components/CodePanel";
 import TrainingCharts from "./components/TrainingCharts";
 import TrainingLogs from "./components/TrainingLogs";
 import RunsPanel from "./components/RunsPanel";
+import LLMPanel from "./components/LLMPanel";
+import { useLLMStore } from "./store/llm-store";
 import { useRunStore } from "./store/run-store";
 import Toolbar from "./components/Toolbar";
 import ToastContainer, { toast } from "./components/Toast";
@@ -18,12 +20,16 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
+import AssistantPanel from "./components/assistant/AssistantPanel";
+import LessonPanel from "./components/LessonPanel";
+import { useLessonStore } from "./store/lesson-store";
 import UpdateBanner from "./components/UpdateBanner";
 import { useUpdateStore } from "./store/update-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
 const ImportDialog = lazy(() => import("./components/ImportDialog"));
+const ImportLLMDialog = lazy(() => import("./components/ImportLLMDialog"));
 const TemplatesDialog = lazy(() => import("./components/TemplatesDialog"));
 const SpotlightDialog = lazy(() => import("./components/SpotlightDialog"));
 const ExportDialog = lazy(() => import("./components/ExportDialog"));
@@ -31,6 +37,7 @@ const DiagramExportDialog = lazy(() => import("./components/DiagramExportDialog"
 const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
 const TryModelDialog = lazy(() => import("./components/TryModelDialog"));
 const GettingStartedDialog = lazy(() => import("./components/GettingStartedDialog"));
+const LessonsDialog = lazy(() => import("./components/LessonsDialog"));
 const AboutDialog = lazy(() => import("./components/AboutDialog"));
 const CompareDialog = lazy(() => import("./components/CompareDialog"));
 const CustomBlockDialog = lazy(() => import("./components/CustomBlockDialog"));
@@ -40,18 +47,22 @@ import { useHistoryStore, startHistoryTracking } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
 import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
-import { TEMPLATES, templateGraph } from "./lib/templates";
+import { TEMPLATES } from "./lib/templates";
+import { packedModelFromHash, decodeModel, templateSlug } from "./lib/share";
+import { buildLLMGraph, type LLMSpec } from "./lib/llm";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
-import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection } from "./lib/document-actions";
+import { confirmDiscardChanges, saveProject, openProject, newProject, replaceGraph, restoreAutoSave, groupSelection, ungroupSelection, applyTemplate } from "./lib/document-actions";
 import { sidecarCall } from "./lib/sidecar";
-import { MODULE_REGISTRY } from "./lib/registry";
+import { compiledToGraph, type CompiledGraph } from "./lib/compiled-graph";
 import { restoreCustomBlocks } from "./lib/custom-blocks";
-import type { NodeCategory } from "./lib/types";
 import Tabs from "./components/ui/Tabs";
-import type { Node, Edge } from "@xyflow/react";
+import type { Node } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
-type BottomTab = "code" | "charts" | "runs" | "logs";
+type BottomTab = "code" | "charts" | "runs" | "logs" | "llm";
+type RightView = "properties" | "assistant";
+
+const RIGHT_WIDTH: Record<RightView, number> = { properties: 288, assistant: 360 };
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -59,10 +70,14 @@ export default function App() {
   const canvasEmpty = useGraphStore((s) => s.nodes.length === 0);
   const logCount = useTrainingStore((s) => s.logs.length);
   const runCount = useRunStore((s) => s.runs.length);
-  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280 });
-  const [bottomPanelOpen, setBottomPanelOpen] = useState(true);
+  const [tabHeights, setTabHeights] = useState<Record<BottomTab, number>>({ code: 220, charts: 300, runs: 300, logs: 280, llm: 320 });
+  const [bottomPanelOpen, setBottomPanelOpen] = useState(() => readLayout().bottom);
   const [bottomTab, setBottomTab] = useState<BottomTab>("code");
+  const llmSpec = useLLMStore((s) => s.spec);
+  // The language model tab only exists for an imported model
+  useEffect(() => { if (!llmSpec && bottomTab === "llm") setBottomTab("code"); }, [llmSpec, bottomTab]);
   const [importOpen, setImportOpen] = useState(false);
+  const [importLLMOpen, setImportLLMOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [spotlightOpen, setSpotlightOpen] = useState(false);
   const [connectFrom, setConnectFrom] = useState<ConnectFromContext | null>(null);
@@ -70,12 +85,17 @@ export default function App() {
   const [diagramOpen, setDiagramOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [gettingStartedOpen, setGettingStartedOpen] = useState(false);
+  const [lessonsOpen, setLessonsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [customBlockOpen, setCustomBlockOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [tryRunId, setTryRunId] = useState<string | null>(null);
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(() => readLayout().left);
+  const [rightPanelOpen, setRightPanelOpen] = useState(() => readLayout().right);
+  // Focus on the canvas: every panel hidden, and the layout from before it to go back to
+  const [focusRestore, setFocusRestore] = useState<{ left: boolean; right: boolean; bottom: boolean } | null>(null);
+  const [rightView, setRightView] = useState<RightView>("properties");
+  const rightWidth = rightPanelOpen ? RIGHT_WIDTH[rightView] : 36;
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [recovered, setRecovered] = useState<AutoSaveData | null>(null);
   const [gpuInfo, setGpuInfo] = useState<string | null>(null);
@@ -86,6 +106,21 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
+
+  // Remember which panels are open, so the canvas keeps the room it was given (not while focusing)
+  useEffect(() => {
+    if (!focusRestore) writeLayout({ left: leftPanelOpen, right: rightPanelOpen, bottom: bottomPanelOpen });
+  }, [leftPanelOpen, rightPanelOpen, bottomPanelOpen, focusRestore]);
+
+  const toggleFocus = useCallback(() => {
+    if (focusRestore) {
+      setLeftPanelOpen(focusRestore.left); setRightPanelOpen(focusRestore.right); setBottomPanelOpen(focusRestore.bottom);
+      setFocusRestore(null);
+    } else {
+      setFocusRestore({ left: leftPanelOpen, right: rightPanelOpen, bottom: bottomPanelOpen });
+      setLeftPanelOpen(false); setRightPanelOpen(false); setBottomPanelOpen(false);
+    }
+  }, [focusRestore, leftPanelOpen, rightPanelOpen, bottomPanelOpen]);
 
   // Restore custom blocks from localStorage on startup
   useEffect(() => {
@@ -109,6 +144,7 @@ export default function App() {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke<{ name: string; memory_total_mb: number } | null>("detect_gpu");
         if (result) {
+          usePythonStore.setState({ nvidiaGpu: result.name });
           const mem = result.memory_total_mb ? ` ${Math.round(result.memory_total_mb / 1024)}GB` : "";
           setGpuInfo(`${result.name}${mem}`);
         } else {
@@ -128,6 +164,34 @@ export default function App() {
     const stopDirty = startDirtyTracking();
     const stopAutoSave = startAutoSave();
     return () => { stopHistory(); stopDirty(); stopAutoSave(); };
+  }, []);
+
+  // A link can open a model: "#m=…" from Share Link, or "?template=resnet-18" from the website
+  useEffect(() => {
+    void (async () => {
+      const packed = packedModelFromHash(location.hash);
+      if (packed) {
+        const model = await decodeModel(packed);
+        if (model) {
+          replaceGraph(model.nodes, model.edges, model.name, model.groups);
+          if (model.training) useTrainingStore.getState().updateConfig(model.training);
+          useDocumentStore.getState().markSaved(null);
+          setRecovered(null);
+        } else {
+          toast.warning("This link's model couldn't be read. It may have been cut short when it was copied.");
+        }
+        // Edits aren't written back to the link, so drop it to keep a reload from undoing them
+        history.replaceState(null, "", location.pathname + location.search);
+        return;
+      }
+      const slug = new URLSearchParams(location.search).get("template");
+      const tpl = slug ? TEMPLATES.find((t) => templateSlug(t.name) === slug) : undefined;
+      if (tpl) {
+        applyTemplate(tpl);
+        setRecovered(null);
+        history.replaceState(null, "", location.pathname + location.hash);
+      }
+    })();
   }, []);
 
   // Window title, with a dot while there are unsaved changes
@@ -173,6 +237,13 @@ export default function App() {
     return () => { unlisten?.(); window.removeEventListener("beforeunload", onBeforeUnload); };
   }, []);
 
+  // "Ask the assistant" buttons elsewhere open it with their question ready
+  useEffect(() => {
+    const open = () => { setRightView("assistant"); setRightPanelOpen(true); };
+    window.addEventListener("tensorbloom:open-assistant", open);
+    return () => window.removeEventListener("tensorbloom:open-assistant", open);
+  }, []);
+
   // Show the Charts tab when a run starts, or when it can't start
   useEffect(() => {
     if (trainingStatus === "running" || trainingStatus === "starting" || trainingStatus === "error") {
@@ -214,7 +285,14 @@ export default function App() {
       else if (ctrl && key === "a") { e.preventDefault(); useGraphStore.getState().selectAll(); }
       else if (ctrl && key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
       else if (ctrl && key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
+      else if (ctrl && key === "j") {
+        e.preventDefault();
+        // Opens the assistant, or goes back to Properties when it's already showing
+        setRightPanelOpen(true);
+        setRightView((v) => (v === "assistant" ? "properties" : "assistant"));
+      }
       else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
+      else if (ctrl && key === "\\") { e.preventDefault(); toggleFocus(); }
       else if (ctrl && key === "enter") {
         // Not while typing or while a dialog is open, where Enter belongs to the field or the dialog
         if (editable || document.querySelector('[aria-modal="true"]')) return;
@@ -224,7 +302,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [toggleFocus]);
 
   const handleAutoLayout = useCallback(() => {
     const { nodes, edges } = useGraphStore.getState();
@@ -236,19 +314,9 @@ export default function App() {
   const handleImport = useCallback(async (code: string) => {
     if (!(await confirmDiscardChanges("importing this code"))) return false;
     try {
-      const result = await sidecarCall<{
-        nodes: Array<{ id: string; type: string; moduleType?: string; label: string; position: { x: number; y: number }; params: Record<string, unknown> }>;
-        edges: Array<{ id: string; source: string; target: string; sourceHandle: string; targetHandle: string }>;
-      }>("compile", { code });
-
-      const nodes: Node<NodeData>[] = result.nodes.map((n) => {
-        const mt = n.moduleType ?? "Identity";
-        const def = MODULE_REGISTRY[mt];
-        return { id: n.id, type: "tensorLabNode", position: n.position,
-          data: { moduleType: mt, label: n.label, category: (def?.category ?? "linear") as NodeCategory, params: n.params } };
-      });
-      const edges: Edge[] = result.edges.map((e) => ({ ...e, type: "smoothstep" }));
-      replaceGraph(autoLayout(nodes, edges), edges, "Imported Model");
+      const { nodes, edges } = compiledToGraph(await sidecarCall<CompiledGraph>("compile", { code }));
+      useLessonStore.getState().exit();
+      replaceGraph(nodes, edges, "Imported Model");
       useDocumentStore.getState().markSaved(null);
       toast.success("Model imported successfully");
       return true;
@@ -263,34 +331,50 @@ export default function App() {
     }
   }, []);
 
+  // A fine-tuned language model is tried in its chat; other models in the Try it dialog
+  const tryModel = useCallback((runId: string) => {
+    if (useLLMStore.getState().spec) {
+      useLLMStore.setState({ view: "chat" });
+      setBottomTab("llm");
+      setBottomPanelOpen(true);
+    } else {
+      setTryRunId(runId);
+    }
+  }, []);
+
+  const handleImportLLM = useCallback(async (spec: LLMSpec) => {
+    if (!(await confirmDiscardChanges("importing a language model"))) return false;
+    const { nodes, edges, groups, notes } = buildLLMGraph(spec);
+    replaceGraph(nodes, edges, spec.name.split("/").pop() || spec.name, groups, spec);
+    // Training this project fine-tunes it with LoRA: settings that suit that
+    useTrainingStore.getState().applyTemplateDefaults(spec.name, {
+      optimizer: { ...useTrainingStore.getState().config.optimizer, type: "AdamW", lr: 2e-4, weightDecay: 0 },
+      epochs: 1,
+      batchSize: 4,
+    });
+    useDocumentStore.getState().markSaved(null);
+    for (const note of notes) toast.info(note);
+    toast.success(`Imported ${spec.name}`);
+    setBottomTab("llm");
+    setBottomPanelOpen(true);
+    return true;
+  }, []);
+
   const handleTemplate = useCallback(async (index: number) => {
     const tpl = TEMPLATES[index];
     if (!tpl) return;
     if (!(await confirmDiscardChanges("opening a template"))) return;
-    const { nodes, edges } = templateGraph(tpl);
-    replaceGraph(nodes, edges, tpl.name);
-    if (tpl.trainingDefaults) {
-      const d = tpl.trainingDefaults;
-      useTrainingStore.getState().applyTemplateDefaults(tpl.name, {
-        ...(d.optimizer && { optimizer: { ...useTrainingStore.getState().config.optimizer, ...d.optimizer } }),
-        ...(d.loss && { loss: d.loss }),
-        ...(d.epochs != null && { epochs: d.epochs }),
-        ...(d.batchSize != null && { batchSize: d.batchSize }),
-        ...(d.dataset && { dataset: d.dataset }),
-      });
-    }
-    // A fresh template has nothing to lose until it's edited
-    useDocumentStore.getState().markSaved(null);
+    useLessonStore.getState().exit();
+    applyTemplate(tpl);
   }, []);
 
   // From the welcome card: a Data node to build from, selected so its source can be picked
   const addDataNode = useCallback(() => {
     const graph = useGraphStore.getState();
-    graph.addNode("Data", { x: 300, y: 60 });
-    const added = useGraphStore.getState().nodes[useGraphStore.getState().nodes.length - 1];
-    if (!added) return;
-    graph.onNodesChange([{ type: "select", id: added.id, selected: true }]);
-    graph.setSelectedNodeId(added.id);
+    const id = graph.addNode("Data", { x: 300, y: 60 });
+    if (!id) return;
+    graph.onNodesChange([{ type: "select", id, selected: true }]);
+    graph.setSelectedNodeId(id);
   }, []);
 
   const handleSpotlightSelect = useCallback((moduleType: string) => {
@@ -331,6 +415,7 @@ export default function App() {
     <div className="flex flex-col h-screen w-screen overflow-hidden" style={{ background: "var(--bg-primary)" }}>
       <Toolbar
         onShowImport={() => setImportOpen(true)}
+        onShowImportLLM={() => setImportLLMOpen(true)}
         onShowTemplates={() => setTemplatesOpen(true)}
         onShowExport={() => setExportOpen(true)}
         onShowDiagram={() => setDiagramOpen(true)}
@@ -339,7 +424,10 @@ export default function App() {
         onShowRun={() => { setBottomTab("charts"); setBottomPanelOpen(true); }}
         onShowShortcuts={() => setShortcutsOpen(true)}
         onShowGettingStarted={() => setGettingStartedOpen(true)}
+        onShowLessons={() => setLessonsOpen(true)}
         onShowAbout={() => setAboutOpen(true)}
+        onToggleFocus={toggleFocus}
+        focused={focusRestore !== null}
         gpuInfo={gpuInfo}
       />
 
@@ -366,6 +454,7 @@ export default function App() {
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 relative min-h-0">
             <GraphEditor onShowSpotlight={(ctx) => { setConnectFrom(ctx ?? null); setSpotlightOpen(true); }} minimapVisible={minimapVisible} />
+            <LessonPanel onShowLessons={() => setLessonsOpen(true)} />
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
               <UpdateBanner />
@@ -387,8 +476,10 @@ export default function App() {
                     onSelectTemplate={handleTemplate}
                     onShowTemplates={() => setTemplatesOpen(true)}
                     onShowImport={() => setImportOpen(true)}
+                    onShowImportLLM={() => setImportLLMOpen(true)}
                     onAddData={addDataNode}
                     onShowGettingStarted={() => setGettingStartedOpen(true)}
+                    onShowLessons={() => setLessonsOpen(true)}
                   />
                 </div>
               )}
@@ -445,6 +536,7 @@ export default function App() {
                   { id: "charts", label: "Charts", live: trainingStatus === "running" || trainingStatus === "starting" },
                   { id: "runs", label: "Runs", badge: runCount > 0 ? runCount : undefined },
                   { id: "logs", label: "Logs", badge: logCount > 0 ? logCount : undefined },
+                  ...(llmSpec ? [{ id: "llm" as const, label: "Language model" }] : []),
                 ]}
               />
             </div>
@@ -459,9 +551,10 @@ export default function App() {
           {bottomPanelOpen && (
             <div className="flex-shrink-0 overflow-hidden" style={{ height: tabHeights[bottomTab], background: "var(--bg-secondary)" }}>
               {bottomTab === "code" && <CodePanel />}
-              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={setTryRunId} />}
-              {bottomTab === "runs" && <RunsPanel onTryModel={setTryRunId} />}
+              {bottomTab === "charts" && <TrainingCharts onSwitchToLogs={() => setBottomTab("logs")} onShowRuns={() => setBottomTab("runs")} onExport={() => setExportOpen(true)} onTryModel={tryModel} />}
+              {bottomTab === "runs" && <RunsPanel onTryModel={tryModel} />}
               {bottomTab === "logs" && <TrainingLogs />}
+              {bottomTab === "llm" && <LLMPanel onShowCharts={() => setBottomTab("charts")} />}
             </div>
           )}
         </div>
@@ -470,13 +563,33 @@ export default function App() {
         <div
           className="flex-shrink-0 relative"
           style={{
-            width: rightPanelOpen ? 288 : 36,
+            width: rightWidth,
             transition: "width 0.2s ease-out",
           }}
         >
-          <div className="h-full overflow-hidden" style={{ borderLeft: "1px solid var(--border)" }}>
-            {rightPanelOpen ? <PropertyPanel /> : (
-              <CollapsedSideBar label="Properties" side="right" onClick={() => setRightPanelOpen(true)} />
+          <div className="h-full overflow-hidden flex flex-col" style={{ borderLeft: "1px solid var(--border)" }}>
+            {rightPanelOpen ? (
+              <>
+                <div className="flex-shrink-0 h-8 px-2" style={{ background: "var(--bg-secondary)", borderBottom: "1px solid var(--border)" }}>
+                  <Tabs
+                    label="Right panel"
+                    className="h-full"
+                    value={rightView}
+                    onChange={setRightView}
+                    items={[
+                      { id: "properties", label: "Properties" },
+                      { id: "assistant", label: "Assistant" },
+                    ]}
+                  />
+                </div>
+                <div className="flex-1 min-h-0">
+                  {/* Both stay mounted so switching keeps scroll position and a reply in progress */}
+                  <div className="h-full" hidden={rightView !== "properties"}><PropertyPanel /></div>
+                  <div className="h-full" hidden={rightView !== "assistant"}><AssistantPanel /></div>
+                </div>
+              </>
+            ) : (
+              <CollapsedSideBar label={rightView === "assistant" ? "Assistant" : "Properties"} side="right" onClick={() => setRightPanelOpen(true)} />
             )}
           </div>
           {rightPanelOpen && (
@@ -488,12 +601,14 @@ export default function App() {
 
       <Suspense fallback={null}>
         {importOpen && <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={handleImport} />}
+        {importLLMOpen && <ImportLLMDialog open={importLLMOpen} onClose={() => setImportLLMOpen(false)} onImport={handleImportLLM} />}
         {templatesOpen && <TemplatesDialog open={templatesOpen} onClose={() => setTemplatesOpen(false)} onSelect={handleTemplate} />}
         {spotlightOpen && <SpotlightDialog open={spotlightOpen} onClose={() => { setSpotlightOpen(false); setConnectFrom(null); }} onSelect={handleSpotlightSelect} connectFrom={connectFrom} />}
         {exportOpen && <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />}
         {diagramOpen && <DiagramExportDialog open={diagramOpen} onClose={() => setDiagramOpen(false)} />}
         {shortcutsOpen && <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />}
-        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} />}
+        {gettingStartedOpen && <GettingStartedDialog open={gettingStartedOpen} onClose={() => setGettingStartedOpen(false)} onShowTemplates={() => setTemplatesOpen(true)} onShowLessons={() => setLessonsOpen(true)} />}
+        {lessonsOpen && <LessonsDialog open={lessonsOpen} onClose={() => setLessonsOpen(false)} />}
         {aboutOpen && <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} gpuInfo={gpuInfo} />}
         {customBlockOpen && <CustomBlockDialog open={customBlockOpen} onClose={() => setCustomBlockOpen(false)} />}
         {compareOpen && compareModel && <CompareDialog open={compareOpen} onClose={() => setCompareOpen(false)}
@@ -502,7 +617,7 @@ export default function App() {
         />}
         {tryRunId && <TryModelDialog runId={tryRunId} onClose={() => setTryRunId(null)} />}
       </Suspense>
-      <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
+      <ToastContainer rightOffset={rightWidth + 16} />
       <DragOverlay />
       <ConfirmDialog />
       <PreflightDialog />
@@ -567,3 +682,25 @@ function CollapsedSideBar({ label, side, onClick }: { label: string; side: "left
   );
 }
 
+
+const LAYOUT_KEY = "tensorbloom-layout";
+
+/** Which panels start open. The canvas comes first: the layer list and the bottom dock start closed (Ctrl+K adds layers). */
+function readLayout(): { left: boolean; right: boolean; bottom: boolean } {
+  const fallback = { left: false, right: true, bottom: false };
+  try {
+    const raw = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
+    if (!raw || typeof raw !== "object") return fallback;
+    return {
+      left: typeof raw.left === "boolean" ? raw.left : fallback.left,
+      right: typeof raw.right === "boolean" ? raw.right : fallback.right,
+      bottom: typeof raw.bottom === "boolean" ? raw.bottom : fallback.bottom,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function writeLayout(layout: { left: boolean; right: boolean; bottom: boolean }) {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* storage off; the default layout is fine */ }
+}

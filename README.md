@@ -1,6 +1,6 @@
 # TensorBloom
 
-**[tensorbloom.org](https://tensorbloom.org)** · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
+**[tensorbloom.org](https://tensorbloom.org)** · [Try it in your browser](https://tensorbloom.org/app/) · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
 
 Build, train, and export PyTorch neural networks visually. Drag-and-drop layers, connect them, train on real datasets with GPU acceleration, and export to ONNX or TorchScript — all without writing boilerplate code.
 
@@ -11,7 +11,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - **See your architecture** — No more debugging invisible dimension mismatches in code. The graph shows every layer, every connection, and every tensor shape.
 - **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection.
 - **See what changed** — Every run is kept, so you can compare runs side by side and try a trained model on samples it never saw.
-- **Learn by doing** — 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
+- **Learn by doing** — 7 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
 - **Real PyTorch underneath** — Every graph generates real `nn.Module` code. Export your model and use it anywhere.
 
 ## Features
@@ -44,12 +44,19 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Every run is kept with its curves, settings, and model, saved in the project file
 - The **Runs** tab overlays runs on shared charts and puts their results and settings side by side, highlighting what differs
 - **Restore** brings back a run's graph and settings
+- **Change one thing** starts from a run, tracks what you change, and puts the new run next to it with the graph diff beside the curves
 - **Try it** runs a trained model on validation samples it didn't train on, shows its top guesses, filters to mistakes, or tries your own image
 
 **Help Built In**
 - A welcome card with starter models, a Getting Started guide, and a Help menu
+- Guided lessons (**Help > Lessons**): fix a shape error, find a learning rate, stop overfitting, add BatchNorm, and more. Each starts from a real model and checks each step with hints when you're stuck
 - A "?" next to every layer parameter and training setting explains what it does
 - Each layer links to its PyTorch documentation
+
+**Language Models**
+- Import an LLM from Hugging Face or a `.gguf`/`.safetensors` file without downloading it, and see its architecture as a graph
+- See the memory it needs to run, LoRA fine-tune, or fully fine-tune at 16, 8 and 4 bits, against your GPU or Mac
+- Chat with it, and fine-tune it with LoRA or QLoRA on your own data, with live loss charts
 
 **Code Generation & Export**
 - Live PyTorch code generation — see the equivalent `nn.Module` as you build
@@ -116,7 +123,7 @@ Grab the latest installer from the [releases page](https://github.com/mdsunbeam/
 - **Windows** — `.exe` installer or `.msi`
 - **Linux** — `.deb`, `.rpm`, or `.AppImage`
 
-**Requirement:** Python 3.9+ must be installed. The editor opens right away; if PyTorch isn't set up yet, a card on the canvas offers to install it and shows its progress while you keep building.
+Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download.
 
 ### Building from Source
 
@@ -129,7 +136,7 @@ npm install
 npx tauri dev
 ```
 
-Requires Node.js 18+, [Rust](https://rustup.rs/), and Python 3.9+.
+Requires Node.js 18+ and [Rust](https://rustup.rs/). `npx tauri dev` and `npx tauri build` download the [uv](https://github.com/astral-sh/uv) binary that the app bundles to install Python (`app/scripts/fetch-uv.mjs`). Python 3.10+ is only needed to run the Python tests.
 **Windows:** also needs [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 **Linux:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 
@@ -208,9 +215,12 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Getting Started](docs/guides/getting-started.md) — Build and train your first model
 - [Custom Data Guide](docs/guides/custom-data.md) — Load your own datasets
 - [Code Blocks](docs/guides/code-blocks.md) — Write custom forward() logic
+- [The Assistant](docs/guides/assistant.md) — Ask about your model and runs, or have it make changes you review
 - [Training Guide](docs/guides/training.md) — Training settings, the run flow, comparing runs, and trying a model
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
+- [Language Models](docs/guides/language-models.md) — Import an LLM, size it for your computer, chat with it, and fine-tune it with LoRA
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures
+- [Lessons](docs/guides/lessons.md) — The guided lessons, and the lesson format for adding your own
 - [Architecture](docs/guides/architecture.md) — Technical internals for contributors
 - [Roadmap](ROADMAP.md) — Planned features and development direction
 
@@ -222,6 +232,17 @@ npx tauri build
 ```
 
 Produces platform-specific installers in `app/src-tauri/target/release/bundle/`.
+
+### Web version
+
+The same app runs in a plain browser with no install. Building, shape checking, code generation, saving (as a download) and share links work there; training, code import and ONNX export point to the desktop app, because they need Python.
+
+```bash
+cd app
+npm run build:web   # static files in app/dist-web, served from /app/
+```
+
+Links can open a model: `/app/?template=resnet-18` opens a template (its name in lowercase, with dashes), and File > Copy Share Link packs the current model into the link's `#m=` fragment, so nothing is stored on a server.
 
 ## Contributing
 

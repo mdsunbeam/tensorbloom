@@ -617,6 +617,42 @@ export function inferShapesClient(
           }
           shapes[node.id] = { shape: inputShape, dtype: "float32" };
         }
+      } else if (mt === "DecoderBlock") {
+        if (inputShape) {
+          const dModel = Number(p.d_model);
+          const nHeads = Number(p.n_heads);
+          const nKv = Number(p.n_kv_heads);
+          const lastDim = inputShape[inputShape.length - 1];
+          if (inputShape.length < 2 || inputShape.length > 3) {
+            errors[node.id] = {
+              message: `DecoderBlock expects [batch, tokens, d_model] (got ${inputShape.length}D)`,
+              type: "root",
+              sourceNodeId: node.id,
+              receivedShape: inputShape,
+            };
+          } else if (lastDim !== dModel) {
+            errors[node.id] = {
+              message: `d_model mismatch: input last dim is ${lastDim}, but d_model=${dModel}`,
+              type: "root",
+              sourceNodeId: node.id,
+              receivedShape: inputShape,
+              paramHint: "d_model",
+            };
+          } else if (nKv < 1 || nHeads % nKv !== 0) {
+            errors[node.id] = {
+              message: `n_heads (${nHeads}) must be a multiple of n_kv_heads (${nKv})`,
+              type: "root",
+              sourceNodeId: node.id,
+            };
+          } else if (!Number(p.head_dim) && dModel % nHeads !== 0) {
+            errors[node.id] = {
+              message: `d_model (${dModel}) must be divisible by n_heads (${nHeads}), or set head_dim`,
+              type: "root",
+              sourceNodeId: node.id,
+            };
+          }
+          shapes[node.id] = { shape: inputShape, dtype: "float32" };
+        }
       } else if (mt === "MaxPool2d" || mt === "AvgPool2d") {
         if (inputShape && inputShape.length === 4) {
           // already handled above

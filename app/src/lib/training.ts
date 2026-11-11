@@ -16,6 +16,10 @@ import { buildSidecarGraph } from "./sidecar-graph";
 import { requirePython } from "../store/python-store";
 import { useRunStore, epochSummary, architectureKey, graphSnapshot, type RunRecord } from "../store/run-store";
 import { computeModelSummary } from "./model-summary";
+import { useLLMStore } from "../store/llm-store";
+import { finetuneProblem, type LLMSpec } from "./llm";
+import { useExperimentStore, runDiff } from "../store/experiment-store";
+import { changeSummary } from "./experiment-diff";
 import { useLayerStatsStore, liveRunLayerStats } from "../store/layer-stats-store";
 import type { FeatureMaps, LayerStat } from "./layer-health";
 
@@ -26,6 +30,9 @@ export async function startTraining() {
   const config = useTrainingStore.getState().config;
   const previousStatus = useTrainingStore.getState().status;
   if (previousStatus === "running" || previousStatus === "starting") return;
+
+  const llm = useLLMStore.getState().spec;
+  if (llm) return startFineTune(llm);
 
   if (nodes.length === 0) {
     useTrainingStore.getState().setError("The graph is empty. Add a Data node and some layers first.", "check");
@@ -94,6 +101,59 @@ export async function startTraining() {
     },
     graph: graphSnapshot(nodes, edges, useGraphStore.getState().groups),
   };
+  await launchRun(run, finalConfig, () => sidecarCall("train.start", {
+    graph: graphJson,
+    config: sidecarTrainConfig(nodes, finalConfig),
+  }));
+}
+
+/**
+ * Fine-tunes the imported language model with LoRA (QLoRA at 4-bit). Uses the Training panel's
+ * optimizer, learning rate, epochs and batch size, and the Language model tab's dataset and LoRA settings.
+ * Progress, charts and the run record work as for graph training.
+ */
+async function startFineTune(spec: LLMSpec) {
+  const { finetune, hfToken, loaded } = useLLMStore.getState();
+  const problem = finetuneProblem(spec, finetune);
+  if (problem) {
+    useTrainingStore.getState().setError(problem, "check");
+    return;
+  }
+  if (!requirePython("Fine-tuning needs Python.")) return;
+  const config = useTrainingStore.getState().config;
+  if (config.seed === null) useTrainingStore.getState().updateConfig({ seed: Math.floor(Math.random() * 2147483647) });
+  const finalConfig = useTrainingStore.getState().config;
+  const { nodes, edges, groups, projectName } = useGraphStore.getState();
+  const run: RunStart = {
+    modelName: `${projectName} (${finetune.precision === "nf4" ? "QLoRA" : "LoRA"} r=${finetune.rank})`,
+    startedAt: new Date().toISOString(),
+    config: finalConfig,
+    model: { params: spec.params, layers: spec.n_layers, key: `llm:${spec.name}` },
+    graph: graphSnapshot(nodes, edges, groups),
+  };
+  // Keep a model that's already loaded at this precision, with its chat
+  if (loaded && loaded.precision !== finetune.precision) useLLMStore.setState({ loaded: null });
+  await launchRun(run, finalConfig, () => sidecarCall("llm.finetune.start", {
+    source: spec.source,
+    local_path: spec.local_path,
+    token: hfToken || undefined,
+    expected_bytes: spec.stored_bytes,
+    precision: finetune.precision,
+    dataset: finetune.dataset,
+    lora: { rank: finetune.rank, alpha: finetune.alpha, dropout: finetune.dropout },
+    max_length: finetune.maxLength,
+    max_samples: finetune.maxSamples,
+    grad_accum: finetune.gradAccum,
+    epochs: finalConfig.epochs,
+    batch_size: finalConfig.batchSize,
+    lr: finalConfig.optimizer.lr,
+    weight_decay: finalConfig.optimizer.weightDecay,
+    seed: finalConfig.seed,
+  }));
+}
+
+/** Streams a run's progress and logs into the training store, and records the run when it ends */
+async function launchRun(run: RunStart, finalConfig: TrainingConfig, start: () => Promise<unknown>) {
   // The run's latest checkpoint, so its model can be tried again after the app restarts
   let checkpoint: RunRecord["checkpoint"];
 
@@ -229,10 +289,7 @@ export async function startTraining() {
   useTrainingStore.getState().setStatus("running");
 
   try {
-    await sidecarCall("train.start", {
-      graph: graphJson,
-      config: sidecarTrainConfig(nodes, finalConfig),
-    });
+    await start();
   } catch (e) {
     useTrainingStore.getState().setError(
       e instanceof Error ? e.message : "Failed to start training"
@@ -302,8 +359,19 @@ function recordRun(start: RunStart, status: RunRecord["status"], error?: string)
     epochs,
     ...(layers ? { layers } : {}),
   };
+  // A "change one thing" experiment: name what changed, and put the run next to the one it started from
+  const baseRunId = useExperimentStore.getState().baseRunId;
+  const base = baseRunId ? runs.find((r) => r.id === baseRunId) : undefined;
+  if (base) {
+    run.baseRunId = base.id;
+    run.change = changeSummary(runDiff(base, run));
+  }
   addRun(run);
   useLayerStatsStore.getState().liveBecameRun(run);
+  if (base) {
+    useRunStore.getState().setCompare([base.id, run.id]);
+    useExperimentStore.getState().end();
+  }
 }
 
 export async function stopTraining() {

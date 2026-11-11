@@ -84,10 +84,25 @@ const PARAM_HELP: Record<string, string> = {
   // Data
   source: "Where the training data comes from: a built-in dataset or your own files.",
   val_split: "Share of the data held out to check the model on, e.g. 0.2 for 20%.",
+  max_samples: "Train on only this many samples, for quick experiments. Validation uses a fifth as many. 0 uses the whole dataset.",
 };
 
 /** Where a parameter name means something different for a particular layer */
 const MODULE_HELP: Record<string, Record<string, string>> = {
+  DecoderBlock: {
+    d_model: "Size of each token's vector (the model's hidden size). Must match the embedding.",
+    n_heads: "Query heads in the attention. Each looks at the sequence in its own way.",
+    n_kv_heads: "Key/value heads. Fewer than n_heads is grouped-query attention, which shrinks the KV cache; n_heads must be a multiple of it.",
+    head_dim: "Size of each attention head. 0 means d_model ÷ n_heads.",
+    ffn_dim: "Width of the MLP inside the block (intermediate_size in Hugging Face configs).",
+    mlp: "The MLP's shape. swiglu (Llama, Mistral, Qwen) and geglu (Gemma) are gated; gelu is the plain GPT-2 kind.",
+    norm: "RMSNorm (most current LLMs) or LayerNorm (GPT-2 era).",
+    norm_eps: "Small number added inside the norm so it never divides by zero.",
+    rope_theta: "Base of the rotary position embedding. Larger values suit longer contexts. 0 turns rotary positions off.",
+    bias: "Which linear layers have a bias: none (Llama), only query/key/value (Qwen2), or all (GPT-2).",
+    n_experts: "Experts in a mixture-of-experts MLP (Mixtral has 8). 0 means one ordinary MLP.",
+    experts_per_token: "How many experts each token is sent to, when n_experts is above 0.",
+  },
   TripletMarginLoss: { p: "Which norm measures distance: 2 is the usual Euclidean distance." },
   PairwiseDistance: { p: "Which norm measures distance: 2 is the usual Euclidean distance." },
   Softmax: { dim: "The dimension whose values become probabilities that sum to 1. -1 for the last one." },
@@ -158,7 +173,7 @@ const TORCH_FUNCTIONS: Record<string, string> = {
 };
 
 /** TensorBloom's own nodes, which have no PyTorch counterpart */
-const NO_DOCS = new Set(["Input", "Output", "Data"]);
+const NO_DOCS = new Set(["Input", "Output", "Data", "DecoderBlock"]);
 
 /** What a layer is in PyTorch, e.g. "torch.nn.Linear" or "torch.cat"; null for TensorBloom's own nodes */
 export function torchName(moduleType: string): string | null {

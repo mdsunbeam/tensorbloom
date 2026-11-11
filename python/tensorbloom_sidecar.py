@@ -24,6 +24,10 @@ import torch
 import torch.nn as nn
 import torch.fx
 
+import os as _os
+sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+import tensorbloom_llm  # noqa: E402  (shipped next to this file)
+
 # Preserve real stdout before any redirection — all JSON-RPC goes through this
 _real_stdout = sys.stdout
 
@@ -148,7 +152,11 @@ SPECIAL_CONSTRUCTORS = {
     "TransformerDecoderLayer": lambda p: _TransformerDecoderSelfAttn(
         nn.TransformerDecoderLayer(**{k: v for k, v in p.items() if v is not None})
     ),
+    "DecoderBlock": tensorbloom_llm.build_decoder_block,
 }
+
+# Layers that aren't in torch.nn: generated code defines them itself
+LOCAL_MODULES = {"DecoderBlock": tensorbloom_llm.DECODER_BLOCK_SOURCE}
 
 
 def build_module(module_type: str, params: dict) -> nn.Module:
@@ -394,7 +402,8 @@ def decompile_graph(graph_json: dict) -> str:
             mt = n["moduleType"]
             params = n.get("params", {})
             param_str = format_constructor_args(mt, params)
-            init_lines.append(f"        self.{name} = nn.{mt}({param_str})")
+            prefix = "" if mt in LOCAL_MODULES else "nn."
+            init_lines.append(f"        self.{name} = {prefix}{mt}({param_str})")
 
     # Build forward lines with handle-aware variable resolution
     forward_lines = []
@@ -485,6 +494,10 @@ def decompile_graph(graph_json: dict) -> str:
         "import torch.nn as nn",
         "",
     ]
+
+    for mt, source in LOCAL_MODULES.items():
+        if any(n.get("moduleType") == mt for n in module_nodes):
+            helper_classes[:0] = [source]
 
     if helper_classes:
         code_lines.append("")
@@ -1027,6 +1040,18 @@ def _build_augmentation(aug_config: dict | None, is_grayscale: bool = False) -> 
     return transforms
 
 
+def _limit_samples(ds, n: int):
+    """The same n samples of ds every time, so runs on a subset stay comparable.
+    Keeps a single Subset level over the original dataset, which callers unwrap to reach
+    its targets and classes."""
+    if len(ds) <= n:
+        return ds
+    picks = torch.randperm(len(ds), generator=torch.Generator().manual_seed(0))[:n].tolist()
+    if isinstance(ds, torch.utils.data.Subset):
+        return torch.utils.data.Subset(ds.dataset, [ds.indices[i] for i in picks])
+    return torch.utils.data.Subset(ds, picks)
+
+
 def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None, dataloader_seed: int | None = None, is_reconstruction: bool = False):
     import torchvision
     import torchvision.transforms as T
@@ -1416,7 +1441,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         except ImportError:
             raise ImportError("Install 'datasets' package: pip install datasets")
         send_notification("train.progress", {"status": "downloading", "dataset": "WikiText-2"})
-        ds = hf_load("wikitext", "wikitext-2-raw-v1")
+        ds = hf_load("Salesforce/wikitext", "wikitext-2-raw-v1")
         train_text = "\n".join(t for t in ds["train"]["text"] if t.strip())
         test_text = "\n".join(t for t in ds["test"]["text"] if t.strip())
 
@@ -1453,12 +1478,12 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         send_notification("train.progress", {"status": "downloading", "dataset": ds_type})
 
         if ds_type == "IMDB":
-            ds = hf_load("imdb")
+            ds = hf_load("stanfordnlp/imdb")
             text_col, label_col = "text", "label"
             seq_len = config.get("max_length", 100)
             max_vocab = config.get("vocab_size", 25000)
         else:
-            ds = hf_load("ag_news")
+            ds = hf_load("fancyzhx/ag_news")
             text_col, label_col = "text", "label"
             seq_len = config.get("max_length", 100)
             max_vocab = config.get("vocab_size", 25000)
@@ -1666,6 +1691,12 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
 
     else:
         raise ValueError(f"Unsupported dataset: {ds_type}")
+
+    max_samples = int(config.get("max_samples") or 0)
+    if max_samples > 0:
+        train_ds = _limit_samples(train_ds, max_samples)
+        if test_ds is not None:
+            test_ds = _limit_samples(test_ds, max(100, max_samples // 5))
 
     generator = None
     if dataloader_seed is not None:
@@ -2246,6 +2277,8 @@ def train_start(params: dict) -> dict:
 
 def train_stop(params: dict) -> dict:
     _train_stop_event.set()
+    if tensorbloom_llm.runtime.busy == "training":
+        tensorbloom_llm.runtime.stop.set()
     return {"status": "stopping"}
 
 
@@ -3146,6 +3179,10 @@ def _system_environment(params: dict) -> dict:
         "gpuName": _gpu_name(),
         "mpsAvailable": _mps_available(),
     }
+
+
+METHODS.update(tensorbloom_llm.METHODS)
+tensorbloom_llm.notify = send_notification
 
 
 def main():

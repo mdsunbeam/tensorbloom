@@ -9,6 +9,9 @@ import { getCachedEnvironment } from "./sidecar";
 import { useRunStore, type RunRecord } from "../store/run-store";
 import { useGraphStore } from "../store/graph-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
+import { IS_WEB } from "./platform";
+import { useLLMStore } from "../store/llm-store";
+import type { LLMSpec, FinetuneSettings } from "./llm";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -40,6 +43,10 @@ export interface ProjectFile {
   runs?: RunRecord[];
   /** Named frames around sets of layers */
   groups?: LayerGroup[];
+  /** The pretrained LLM this project was imported from */
+  llm?: LLMSpec;
+  /** Dataset and LoRA settings for fine-tuning it */
+  llmFinetune?: FinetuneSettings;
 }
 
 export function serializeProject(
@@ -77,6 +84,8 @@ export function serializeProject(
     trainingResults: store.trainingResults ?? undefined,
     runs: useRunStore.getState().runs,
     groups: useGraphStore.getState().groups,
+    llm: useLLMStore.getState().spec ?? undefined,
+    llmFinetune: useLLMStore.getState().spec ? useLLMStore.getState().finetune : undefined,
   };
 }
 
@@ -149,7 +158,7 @@ export async function writeProjectFile(
   const project = serializeProject(name, nodes, edges);
   const json = JSON.stringify(project, null, 2);
 
-  try {
+  if (!IS_WEB) try {
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
     if (!path) {
       // Tauri native save dialog
@@ -191,6 +200,7 @@ export function downloadCode(code: string, filename: string = "model.py") {
 /** Asks for a project file and reads it. `path` is null when the browser's file picker was used. */
 export async function loadProjectFile(): Promise<{ project: ProjectFile; path: string | null } | null> {
   try {
+    if (IS_WEB) throw new Error("No native dialog in the browser");
     // Tauri native open dialog
     const { open } = await import("@tauri-apps/plugin-dialog");
     const { readTextFile } = await import("@tauri-apps/plugin-fs");

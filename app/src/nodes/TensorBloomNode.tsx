@@ -10,6 +10,8 @@ import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
 import { CategoryBadge, tint } from "../lib/category-icons";
+import { useLLMStore } from "../store/llm-store";
+import { useExperimentStore } from "../store/experiment-store";
 import { useNodeOverlay } from "../lib/use-layer-overlay";
 import { overlayColor, overlayTextColor, type LayerFlag } from "../lib/layer-health";
 import LayerStatsCard, { FloatingLayerCard } from "../components/LayerStatsCard";
@@ -53,6 +55,9 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const [hovered, setHovered] = useState(false);
+  // In a "change one thing" experiment: whether this layer is new or changed since the starting run
+  const mark = useExperimentStore((s) => s.marks.get(id));
+  const markColor = mark === "added" ? "var(--success)" : mark === "changed" ? "var(--warning)" : null;
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -111,12 +116,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         width: nodeWidth,
         minHeight: nodeMinHeight,
         background: "var(--bg-secondary)",
-        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
+        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : markColor ?? (hovered ? "var(--bg-elevated)" : "var(--border)")}`,
         boxShadow: selected
           ? `var(--node-shadow-hover), 0 0 0 3px ${tint(rootError ? "var(--danger)" : color, 20)}`
-          : hovered
-            ? "var(--node-shadow-hover)"
-            : "var(--node-shadow)",
+          : markColor
+            ? `var(--node-shadow), 0 0 0 3px ${tint(markColor, 25)}`
+            : hovered
+              ? "var(--node-shadow-hover)"
+              : "var(--node-shadow)",
         transition: "border-color 0.15s ease, box-shadow 0.2s ease",
       }}
     >
@@ -149,6 +156,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             >
               {data.label}
             </span>
+            {mark && !compact && (
+              <span
+                className={`ml-auto flex-shrink-0 text-[11px] font-medium px-1.5 rounded ${mark === "added" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"}`}
+                title="Different from the run this experiment started from"
+              >
+                {mark === "added" ? "New" : "Changed"}
+              </span>
+            )}
             {isCodeBlock && (
               <span
                 className="text-[11px] px-1 py-0.5 rounded font-mono flex-shrink-0"
@@ -330,6 +345,8 @@ function FlagIcon({ flag, size }: { flag: LayerFlag; size: number }) {
 }
 
 function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
+  // An imported language model is fed tokens, not the training panel's dataset
+  const isLLM = useLLMStore((s) => s.spec !== null);
   const nodes = useGraphStore((s) => s.nodes);
 
   // Find the Data node in the graph — prefer it over training store default
@@ -363,6 +380,8 @@ function DatasetBadge({ nodeParams }: { nodeParams: Record<string, unknown> }) {
     try { shape = JSON.parse(raw.replace(/\(/g, "[").replace(/\)/g, "]")); } catch { return null; }
     return JSON.stringify(shape) === JSON.stringify(info.inputShape);
   }, [nodeParams.shape, info?.inputShape]);
+
+  if (isLLM) return null;
 
   if (match === null && info.inputShape === null) {
     // Custom dataset with unknown shape — show name only

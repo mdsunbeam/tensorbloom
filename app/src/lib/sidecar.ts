@@ -6,7 +6,7 @@
 
 import type { JsonRpcResponse } from "./types";
 import type { EnvironmentInfo } from "../store/training-store";
-import { requirePython } from "../store/python-store";
+import { requirePython, usePythonStore } from "../store/python-store";
 
 let requestId = 0;
 let sidecarStarted = false;
@@ -23,6 +23,17 @@ let onTrainProgress: ProgressCallback | null = null;
 
 export function setTrainProgressCallback(cb: ProgressCallback | null) {
   onTrainProgress = cb;
+}
+
+type NotificationListener = (params: unknown) => void;
+const notificationListeners = new Map<string, Set<NotificationListener>>();
+
+/** Calls `listener` with each notification the sidecar sends for `method`. Returns a function that stops listening. */
+export function onSidecarNotification(method: string, listener: NotificationListener): () => void {
+  let set = notificationListeners.get(method);
+  if (!set) notificationListeners.set(method, (set = new Set()));
+  set.add(listener);
+  return () => { set.delete(listener); };
 }
 
 let onTrainLayers: ProgressCallback | null = null;
@@ -67,6 +78,9 @@ function handleStdoutLine(line: string) {
       }
       if (msg.method === "train.log" && onTrainLog) {
         onTrainLog(msg.params as { text: string; stream: "stdout" | "stderr" });
+      }
+      if (msg.method) {
+        for (const listener of notificationListeners.get(msg.method) ?? []) listener(msg.params);
       }
       return;
     }
@@ -180,7 +194,9 @@ function needsPythonReason(method: string): string {
 
 export async function sidecarCall<T = unknown>(method: string, params: unknown = {}): Promise<T> {
   if (!requirePython(needsPythonReason(method))) {
-    throw new Error("Python isn't set up yet. Set it up from the card at the top right of the canvas.");
+    throw new Error(usePythonStore.getState().status === "web"
+      ? "This needs the TensorBloom desktop app, which runs Python. The web version builds and checks models."
+      : "Python isn't set up yet. Set it up from the card at the top right of the canvas.");
   }
   const ready = await ensureSidecar();
   if (!ready) {

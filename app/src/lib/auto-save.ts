@@ -7,6 +7,8 @@ import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useDocumentStore } from "../store/document-store";
 import { useRunStore, type RunRecord } from "../store/run-store";
 import type { LayerGroup } from "./groups";
+import type { LLMSpec } from "./llm";
+import { useLLMStore } from "../store/llm-store";
 import type { Node, Edge } from "@xyflow/react";
 
 const STORAGE_KEY = "tensorbloom-autosave";
@@ -21,6 +23,7 @@ export interface AutoSaveData {
   edges: Edge[];
   runs?: RunRecord[];
   groups?: LayerGroup[];
+  llm?: LLMSpec | null;
 }
 
 /** Writes the project now if it has unsaved work, and removes the old copy if it doesn't */
@@ -53,6 +56,7 @@ export function writeAutoSave() {
       })),
       runs: useRunStore.getState().runs,
       groups: useGraphStore.getState().groups,
+      llm: useLLMStore.getState().spec,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {

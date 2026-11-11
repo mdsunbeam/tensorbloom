@@ -243,6 +243,22 @@ The **Runs** tab at the bottom lists runs newest first, each with its color, sta
 
 ![Comparing two runs](../screenshot-runs.png)
 
+## Change One Thing
+
+The quickest way to learn what a setting does is to change only that setting and train again. **Change one thing** in the run summary, or on a run in the Runs tab, starts from that run: its model and training settings come back on the canvas (Ctrl+Z undoes that), and a card at the top of the canvas follows what you change.
+
+- Changed layers are marked **Changed** on the canvas, and new layers **New**.
+- The card lists each change, such as "Learning rate 0.001 → 0.01" or "fc1 out_features 120 → 64". Renaming a layer or moving it doesn't count.
+- With more than one change, the card warns that you won't be able to tell which one made the difference. **Train anyway** still trains.
+- **Train and compare** trains. The new run is named after its change ("vs Run 3: Learning rate 0.001 → 0.01") and is put next to the run it started from.
+- **Cancel** ends the experiment and keeps your edits.
+
+With two runs checked in the Runs tab, **Curves** shows **What changed** beside the charts: how the headline result moved (for example "97.1% → 97.8% (+0.7 points)"), each change to the layers, connections, and training settings, and a small map of the graph with new layers in green, changed ones in amber, and removed ones dashed in red. Click a layer's name to find it on the canvas.
+
+![The canvas during an experiment, with one change](../screenshot-change-one-thing-canvas.png)
+
+![Two runs compared, with what changed beside the curves](../screenshot-change-one-thing.png)
+
 ## Trying a Trained Model
 
 **Try it** in the run summary, or **Try** on a run in the Runs tab, opens a grid of 12 predictions on validation samples the model didn't train on. Each card shows the input, the top three guesses as bars, and "Right" or "Wrong, it's X". The header shows the score, such as "9 of 12 right".
