@@ -70,3 +70,5 @@ jobs:
         run: python python/test_templates.py
       - name: Run sidecar tests
         run: python python/test_sidecar.py
+      - name: Run LLM tests
+        run: python python/test_llm.py

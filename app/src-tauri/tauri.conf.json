@@ -31,6 +31,7 @@
     "createUpdaterArtifacts": true,
     "resources": {
       "../../python/tensorbloom_sidecar.py": "python/tensorbloom_sidecar.py",
+      "../../python/tensorbloom_llm.py": "python/tensorbloom_llm.py",
       "../../python/requirements.txt": "python/requirements.txt"
     },
     "icon": [

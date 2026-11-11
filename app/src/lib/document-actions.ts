@@ -9,8 +9,10 @@ import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
 import { useRunStore } from "../store/run-store";
+import { useLLMStore } from "../store/llm-store";
 import { useLessonStore } from "../store/lesson-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
+import type { LLMSpec } from "./llm";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
 import { clearAutoSave, type AutoSaveData } from "./auto-save";
 import { askToSaveChanges } from "../components/ConfirmDialog";
@@ -48,9 +50,11 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
 }
 
 /** Replaces the graph with a different project. Undo can still bring the old graph back. */
-export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string, groups: LayerGroup[] = []) {
+export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string, groups: LayerGroup[] = [], llm: LLMSpec | null = null) {
   settlePendingChanges();
   useHistoryStore.getState().pushSnapshot();
+  // The pretrained LLM the graph came from, if any
+  useLLMStore.getState().setSpec(llm);
   useGraphStore.getState().loadGraph(nodes, edges, groups);
   useGraphStore.getState().setProjectName(projectName);
 }
@@ -61,6 +65,7 @@ export async function newProject() {
   useLessonStore.getState().exit();
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().clearGraph();
+  useLLMStore.getState().setSpec(null);
   useGraphStore.getState().setProjectName("Untitled");
   useRunStore.getState().setRuns([]);
   useDocumentStore.getState().markSaved(null);
@@ -74,7 +79,7 @@ export async function openProject() {
   const { project, path } = opened;
   useLessonStore.getState().exit();
   const { nodes, edges, groups, warnings } = deserializeProject(project);
-  replaceGraph(nodes, edges, project.name, groups);
+  replaceGraph(nodes, edges, project.name, groups, project.llm ?? null);
   useDocumentStore.getState().markSaved(path);
   clearAutoSave();
   for (const w of warnings) toast.warning(w);
@@ -84,7 +89,7 @@ export async function openProject() {
 /** Brings back unsaved work from the last session. It stays unsaved until the user saves it. */
 export function restoreAutoSave(data: AutoSaveData) {
   useLessonStore.getState().exit();
-  replaceGraph(data.nodes, data.edges, data.projectName, normalizeGroups(data.groups));
+  replaceGraph(data.nodes, data.edges, data.projectName, normalizeGroups(data.groups), data.llm ?? null);
   useRunStore.getState().setRuns(data.runs ?? []);
   useDocumentStore.getState().markSaved(data.filePath ?? null);
   useDocumentStore.getState().markUnsaved();

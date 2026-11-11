@@ -9,6 +9,8 @@ import { getCachedEnvironment } from "./sidecar";
 import { useRunStore, type RunRecord } from "../store/run-store";
 import { useGraphStore } from "../store/graph-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
+import { useLLMStore } from "../store/llm-store";
+import type { LLMSpec } from "./llm";
 
 export interface ProjectFile {
   version: "1.0" | "1.1" | "2.0";
@@ -40,6 +42,8 @@ export interface ProjectFile {
   runs?: RunRecord[];
   /** Named frames around sets of layers */
   groups?: LayerGroup[];
+  /** The pretrained LLM this project was imported from */
+  llm?: LLMSpec;
 }
 
 export function serializeProject(
@@ -77,6 +81,7 @@ export function serializeProject(
     trainingResults: store.trainingResults ?? undefined,
     runs: useRunStore.getState().runs,
     groups: useGraphStore.getState().groups,
+    llm: useLLMStore.getState().spec ?? undefined,
   };
 }
 
