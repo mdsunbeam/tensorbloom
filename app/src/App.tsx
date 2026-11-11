@@ -20,6 +20,8 @@ import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
 import LessonPanel from "./components/LessonPanel";
 import { useLessonStore } from "./store/lesson-store";
+import UpdateBanner from "./components/UpdateBanner";
+import { useUpdateStore } from "./store/update-store";
 import type { ConnectFromContext } from "./components/SpotlightDialog";
 
 // Lazy-loaded dialogs — only loaded when opened
@@ -92,6 +94,11 @@ export default function App() {
   // Restore custom blocks from localStorage on startup
   useEffect(() => {
     restoreCustomBlocks();
+  }, []);
+
+  // Look for a newer release in the background; the banner offers it
+  useEffect(() => {
+    void useUpdateStore.getState().check();
   }, []);
 
   // Check for Python in the background. The editor doesn't wait for it; training does.
@@ -369,6 +376,7 @@ export default function App() {
             <LessonPanel onShowLessons={() => setLessonsOpen(true)} />
             {/* Banners stack at the top of the canvas; an empty canvas also centers the welcome card below them */}
             <div className="absolute inset-0 z-20 flex flex-col items-center gap-4 p-3 overflow-y-auto pointer-events-none">
+              <UpdateBanner />
               {recovered && (
                 <RecoveryBanner
                   data={recovered}

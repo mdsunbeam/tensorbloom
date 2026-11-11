@@ -1,3 +1,4 @@
+import { useUpdateStore } from "../store/update-store";
 import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { useThemeStore } from "../store/theme-store";
 import { useGraphStore } from "../store/graph-store";
@@ -114,6 +115,7 @@ export default function Toolbar({ onShowImport, onShowTemplates, onShowExport, o
         { label: "PyTorch Layer Reference", external: true, action: () => void openExternal(LINKS.pytorchReference) },
         { label: "Report a Problem", external: true, action: () => void openExternal(LINKS.newIssue) },
         { type: "separator" },
+        { label: "Check for Updates…", action: () => void useUpdateStore.getState().check({ manual: true }) },
         { label: "About TensorBloom", action: onShowAbout },
       ],
     },
