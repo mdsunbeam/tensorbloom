@@ -11,6 +11,9 @@ import { isDatasetNode, extractDatasetConfig } from "../lib/dataset-metadata";
 import { formatParamCount } from "../lib/model-summary";
 import { formatDuration, timeAgo } from "../lib/format-time";
 import { formatLoss } from "./RunControls";
+import { useExperimentStore } from "../store/experiment-store";
+import RunChanges from "./RunChanges";
+import { useLayerStatsStore } from "../store/layer-stats-store";
 
 /** Each run keeps one color wherever it's drawn, picked by its number */
 export function runColor(run: RunRecord): string {
@@ -63,8 +66,12 @@ export default function RunsPanel({ onTryModel }: { onTryModel: (runId: string) 
               : `Comparing ${selected.length} runs`}
           </span>
         </div>
-        <div className="flex-1 min-h-0">
-          {selected.length === 0 ? null : view === "curves" ? <RunCurves runs={selected} /> : <RunSettings runs={selected} />}
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0">
+            {selected.length === 0 ? null : view === "curves" ? <RunCurves runs={selected} /> : <RunSettings runs={selected} />}
+          </div>
+          {/* Two runs: what changed between them, next to how their curves differ */}
+          {selected.length === 2 && view === "curves" && <RunChanges from={selected[0]} to={selected[1]} />}
         </div>
       </section>
     </div>
@@ -82,6 +89,7 @@ function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareI
     // The device is this computer's, not the run's
     const { device } = useTrainingStore.getState().config;
     useTrainingStore.getState().updateConfig({ ...run.config, device });
+    useLayerStatsStore.getState().showRun(run);
     toast.success(`Restored Run ${run.number}'s model and training settings. Ctrl+Z brings back your previous graph.`);
   };
 
@@ -126,6 +134,11 @@ function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareI
                     <span title={new Date(run.startedAt).toLocaleString()}>{timeAgo(Date.parse(run.startedAt))}</span>
                     {run.status !== "failed" && <><span aria-hidden="true">·</span><span>{formatDuration(run.durationMs)}</span></>}
                   </span>
+                  {run.change && (
+                    <span className="block text-[11px] text-fg-secondary truncate" title={`From Run ${runs.find((r) => r.id === run.baseRunId)?.number ?? "?"}: ${run.change}`}>
+                      <span className="text-fg-muted">vs Run {runs.find((r) => r.id === run.baseRunId)?.number ?? "?"}:</span> {run.change}
+                    </span>
+                  )}
                   {run.error && <span className="block text-[11px] text-fg-muted truncate" title={run.error}>{run.error}</span>}
                 </span>
               </label>
@@ -135,6 +148,12 @@ function RunList({ runs, compareIds, onTryModel }: { runs: RunRecord[]; compareI
                   <Button size="sm" disabled={training || !runWeights(run, liveRunId)} onClick={() => onTryModel(run.id)}
                     title={training ? "Wait for training to finish" : runWeights(run, liveRunId) ? "See what this run's model predicts" : "This run's weights weren't kept"}>
                     Try
+                  </Button>
+                )}
+                {run.status !== "failed" && (
+                  <Button size="sm" disabled={training} onClick={() => useExperimentStore.getState().start(run)}
+                    title={training ? "Wait for training to finish" : "Start from this run, change one thing, and train to see what it does"}>
+                    Change one thing
                   </Button>
                 )}
                 <Button size="sm" disabled={training} onClick={() => restore(run)} title={training ? "Wait for training to finish" : "Open this run's model and training settings"}>

@@ -4,7 +4,7 @@ Thanks for your interest in contributing! Here's how to get started.
 
 ## Development Setup
 
-1. Install prerequisites: Node.js 18+, Rust (stable), Python 3.9+
+1. Install prerequisites: Node.js 18+ and Rust (stable). Python 3.10+ is only needed to run the Python tests.
 2. Clone and install:
    ```bash
    git clone https://github.com/mdsunbeam/tensorbloom.git
@@ -12,7 +12,7 @@ Thanks for your interest in contributing! Here's how to get started.
    npm install
    npx tauri dev
    ```
-3. The app auto-provisions a Python venv with PyTorch on first launch.
+3. `tauri dev` downloads the bundled uv binary into `app/src-tauri/binaries/` (see `app/scripts/fetch-uv.mjs`). On first launch the app uses it to download a managed Python and install PyTorch into its own venv.
 
 ## Project Structure
 

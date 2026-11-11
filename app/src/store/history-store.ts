@@ -38,6 +38,24 @@ let baselineKey = "";
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 // True while undo/redo is loading a snapshot, so that load isn't recorded as a new edit
 let applyingHistory = false;
+// True while the assistant's changes are on the canvas for review: they become one step if applied, none if discarded
+let paused = false;
+
+/**
+ * Stops recording edits as undo steps, and turns undo and redo off, until called with false.
+ * When recording resumes, whatever changed meanwhile becomes a single step at the next commit.
+ */
+export function pauseHistory(pause: boolean) {
+  if (pause && pendingTimer) {
+    // An edit made just before the pause is its own step, not part of what follows
+    useHistoryStore.getState().pushSnapshot();
+  }
+  paused = pause;
+}
+
+export function isHistoryPaused(): boolean {
+  return paused;
+}
 
 /** The parts of the graph that are the user's work: no selection, drag or measurement state */
 function snapshotOf(nodes: Node<NodeData>[], edges: Edge[], groups: LayerGroup[]): Snapshot {
@@ -72,6 +90,7 @@ function apply(s: Snapshot) {
 export const useHistoryStore = create<HistoryState>((set, get) => {
   const commit = () => {
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+    if (paused) return;
     const snap = currentSnapshot();
     const key = keyOf(snap);
     if (baseline === null) { baseline = snap; baselineKey = key; return; }
@@ -91,6 +110,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => {
     pushSnapshot: commit,
 
     undo: () => {
+      if (paused) return;
       commit();
       const { past, future } = get();
       if (past.length === 0 || !baseline) return;
@@ -101,6 +121,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => {
     },
 
     redo: () => {
+      if (paused) return;
       commit();
       const { past, future } = get();
       if (future.length === 0 || !baseline) return;
@@ -123,7 +144,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => {
 export function startHistoryTracking(): () => void {
   useHistoryStore.getState().clear();
   const unsub = useGraphStore.subscribe((state, prev) => {
-    if (applyingHistory) return;
+    if (applyingHistory || paused) return;
     if (state.nodes === prev.nodes && state.edges === prev.edges && state.groups === prev.groups) return;
     // Wait for a drag to finish so the whole move is one step
     if (state.nodes.some((n) => n.dragging)) {
