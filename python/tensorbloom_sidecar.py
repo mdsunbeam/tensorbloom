@@ -1950,7 +1950,7 @@ def _train_loop(graph_json: dict, config: dict):
                 print("WARNING: Apple GPU (MPS) not available. Training on CPU (slow).", file=sys.stderr)
             else:
                 print("WARNING: CUDA not available. Training on CPU (slow).", file=sys.stderr)
-                print("To enable GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126", file=sys.stderr)
+                print("If you have an NVIDIA GPU, add GPU support from Help > About TensorBloom.", file=sys.stderr)
 
         # Detect multi-input models (e.g. encoder-decoder Transformer)
         num_inputs = sum(1 for n in graph_json["nodes"]
