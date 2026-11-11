@@ -5,6 +5,7 @@ import { useGraphStore } from "./graph-store";
 import { useTrainingStore } from "./training-store";
 import { replaceGraph } from "../lib/document-actions";
 import { setupDiff, type SetupDiff } from "../lib/experiment-diff";
+import { useLayerStatsStore } from "./layer-stats-store";
 
 /**
  * A "change one thing" experiment: start from a run's model and settings, change one thing,
@@ -38,6 +39,8 @@ export const useExperimentStore = create<ExperimentState>((set) => ({
       // The device is this computer's, not the run's
       training.updateConfig({ ...run.config, device: training.config.device });
     }
+    // The graph shows what training did to the starting run's layers
+    useLayerStatsStore.getState().showRun(run);
     set({ baseRunId: run.id });
   },
   end: () => set({ baseRunId: null, marks: NO_MARKS }),

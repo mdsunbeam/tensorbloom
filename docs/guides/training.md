@@ -245,7 +245,7 @@ The **Runs** tab at the bottom lists runs newest first, each with its color, sta
 
 ## Change One Thing
 
-The quickest way to learn what a setting does is to change only that setting and train again. **Change one thing** in the run summary, or on a run in the Runs tab, starts from that run: its model and training settings come back on the canvas (Ctrl+Z undoes that), and a card at the top of the canvas follows what you change.
+The quickest way to learn what a setting does is to change only that setting and train again. **Change one thing** in the run summary, or on a run in the Runs tab, starts from that run: its model and training settings come back on the canvas (Ctrl+Z undoes that), and a card at the top right of the canvas follows what you change.
 
 - Changed layers are marked **Changed** on the canvas, and new layers **New**.
 - The card lists each change, such as "Learning rate 0.001 → 0.01" or "fc1 out_features 120 → 64". Renaming a layer or moving it doesn't count.

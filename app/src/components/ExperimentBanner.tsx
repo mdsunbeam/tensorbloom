@@ -24,7 +24,7 @@ export default function ExperimentBanner() {
 
   return (
     <div
-      className="absolute top-3 left-1/2 -translate-x-1/2 z-10 w-[420px] max-w-[calc(100%-24px)] rounded-lg border bg-surface p-3 text-[11px] space-y-2"
+      className="absolute top-3 right-3 z-10 w-[380px] max-w-[calc(100%-272px)] rounded-lg border bg-surface p-3 text-[11px] space-y-2"
       style={{ boxShadow: "var(--node-shadow)", borderColor: count > 1 ? "var(--warning)" : "var(--accent)" }}
       role="region"
       aria-label="Change one thing"
