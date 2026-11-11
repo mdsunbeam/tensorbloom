@@ -18,6 +18,7 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import PreflightDialog from "./components/PreflightDialog";
 import { startTraining } from "./lib/training";
 import RecoveryBanner from "./components/RecoveryBanner";
+import AssistantPanel from "./components/assistant/AssistantPanel";
 import LessonPanel from "./components/LessonPanel";
 import { useLessonStore } from "./store/lesson-store";
 import UpdateBanner from "./components/UpdateBanner";
@@ -55,6 +56,9 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "./store/graph-store";
 
 type BottomTab = "code" | "charts" | "runs" | "logs";
+type RightView = "properties" | "assistant";
+
+const RIGHT_WIDTH: Record<RightView, number> = { properties: 288, assistant: 360 };
 
 export default function App() {
   const theme = useThemeStore((s) => s.theme);
@@ -80,6 +84,8 @@ export default function App() {
   const [tryRunId, setTryRunId] = useState<string | null>(null);
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightView, setRightView] = useState<RightView>("properties");
+  const rightWidth = rightPanelOpen ? RIGHT_WIDTH[rightView] : 36;
   const [minimapVisible, setMinimapVisible] = useState(true);
   const [recovered, setRecovered] = useState<AutoSaveData | null>(null);
   const [gpuInfo, setGpuInfo] = useState<string | null>(null);
@@ -178,6 +184,13 @@ export default function App() {
     return () => { unlisten?.(); window.removeEventListener("beforeunload", onBeforeUnload); };
   }, []);
 
+  // "Ask the assistant" buttons elsewhere open it with their question ready
+  useEffect(() => {
+    const open = () => { setRightView("assistant"); setRightPanelOpen(true); };
+    window.addEventListener("tensorbloom:open-assistant", open);
+    return () => window.removeEventListener("tensorbloom:open-assistant", open);
+  }, []);
+
   // Show the Charts tab when a run starts, or when it can't start
   useEffect(() => {
     if (trainingStatus === "running" || trainingStatus === "starting" || trainingStatus === "error") {
@@ -219,6 +232,12 @@ export default function App() {
       else if (ctrl && key === "a") { e.preventDefault(); useGraphStore.getState().selectAll(); }
       else if (ctrl && key === "b") { e.preventDefault(); setLeftPanelOpen((p) => !p); }
       else if (ctrl && key === ".") { e.preventDefault(); setRightPanelOpen((p) => !p); }
+      else if (ctrl && key === "j") {
+        e.preventDefault();
+        // Opens the assistant, or goes back to Properties when it's already showing
+        setRightPanelOpen(true);
+        setRightView((v) => (v === "assistant" ? "properties" : "assistant"));
+      }
       else if (ctrl && key === "m") { e.preventDefault(); setMinimapVisible((v) => !v); }
       else if (ctrl && key === "enter") {
         // Not while typing or while a dialog is open, where Enter belongs to the field or the dialog
@@ -480,13 +499,33 @@ export default function App() {
         <div
           className="flex-shrink-0 relative"
           style={{
-            width: rightPanelOpen ? 288 : 36,
+            width: rightWidth,
             transition: "width 0.2s ease-out",
           }}
         >
-          <div className="h-full overflow-hidden" style={{ borderLeft: "1px solid var(--border)" }}>
-            {rightPanelOpen ? <PropertyPanel /> : (
-              <CollapsedSideBar label="Properties" side="right" onClick={() => setRightPanelOpen(true)} />
+          <div className="h-full overflow-hidden flex flex-col" style={{ borderLeft: "1px solid var(--border)" }}>
+            {rightPanelOpen ? (
+              <>
+                <div className="flex-shrink-0 h-8 px-2" style={{ background: "var(--bg-secondary)", borderBottom: "1px solid var(--border)" }}>
+                  <Tabs
+                    label="Right panel"
+                    className="h-full"
+                    value={rightView}
+                    onChange={setRightView}
+                    items={[
+                      { id: "properties", label: "Properties" },
+                      { id: "assistant", label: "Assistant" },
+                    ]}
+                  />
+                </div>
+                <div className="flex-1 min-h-0">
+                  {/* Both stay mounted so switching keeps scroll position and a reply in progress */}
+                  <div className="h-full" hidden={rightView !== "properties"}><PropertyPanel /></div>
+                  <div className="h-full" hidden={rightView !== "assistant"}><AssistantPanel /></div>
+                </div>
+              </>
+            ) : (
+              <CollapsedSideBar label={rightView === "assistant" ? "Assistant" : "Properties"} side="right" onClick={() => setRightPanelOpen(true)} />
             )}
           </div>
           {rightPanelOpen && (
@@ -513,7 +552,7 @@ export default function App() {
         />}
         {tryRunId && <TryModelDialog runId={tryRunId} onClose={() => setTryRunId(null)} />}
       </Suspense>
-      <ToastContainer rightOffset={(rightPanelOpen ? 288 : 36) + 16} />
+      <ToastContainer rightOffset={rightWidth + 16} />
       <DragOverlay />
       <ConfirmDialog />
       <PreflightDialog />

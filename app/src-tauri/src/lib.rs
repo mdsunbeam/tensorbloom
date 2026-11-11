@@ -1,3 +1,4 @@
+mod assistant;
 mod icon_data;
 mod python_env;
 mod sidecar_manager;
@@ -136,6 +137,10 @@ pub fn run() {
             install_gpu_support,
             get_python_path,
             detect_gpu,
+            assistant::assistant_key_status,
+            assistant::assistant_save_key,
+            assistant::assistant_delete_key,
+            assistant::assistant_request,
             sidecar_manager::start_sidecar,
             sidecar_manager::sidecar_write,
             sidecar_manager::stop_sidecar,
