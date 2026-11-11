@@ -44,10 +44,16 @@ export default function TemplatesDialog({ open, onClose, onSelect }: TemplatesDi
   );
 }
 
+/** 5000 → "5k" */
+function formatCount(n: number): string {
+  return n >= 1000 && n % 1000 === 0 ? `${n / 1000}k` : n.toLocaleString();
+}
+
 /** A template as a card: a preview of its layers, its name, and what it trains on */
 export function TemplateCard({ template, onClick, compact = false }: { template: Template; onClick: () => void; compact?: boolean }) {
   const layers = templatePreview(template).layers;
-  const dataset = template.trainingDefaults?.dataset?.type;
+  const ds = template.trainingDefaults?.dataset;
+  const dataset = ds ? (ds.maxSamples ? `${ds.type}, ${formatCount(ds.maxSamples)} samples` : ds.type) : undefined;
   return (
     <button
       type="button"
@@ -63,9 +69,9 @@ export function TemplateCard({ template, onClick, compact = false }: { template:
           {template.year && <span className="text-[11px] text-fg-muted">{template.year}</span>}
         </div>
         {!compact && <div className="text-[11px] mt-0.5 text-fg-secondary line-clamp-2">{template.description}</div>}
-        <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-fg-muted">
-          <span>{layers} layers</span>
-          {dataset && <><span aria-hidden="true">·</span><span>{dataset}</span></>}
+        <div className="flex items-center gap-1.5 mt-1.5 text-[11px] text-fg-muted min-w-0">
+          <span className="whitespace-nowrap">{layers} layers</span>
+          {dataset && <><span aria-hidden="true">·</span><span className="truncate" title={dataset}>{dataset}</span></>}
         </div>
         {!compact && template.paper && <div className="text-[11px] mt-0.5 italic text-fg-muted truncate" title={template.paper}>{template.paper}</div>}
       </div>

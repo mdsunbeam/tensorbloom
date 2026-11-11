@@ -4,6 +4,7 @@
 
 import type { Node } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
+import { decoderBlockParams } from "./llm";
 
 export interface ModelSummary {
   totalParams: number;
@@ -67,6 +68,15 @@ function estimateFlops(moduleType: string, p: Record<string, unknown>): number {
       const d = Number(p.embed_dim ?? 0);
       const seq = 128; // assume
       return 4 * seq * d * d + 2 * seq * seq * d; // QKV proj + attention
+    }
+    case "DecoderBlock": {
+      // Per token: 2 FLOPs per weight the token passes through (one expert set in a mixture of experts)
+      const active = decoderBlockParams({
+        d_model: Number(p.d_model ?? 0), n_heads: Number(p.n_heads ?? 1), n_kv_heads: Number(p.n_kv_heads ?? 1),
+        head_dim: Number(p.head_dim ?? 0), ffn_dim: Number(p.ffn_dim ?? 0) * Math.max(1, Number(p.n_experts) ? Number(p.experts_per_token ?? 2) : 1),
+        mlp: String(p.mlp ?? "swiglu"), norm: String(p.norm ?? "rmsnorm"), bias: String(p.bias ?? "none"),
+      });
+      return 2 * 128 * active;
     }
     case "TransformerEncoderLayer":
     case "TransformerDecoderLayer": {
@@ -189,6 +199,12 @@ function countParams(moduleType: string, p: Record<string, unknown>): number {
       // MHA: 4*d^2 + 4*d, FFN: d*ff + ff + ff*d + d, 2x LayerNorm: 4*d
       return 4 * d * d + 4 * d + 2 * d * ff + ff + d + 4 * d;
     }
+    case "DecoderBlock":
+      return decoderBlockParams({
+        d_model: Number(p.d_model ?? 0), n_heads: Number(p.n_heads ?? 1), n_kv_heads: Number(p.n_kv_heads ?? 1),
+        head_dim: Number(p.head_dim ?? 0), ffn_dim: Number(p.ffn_dim ?? 0), mlp: String(p.mlp ?? "swiglu"),
+        norm: String(p.norm ?? "rmsnorm"), bias: String(p.bias ?? "none"), n_experts: Number(p.n_experts ?? 0),
+      });
     case "TransformerDecoderLayer": {
       const d = Number(p.d_model ?? 0);
       const ff = Number(p.dim_feedforward ?? 2048);

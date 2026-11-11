@@ -7,6 +7,7 @@ import type { Node, Edge } from "@xyflow/react";
 import type { NodeData } from "../store/graph-store";
 import type { ShapeMap } from "./shape-inference";
 import { isDatasetNode } from "./dataset-metadata";
+import { DECODER_BLOCK_SOURCE } from "./llm-block";
 
 interface DecompileResult {
   code: string;
@@ -15,6 +16,27 @@ interface DecompileResult {
 
 /** Functional ops that don't need __init__ */
 const FUNCTIONAL_OPS = new Set(["Add", "Concatenate", "MatMul"]);
+
+/** Layers that aren't in torch.nn: generated code defines them itself, from this source */
+const LOCAL_MODULES: Record<string, string> = { DecoderBlock: DECODER_BLOCK_SOURCE };
+
+/** How a layer's class is written in generated code: nn.Linear, or DecoderBlock for TensorBloom's own */
+function moduleClass(moduleType: string): string {
+  return moduleType in LOCAL_MODULES ? moduleType : `nn.${moduleType}`;
+}
+
+/**
+ * Forward lines for a TransformerDecoderLayer used as a causal (GPT-style) block.
+ * Matches the sidecar: self-attention is always causal (position t only attends
+ * to positions <= t). With no memory connected, the input is also the memory and
+ * cross-attention gets the same mask.
+ */
+export function causalDecoderLines(myVar: string, x: string, params: Record<string, unknown>, memory?: string): string[] {
+  const seqDim = params.batch_first === false ? 0 : -2;
+  const maskLine = `${myVar}_mask = torch.ones(${x}.size(${seqDim}), ${x}.size(${seqDim}), dtype=torch.bool, device=${x}.device).triu(1)`;
+  if (memory) return [maskLine, `${myVar} = self.${myVar}(${x}, ${memory}, tgt_mask=${myVar}_mask)`];
+  return [maskLine, `${myVar} = self.${myVar}(${x}, ${x}, tgt_mask=${myVar}_mask, memory_mask=${myVar}_mask)`];
+}
 
 /** Edge with handle info for code block awareness */
 interface IncomingEdge {
@@ -119,7 +141,7 @@ export function generateNodeSnippet(
       initCode = `self.${myVar} = ${node.data.customCode}`;
     } else {
       const args = formatCtorArgs(mt, node.data.params);
-      initCode = `self.${myVar} = nn.${mt}(${args})`;
+      initCode = `self.${myVar} = ${moduleClass(mt)}(${args})`;
     }
   }
 
@@ -135,6 +157,13 @@ export function generateNodeSnippet(
   } else if (mt === "MatMul") {
     const vars = inputVars.length >= 2 ? inputVars : ["x", "y"];
     forwardExpr = `${myVar} = torch.matmul(${vars[0]}, ${vars[1]})`;
+  } else if (mt === "TransformerDecoderLayer") {
+    const incoming = edges.filter((e) => e.target === node.id);
+    const xEdge = incoming.find((e) => e.targetHandle !== "memory");
+    const memEdge = incoming.find((e) => e.targetHandle === "memory");
+    const xVar = xEdge ? varNames.get(xEdge.source) ?? "x" : "x";
+    const memVar = memEdge ? varNames.get(memEdge.source) : undefined;
+    forwardExpr = causalDecoderLines(myVar, xVar, node.data.params, memVar).join("\n");
   } else {
     const inputStr = inputVars.length > 0 ? inputVars.join(", ") : "x";
     forwardExpr = `${myVar} = self.${myVar}(${inputStr})`;
@@ -224,6 +253,9 @@ export function decompileGraph(
 
   // Collect code block helper class definitions
   const helperClasses: string[] = [];
+  for (const [mt, source] of Object.entries(LOCAL_MODULES)) {
+    if (sorted.some((n) => n.data.moduleType === mt && !n.data.customCode)) helperClasses.push(source);
+  }
   const codeBlockNodes = sorted.filter((n) => n.data.codeBlock);
 
   for (const n of codeBlockNodes) {
@@ -263,7 +295,7 @@ export function decompileGraph(
       initLines.push(`        self.${name} = ${n.data.customCode}`);
     } else {
       const args = formatCtorArgs(n.data.moduleType, n.data.params);
-      initLines.push(`        self.${name} = nn.${n.data.moduleType}(${args})`);
+      initLines.push(`        self.${name} = ${moduleClass(n.data.moduleType)}(${args})`);
     }
   }
 
@@ -323,6 +355,14 @@ export function decompileGraph(
     } else if (mt === "MatMul") {
       if (inputVars.length >= 2) {
         forwardLines.push(`        ${myVar} = torch.matmul(${inputVars[0]}, ${inputVars[1]})`);
+      }
+    } else if (mt === "TransformerDecoderLayer") {
+      const xEdge = incomingEdges.find((e) => e.targetHandle !== "memory");
+      const memEdge = incomingEdges.find((e) => e.targetHandle === "memory");
+      const xVar = xEdge ? resolveInputVar(xEdge) : "x";
+      const memVar = memEdge ? resolveInputVar(memEdge) : undefined;
+      for (const line of causalDecoderLines(myVar, xVar, n.data.params, memVar)) {
+        forwardLines.push(`        ${line}`);
       }
     } else {
       const inputStr = inputVars.length > 0 ? inputVars.join(", ") : "x";
@@ -460,6 +500,7 @@ export function formatCtorArgs(moduleType: string, params: Record<string, unknow
     MultiheadAttention: { dropout: 0.0, bias: true, batch_first: true },
     TransformerEncoderLayer: { dim_feedforward: 2048, dropout: 0.1, activation: "relu", batch_first: true, norm_first: false },
     TransformerDecoderLayer: { dim_feedforward: 2048, dropout: 0.1, activation: "relu", batch_first: true, norm_first: false },
+    DecoderBlock: { head_dim: 0, mlp: "swiglu", norm: "rmsnorm", norm_eps: 1e-5, rope_theta: 10000, bias: "none", n_experts: 0, experts_per_token: 2 },
     CrossEntropyLoss: { reduction: "mean", label_smoothing: 0.0 },
     MSELoss: { reduction: "mean" },
     BCEWithLogitsLoss: { reduction: "mean" },

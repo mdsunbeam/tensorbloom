@@ -12,6 +12,7 @@ const SHORTCUTS = [
   { key: "Ctrl+S", action: "Save project" },
   { key: "Ctrl+Shift+S", action: "Save as" },
   { key: "Ctrl+E", action: "Export model (ONNX/TorchScript)" },
+  { key: "Ctrl+Shift+E", action: "Export a 3D diagram (PDF/SVG/PNG)" },
 
   { section: "Edit" },
   { key: "Ctrl+Z", action: "Undo" },
@@ -37,6 +38,7 @@ const SHORTCUTS = [
   { section: "View" },
   { key: "Ctrl+B", action: "Toggle left panel" },
   { key: "Ctrl+.", action: "Toggle right panel" },
+  { key: "Ctrl+J", action: "Open or close the assistant" },
   { key: "Ctrl+M", action: "Toggle minimap" },
   { key: "Ctrl+\\", action: "Focus on the canvas (hide every panel)" },
   { key: "Ctrl+?", action: "Keyboard shortcuts" },

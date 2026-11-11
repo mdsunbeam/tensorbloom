@@ -16,6 +16,7 @@ import type { ShapeMap, ShapeError } from "../lib/shape-inference";
 import { addGroup, nextGroupName, pruneGroups, layersBounds, CARD_HEIGHT, type LayerGroup } from "../lib/groups";
 import { isDatasetNode, DATASET_METADATA, LEGACY_DATASET_TYPES, resolveDataNodeShape, DATA_PRESETS } from "../lib/dataset-metadata";
 import { formatCtorArgs } from "../lib/decompiler";
+import { createNode, removeLayers, nextNodeId, syncNodeIds, resetNodeIds, makeEdge, handlesOf } from "../lib/graph-ops";
 
 export interface NodeData extends Record<string, unknown> {
   moduleType: string;
@@ -53,7 +54,8 @@ interface GraphState {
   onNodesChange: OnNodesChange<TLNode>;
   onEdgesChange: OnEdgesChange<TLEdge>;
   onConnect: OnConnect;
-  addNode: (moduleType: string, position: { x: number; y: number }) => void;
+  /** Adds a layer with default settings. Returns its id, or null for an unknown type. */
+  addNode: (moduleType: string, position: { x: number; y: number }) => string | null;
   updateNodeParam: (nodeId: string, paramName: string, value: unknown) => void;
   setSelectedNodeId: (id: string | null) => void;
   deleteSelected: () => void;
@@ -66,7 +68,8 @@ interface GraphState {
   setShapeMap: (map: ShapeMap) => void;
   setShapeErrors: (errors: Record<string, ShapeError>) => void;
   toggleShapeDisplayBatch: () => void;
-  addNodeConnected: (moduleType: string, sourceNodeId: string, sourceHandleId: string) => void;
+  /** Adds a layer below another and connects it. Returns its id, or null when either is unknown. */
+  addNodeConnected: (moduleType: string, sourceNodeId: string, sourceHandleId: string) => string | null;
   /** Groups the selected layers (two or more) and starts naming the group. Returns its id. */
   groupSelected: () => string | null;
   renameGroup: (groupId: string, name: string) => void;
@@ -90,12 +93,6 @@ interface GraphState {
   clearGraph: () => void;
   loadGraph: (nodes: TLNode[], edges: TLEdge[], groups?: LayerGroup[]) => void;
   setProjectName: (name: string) => void;
-}
-
-let nodeIdCounter = 0;
-
-function nextNodeId(): string {
-  return `node_${++nodeIdCounter}`;
 }
 
 export const useGraphStore = create<GraphState>((set, get) => ({
@@ -153,29 +150,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   addNode: (moduleType, position) => {
-    const def = MODULE_REGISTRY[moduleType];
-    if (!def) return;
-
-    const defaults: Record<string, unknown> = {};
-    for (const p of def.params) {
-      defaults[p.name] = p.default;
-    }
-
-    const newNode: TLNode = {
-      id: nextNodeId(),
-      type: "tensorLabNode",
-      position,
-      data: {
-        moduleType: def.type,
-        label: def.label,
-        category: def.category,
-        params: defaults,
-        // Data nodes get explicit output handles
-        ...(moduleType === "Data" ? { dataOutputs: [...DEFAULT_DATA_OUTPUTS] } : {}),
-      },
-    };
-
-    set({ nodes: [...get().nodes, newNode] });
+    if (!MODULE_REGISTRY[moduleType]) return null;
+    const node = createNode({ moduleType, position });
+    set({ nodes: [...get().nodes, node] });
+    return node.id;
   },
 
   updateNodeParam: (nodeId, paramName, value) => {
@@ -217,13 +195,10 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   deleteMultiple: (nodeIds) => {
-    const idSet = new Set(nodeIds);
-    const { nodes, edges } = get();
-    set({
-      nodes: nodes.filter((n) => !idSet.has(n.id)),
-      edges: edges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target)),
-      selectedNodeId: null,
-    });
+    const { nodes, edges, groups } = get();
+    const known = nodeIds.filter((id) => nodes.some((n) => n.id === id));
+    const doc = removeLayers({ nodes, edges, groups }, known);
+    set({ nodes: doc.nodes, edges: doc.edges, selectedNodeId: null });
   },
 
   duplicateSelected: () => {
@@ -333,48 +308,17 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   toggleShapeDisplayBatch: () => set((s) => ({ shapeDisplayBatch: !s.shapeDisplayBatch })),
 
   addNodeConnected: (moduleType, sourceNodeId, sourceHandleId) => {
-    const def = MODULE_REGISTRY[moduleType];
-    if (!def) return;
-
+    if (!MODULE_REGISTRY[moduleType]) return null;
     const sourceNode = get().nodes.find((n) => n.id === sourceNodeId);
-    if (!sourceNode) return;
-
-    const defaults: Record<string, unknown> = {};
-    for (const p of def.params) {
-      defaults[p.name] = p.default;
-    }
-
-    const newId = nextNodeId();
-    const newNode: TLNode = {
-      id: newId,
-      type: "tensorLabNode",
-      position: {
-        x: sourceNode.position.x,
-        y: sourceNode.position.y + 120,
-      },
-      data: {
-        moduleType: def.type,
-        label: def.label,
-        category: def.category,
-        params: defaults,
-      },
-    };
-
-    const targetHandle = def.inputHandles?.[0]?.id ?? "in";
-    const newEdge: TLEdge = {
-      id: `e_${sourceNodeId}_${newId}`,
-      source: sourceNodeId,
-      sourceHandle: sourceHandleId,
-      target: newId,
-      targetHandle,
-      type: "smoothstep",
-    };
-
+    if (!sourceNode) return null;
+    const newNode = createNode({ moduleType, position: { x: sourceNode.position.x, y: sourceNode.position.y + 120 } });
+    const targetHandle = handlesOf(newNode).inputHandles[0]?.id ?? "in";
     set({
       nodes: [...get().nodes, newNode],
-      edges: [...get().edges, newEdge],
-      selectedNodeId: newId,
+      edges: [...get().edges, makeEdge(sourceNodeId, sourceHandleId, newNode.id, targetHandle)],
+      selectedNodeId: newNode.id,
     });
+    return newNode.id;
   },
 
   groupSelected: () => {
@@ -709,7 +653,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
   },
 
   clearGraph: () => {
-    nodeIdCounter = 0;
+    resetNodeIds();
     set({ nodes: [], edges: [], selectedNodeId: null, shapeMap: {}, shapeErrors: {}, groups: [], selectedGroupId: null, renamingGroupId: null });
   },
 
@@ -765,11 +709,7 @@ export const useGraphStore = create<GraphState>((set, get) => ({
       return n;
     });
 
-    const maxId = migrated.reduce((max, n) => {
-      const match = n.id.match(/^node_(\d+)$/);
-      return match ? Math.max(max, parseInt(match[1], 10)) : max;
-    }, 0);
-    nodeIdCounter = Math.max(nodeIdCounter, maxId);
+    syncNodeIds(migrated);
     set({ nodes: migrated, edges, selectedNodeId: null, groups: pruneGroups(groups, migrated), selectedGroupId: null, renamingGroupId: null });
   },
 

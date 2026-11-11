@@ -304,3 +304,11 @@ button, input, select {
   stroke: var(--accent) !important;
   stroke-width: 2 !important;
 }
+
+/* The assistant's pending changes on the canvas */
+.react-flow__node.tb-preview-added > * { outline: 2px solid var(--success); outline-offset: 2px; border-radius: 10px; }
+.react-flow__node.tb-preview-changed > * { outline: 2px solid var(--warning); outline-offset: 2px; border-radius: 10px; }
+.react-flow__node.tb-preview-removed { opacity: 0.45; pointer-events: none; }
+.react-flow__node.tb-preview-removed > * { outline: 2px dashed var(--danger); outline-offset: 2px; border-radius: 10px; }
+.react-flow__edge.tb-preview-added-edge .react-flow__edge-path { stroke: var(--success) !important; }
+.react-flow__edge.tb-preview-removed-edge .react-flow__edge-path { stroke: var(--danger) !important; stroke-dasharray: 5 4; opacity: 0.6; }

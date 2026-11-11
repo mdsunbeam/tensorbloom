@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { usePythonStore } from "../store/python-store";
+import { usePythonStore, gpuUpgradeAvailable } from "../store/python-store";
 import { useGraphStore } from "../store/graph-store";
 import { startTraining } from "../lib/training";
 import { openExternal } from "../lib/open-external";
 import { saveProject } from "../lib/document-actions";
 import { LINKS } from "../lib/links";
 import Button, { IconButton } from "./ui/Button";
-
-const PYTHON_DOWNLOAD_URL = "https://www.python.org/downloads/";
-
 
 function formatBytes(n: number): string {
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)} GB`;
@@ -32,7 +29,10 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
   const log = usePythonStore((s) => s.log);
   const error = usePythonStore((s) => s.error);
   const venvPath = usePythonStore((s) => s.venvPath);
-  const { install, closeCard } = usePythonStore.getState();
+  const task = usePythonStore((s) => s.task);
+  const nvidiaGpu = usePythonStore((s) => s.nvidiaGpu);
+  const offerGpu = usePythonStore(gpuUpgradeAvailable);
+  const { install, installGpu, closeCard } = usePythonStore.getState();
   const hasNodes = useGraphStore((s) => s.nodes.length > 0);
   const [showLog, setShowLog] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
@@ -42,16 +42,17 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
   }, [log, showLog]);
 
   if (!cardOpen) return null;
-  if (status === "ready" && !justInstalled) return null;
+  // A failed GPU install leaves the CPU build working, so Python is still "ready"
+  const view = status === "ready" && task === "gpu" && error ? "failed" : status;
+  if (view === "ready" && !justInstalled) return null;
 
-  const needsPython = error != null && /python\.org/i.test(error);
   const lastLine = log.length > 0 ? log[log.length - 1].trim() : "";
 
   let title: string;
   let body: React.ReactNode;
   let actions: React.ReactNode;
 
-  if (status === "web") {
+  if (view === "web") {
     // The web version: no Python here, so whatever needed it points to the desktop app
     // "Exporting needs Python." → "Exporting needs the desktop app"
     title = reason ? reason.replace(/Python\.?$/, "the desktop app") : "Training runs in the desktop app";
@@ -59,7 +60,7 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
       <>
         <p className="text-fg-secondary leading-relaxed">
           This web version builds models, checks shapes and writes the PyTorch code, all in your browser.
-          To train, import code or export to ONNX, download TensorBloom for Windows or Linux.
+          To train, import code or export to ONNX, download TensorBloom for Windows, macOS or Linux.
         </p>
         {hasNodes && <p className="text-fg-muted mt-1.5">Save this model first, then open the file in the app.</p>}
       </>
@@ -70,20 +71,20 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
         <Button size="sm" variant="primary" onClick={() => void openExternal(LINKS.releases)}>Download the app</Button>
       </>
     );
-  } else if (status === "checking") {
+  } else if (view === "checking") {
     title = "Checking for Python";
     body = <p className="text-fg-secondary">One moment…</p>;
     actions = null;
-  } else if (status === "missing") {
+  } else if (view === "missing") {
     title = "Set up Python to train";
     body = (
       <>
         {reason && <p className="font-medium text-fg mb-1.5">{reason}</p>}
         <p className="text-fg-secondary leading-relaxed">
-          TensorBloom trains models with PyTorch, in a Python environment of its own. Setup downloads about 3 GB and takes a few minutes.
-          You can keep building while it runs.
+          TensorBloom trains models with PyTorch, in a Python environment of its own. Setup downloads Python and PyTorch,
+          about 500 MB, and takes a few minutes. You can keep building while it runs.
         </p>
-        <p className="text-fg-muted mt-1.5">Needs Python 3.9 or newer on this computer.</p>
+        <p className="text-fg-muted mt-1.5">Nothing else needs to be installed first.</p>
       </>
     );
     actions = (
@@ -92,9 +93,9 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
         <Button size="sm" variant="primary" onClick={() => void install()}>Set up now</Button>
       </>
     );
-  } else if (status === "installing") {
-    const fileFraction = download && download.total > 0 ? Math.min(1, download.done / download.total) : null;
-    title = "Setting up Python";
+  } else if (view === "installing") {
+    const fraction = download && download.total > 0 ? Math.min(1, download.done / download.total) : null;
+    title = task === "gpu" ? "Adding GPU support" : "Setting up Python";
     body = (
       <>
         <div className="flex items-baseline justify-between gap-2 mb-1.5">
@@ -113,44 +114,63 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
             );
           })}
         </div>
-        {download && fileFraction != null && (
+        {download && fraction != null && (
           <div className="mb-2">
             <div className="flex justify-between gap-2 text-fg-secondary tabular-nums mb-1">
-              <span className="truncate font-mono">{download.name}</span>
+              <span>Downloaded</span>
               <span className="whitespace-nowrap">{formatBytes(download.done)} of {formatBytes(download.total)}</span>
             </div>
-            <div className="h-1 rounded-full bg-surface-raised overflow-hidden" role="progressbar" aria-label={`Downloading ${download.name}`}
-              aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fileFraction * 100)}>
-              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${fileFraction * 100}%` }} />
+            <div className="h-1 rounded-full bg-surface-raised overflow-hidden" role="progressbar" aria-label="Download progress"
+              aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(fraction * 100)}>
+              <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${fraction * 100}%` }} />
             </div>
           </div>
         )}
-        {!showLog && !(download && fileFraction != null) && lastLine && <p className="font-mono text-fg-muted truncate" title={lastLine}>{lastLine}</p>}
+        {!showLog && !(download && fraction != null) && lastLine && <p className="font-mono text-fg-muted truncate" title={lastLine}>{lastLine}</p>}
         <p className="text-fg-muted mt-1.5">You can keep building while this runs.</p>
       </>
     );
     actions = <Button size="sm" onClick={closeCard}>Hide</Button>;
-  } else if (status === "failed") {
-    title = "Python setup didn't finish";
+  } else if (view === "failed") {
+    title = task === "gpu" ? "GPU support didn't install" : "Python setup didn't finish";
     body = (
       <>
         <p className="text-danger leading-relaxed line-clamp-4 break-words" title={error ?? undefined}>{error}</p>
-        {!needsPython && <p className="text-fg-muted mt-1.5">Check your internet connection and free disk space, then try again.</p>}
+        <p className="text-fg-muted mt-1.5">
+          Check your internet connection and free disk space, then try again.
+          {task === "gpu" && " Training still works on the CPU in the meantime."}
+        </p>
       </>
     );
     actions = (
       <>
-        {needsPython && <Button size="sm" onClick={() => void openExternal(PYTHON_DOWNLOAD_URL)}>Get Python</Button>}
-        <Button size="sm" variant="primary" onClick={() => void install()}>Try again</Button>
+        <Button size="sm" variant="primary" onClick={() => void (task === "gpu" ? installGpu() : install())}>Try again</Button>
+      </>
+    );
+  } else if (offerGpu) {
+    title = "Python is ready";
+    body = (
+      <>
+        <p className="text-fg-secondary leading-relaxed">
+          You can train now, on the CPU. This computer also has {nvidiaGpu ? <span className="font-medium text-fg">{nvidiaGpu}</span> : "an NVIDIA GPU"},
+          which trains much faster with GPU support (CUDA). Adding it downloads about 3 GB.
+        </p>
+        <p className="text-fg-muted mt-1.5">You can add it later from Help, About TensorBloom.</p>
+      </>
+    );
+    actions = (
+      <>
+        <Button size="sm" onClick={closeCard}>Not now</Button>
+        <Button size="sm" variant="primary" onClick={() => void installGpu()}>Add GPU support</Button>
       </>
     );
   } else {
-    title = "Python is ready";
-    body = <p className="text-fg-secondary">PyTorch is installed. You can train now.</p>;
+    title = task === "gpu" ? "GPU support is ready" : "Python is ready";
+    body = <p className="text-fg-secondary">{task === "gpu" ? "Training can use your NVIDIA GPU now." : "PyTorch is installed. You can train now."}</p>;
     actions = hasNodes ? <Button size="sm" variant="primary" onClick={() => { closeCard(); void startTraining(); }}>Train now</Button> : null;
   }
 
-  const showLogToggle = log.length > 0 && (status === "installing" || status === "failed");
+  const showLogToggle = log.length > 0 && (view === "installing" || view === "failed");
 
   return (
     <section
@@ -161,12 +181,12 @@ export default function PythonSetupCard({ placement }: { placement: "inline" | "
       style={{ boxShadow: "var(--node-shadow-hover)" }}
     >
       <div className="flex items-start gap-2.5 pl-3.5 pr-2 pt-3">
-        <StatusIcon status={status} />
+        <StatusIcon status={view} />
         <div className="flex-1 min-w-0 pt-px">
           <h2 className="text-xs font-semibold text-fg mb-1.5">{title}</h2>
           {body}
         </div>
-        {status !== "installing" && status !== "checking" && (
+        {view !== "installing" && view !== "checking" && (
           <IconButton size="sm" label="Close" onClick={closeCard} className="-mt-0.5">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
               <line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" />

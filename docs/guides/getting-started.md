@@ -7,11 +7,16 @@ This guide walks you through building and training your first neural network in 
 TensorBloom trains with PyTorch in a Python environment of its own. The editor opens right away, so you can start building while that environment is set up:
 
 - If PyTorch isn't installed yet, a card on the canvas offers to set it up. Pick **Set up now** or **Later**.
+- Setup downloads Python and the CPU build of PyTorch, about 500 MB, into TensorBloom's own folder. Nothing needs to be installed first, and it doesn't touch any Python you already have.
 - The card shows each step and the download progress. **Show details** opens the full log.
 - Hiding the card keeps the current step in the toolbar. Click it to bring the card back.
 - Training, code import, the dataset tools, and export need Python. Using one of them before setup opens the card and says why.
 
-You need Python 3.9 or newer on your computer. If it can't be found, the card links to python.org.
+If your computer has an NVIDIA GPU (Windows or Linux), the card then offers **Add GPU support**, which swaps in the CUDA build of PyTorch (about 3 GB). You can also add it later from **Help > About TensorBloom**. On a Mac, PyTorch already includes support for Apple GPUs.
+
+### Quick first runs
+
+Templates train on part of their dataset at first, so the first run finishes in well under a minute on a laptop CPU. The Data node's **Training samples** setting says how many samples are used; set it to 0 to train on the whole dataset, and raise **Epochs** in the Training panel for a full run.
 
 ## Your First Model
 

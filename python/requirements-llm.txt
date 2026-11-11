@@ -1,0 +1,7 @@
+# Optional: running and fine-tuning language models (installed from the app's Language model tab)
+transformers>=4.45
+accelerate>=0.34
+peft>=0.13
+huggingface_hub>=0.25
+# 8- and 4-bit loading, NVIDIA GPUs only
+bitsandbytes>=0.43; sys_platform != "darwin"

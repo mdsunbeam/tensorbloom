@@ -37,3 +37,6 @@ test_model.*
 
 # Claude
 .claude/
+
+# uv, downloaded by app/scripts/fetch-uv.mjs
+app/src-tauri/binaries/
