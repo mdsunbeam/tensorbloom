@@ -32,6 +32,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 **Training**
 - One-click training (Ctrl+Enter) with a live status in the toolbar: download, epoch progress, and the result
 - Live loss/accuracy charts with a hover readout, and a summary card when the run ends
+- Training shows on the graph: each layer is colored by its gradient size or output spread, flags dead ReLUs and vanishing or exploding gradients, and shows its output histogram and feature maps on hover
 - Plain-language error panel with hints for shape mismatches, out-of-memory, bad labels, missing packages, and more
 - Pre-flight fixes are listed for review (Fix and train, Train without changes, or Cancel) instead of being applied silently
 - 10+ built-in datasets: MNIST, CIFAR-10/100, TinyShakespeare, WikiText-2, IMDB, AG News, SpeechCommands
@@ -43,6 +44,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Every run is kept with its curves, settings, and model, saved in the project file
 - The **Runs** tab overlays runs on shared charts and puts their results and settings side by side, highlighting what differs
 - **Restore** brings back a run's graph and settings
+- **Change one thing** starts from a run, tracks what you change, and puts the new run next to it with the graph diff beside the curves
 - **Try it** runs a trained model on validation samples it didn't train on, shows its top guesses, filters to mistakes, or tries your own image
 
 **Help Built In**
@@ -54,6 +56,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Live PyTorch code generation — see the equivalent `nn.Module` as you build
 - Import existing PyTorch code into the graph editor
 - Export to ONNX (for deployment) or TorchScript (for PyTorch-native use)
+- Export a 3D architecture diagram for papers and slides as vector PDF, SVG or PNG (File > Export Diagram)
 
 <details>
 <summary>Compare training runs</summary>
