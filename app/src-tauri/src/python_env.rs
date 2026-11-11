@@ -1,8 +1,10 @@
 //! Python environment manager for TensorBloom.
-//! Creates a local venv, installs PyTorch + dependencies, and provides the
-//! path to the Python executable for sidecar spawning.
+//! Uses the bundled uv to download a Python of TensorBloom's own, create a venv
+//! with it, and install PyTorch, so nothing has to be installed first. PyTorch
+//! starts as the CPU build (small and works everywhere); people with an NVIDIA GPU
+//! can switch to the CUDA build afterwards.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -11,6 +13,16 @@ use serde::Serialize;
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
 
+/// The Python version TensorBloom installs. PyTorch publishes wheels for it on every platform.
+const PYTHON_VERSION: &str = "3.12";
+
+/// The CPU build of PyTorch. macOS uses PyPI instead, whose wheels include MPS support.
+const TORCH_CPU_INDEX: &str = "https://download.pytorch.org/whl/cpu";
+/// The CUDA build, for the GPU upgrade on Windows and Linux.
+const TORCH_CUDA_INDEX: &str = "https://download.pytorch.org/whl/cu126";
+const TORCH_PACKAGES: [&str; 3] = ["torch", "torchvision", "torchaudio"];
+const OTHER_PACKAGES: [&str; 4] = ["onnx", "onnxscript", "datasets", "soundfile"];
+
 #[derive(Serialize, Clone, Debug)]
 pub struct PythonEnvStatus {
     pub ready: bool,
@@ -18,6 +30,12 @@ pub struct PythonEnvStatus {
     pub venv_path: String,
     pub error: Option<String>,
     pub stage: String,
+    /// e.g. "2.9.0+cpu", when PyTorch imports
+    pub torch_version: Option<String>,
+    /// Whether this PyTorch build can use an NVIDIA GPU
+    pub torch_cuda: bool,
+    /// Whether switching to the CUDA build is offered on this platform
+    pub cuda_upgrade_supported: bool,
 }
 
 /// Returns the venv directory path inside the app data directory.
@@ -35,77 +53,97 @@ fn venv_python(app_data: &Path) -> PathBuf {
     }
 }
 
-/// Find a system Python 3 installation.
-fn find_system_python() -> Option<String> {
-    // Try common names in order of preference
-    let candidates = if cfg!(windows) {
-        vec!["python", "python3", "py -3"]
-    } else {
-        vec!["python3", "python"]
-    };
+fn cuda_upgrade_supported() -> bool {
+    cfg!(windows) || cfg!(target_os = "linux")
+}
 
-    for cmd in candidates {
-        let parts: Vec<&str> = cmd.split_whitespace().collect();
-        let result = Command::new(parts[0])
-            .args(&parts[1..])
-            .arg("--version")
-            .output();
-
-        if let Ok(output) = result {
-            if output.status.success() {
-                let version = String::from_utf8_lossy(&output.stdout);
-                let version_str = version.trim();
-                // Verify it's Python 3.9+
-                if version_str.starts_with("Python 3.") {
-                    let minor: Option<u32> = version_str
-                        .strip_prefix("Python 3.")
-                        .and_then(|s| s.split('.').next())
-                        .and_then(|s| s.parse().ok());
-                    if minor.map_or(false, |m| m >= 9) {
-                        return Some(cmd.to_string());
-                    }
-                }
-            }
+/// The uv binary bundled next to the app's executable (Tauri's externalBin), or one on PATH
+/// for development builds made without `scripts/fetch-uv.mjs`.
+fn find_uv() -> Option<PathBuf> {
+    let name = if cfg!(windows) { "uv.exe" } else { "uv" };
+    if let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(Path::to_path_buf)) {
+        let bundled = dir.join(name);
+        if bundled.is_file() {
+            return Some(bundled);
         }
     }
-    None
+    let on_path = PathBuf::from(name);
+    let works = Command::new(&on_path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    works.then_some(on_path)
+}
+
+/// A uv command that keeps everything inside the app data directory and ignores any
+/// uv or Python setup the person has of their own.
+fn uv_command(uv: &Path, app_data: &Path) -> Command {
+    let mut cmd = Command::new(uv);
+    cmd.env("UV_PYTHON_INSTALL_DIR", app_data.join("python"))
+        .env("UV_CACHE_DIR", app_data.join("uv-cache"))
+        .env("UV_PYTHON_PREFERENCE", "only-managed")
+        .env("UV_NO_CONFIG", "1")
+        .env("NO_COLOR", "1")
+        .env_remove("VIRTUAL_ENV")
+        .env_remove("CONDA_PREFIX")
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH");
+    cmd
 }
 
 /// Check if the venv exists and has torch installed.
 pub fn check_env(app_data: &Path) -> PythonEnvStatus {
     let python = venv_python(app_data);
+    let venv_path = venv_dir(app_data).to_string_lossy().to_string();
+    let not_ready = |python_path: String, error: Option<String>, stage: &str| PythonEnvStatus {
+        ready: false,
+        python_path,
+        venv_path: venv_path.clone(),
+        error,
+        stage: stage.to_string(),
+        torch_version: None,
+        torch_cuda: false,
+        cuda_upgrade_supported: cuda_upgrade_supported(),
+    };
 
     if !python.exists() {
-        return PythonEnvStatus {
-            ready: false,
-            python_path: String::new(),
-            venv_path: venv_dir(app_data).to_string_lossy().to_string(),
-            error: None,
-            stage: "not_installed".to_string(),
-        };
+        return not_ready(String::new(), None, "not_installed");
     }
 
-    // Check if torch is importable
-    let check = Command::new(&python)
+    let mut check = Command::new(&python);
+    check
         .arg("-c")
-        .arg("import torch; print(torch.__version__)")
-        .output();
+        .arg("import torch; print(torch.__version__); print(torch.version.cuda or '')")
+        .stdin(Stdio::null());
+    #[cfg(windows)]
+    check.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
-    match check {
-        Ok(output) if output.status.success() => PythonEnvStatus {
-            ready: true,
-            python_path: python.to_string_lossy().to_string(),
-            venv_path: venv_dir(app_data).to_string_lossy().to_string(),
-            error: None,
-            stage: format!("ready (torch {})", String::from_utf8_lossy(&output.stdout).trim()),
-        },
-        _ => PythonEnvStatus {
-            ready: false,
-            python_path: python.to_string_lossy().to_string(),
-            venv_path: venv_dir(app_data).to_string_lossy().to_string(),
-            error: Some("PyTorch not installed in venv".to_string()),
-            stage: "deps_missing".to_string(),
-        },
+    match check.output() {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut lines = stdout.lines().map(str::trim);
+            let version = lines.next().unwrap_or("").to_string();
+            let cuda = lines.next().unwrap_or("");
+            PythonEnvStatus {
+                ready: true,
+                python_path: python.to_string_lossy().to_string(),
+                venv_path: venv_path.clone(),
+                error: None,
+                stage: format!("ready (torch {})", version),
+                torch_version: Some(version),
+                torch_cuda: !cuda.is_empty(),
+                cuda_upgrade_supported: cuda_upgrade_supported(),
+            }
+        }
+        _ => not_ready(
+            python.to_string_lossy().to_string(),
+            Some("PyTorch not installed in venv".to_string()),
+            "deps_missing",
+        ),
     }
 }
 
@@ -115,19 +153,57 @@ pub fn check_env(app_data: &Path) -> PythonEnvStatus {
 pub enum SetupUpdate {
     /// A new step started
     Step { step: u32, total: u32, label: String },
-    /// Bytes downloaded so far of the file pip is fetching
+    /// Bytes downloaded so far of the packages this step downloads
     Download { done: u64, total: u64 },
-    /// A line of output from pip or Python
+    /// A line of output from uv or Python
     Log { line: String },
 }
 
-const SETUP_STEPS: u32 = 6;
+/// "495.1MiB" → bytes
+fn parse_size(s: &str) -> Option<u64> {
+    let s = s.trim();
+    let split = s.find(|c: char| c.is_ascii_alphabetic())?;
+    let (num, unit) = s.split_at(split);
+    let n: f64 = num.trim().parse().ok()?;
+    let mult = match unit {
+        "B" => 1.0,
+        "KiB" => 1024.0,
+        "MiB" => 1024.0 * 1024.0,
+        "GiB" => 1024.0 * 1024.0 * 1024.0,
+        _ => return None,
+    };
+    Some((n * mult) as u64)
+}
 
-/// Parses pip's `--progress-bar=raw` lines, which look like "Progress 1024 of 2048".
-fn parse_pip_progress(line: &str) -> Option<(u64, u64)> {
-    let rest = line.trim().strip_prefix("Progress ")?;
-    let (done, total) = rest.split_once(" of ")?;
-    Some((done.trim().parse().ok()?, total.trim().parse().ok()?))
+/// Adds up uv's download lines: "Downloading torch (514.2MiB)" when a big download starts
+/// and " Downloaded torch" when it finishes. uv only names downloads over about a megabyte,
+/// so this tracks the big ones, which are nearly all of the bytes.
+#[derive(Default)]
+struct DownloadTally {
+    sizes: HashMap<String, u64>,
+    total: u64,
+    done: u64,
+}
+
+impl DownloadTally {
+    /// Returns (done, total) when the line changed them.
+    fn line(&mut self, line: &str) -> Option<(u64, u64)> {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("Downloading ") {
+            let (name, size) = rest.split_once(" (")?;
+            let size = parse_size(size.strip_suffix(')')?)?;
+            if self.sizes.insert(name.to_string(), size).is_none() {
+                self.total += size;
+            }
+            return Some((self.done, self.total));
+        }
+        if let Some(name) = line.strip_prefix("Downloaded ") {
+            let size = self.sizes.remove(name.trim())?;
+            self.done += size;
+            return Some((self.done, self.total));
+        }
+        None
+    }
 }
 
 /// Runs a command, passing each line it prints to `report` as it arrives.
@@ -146,9 +222,14 @@ fn run_streamed(cmd: &mut Command, report: &(dyn Fn(SetupUpdate) + Sync)) -> Res
     let stderr = child.stderr.take().ok_or("No stderr")?;
 
     let stderr_tail = std::thread::scope(|scope| {
+        // uv writes its progress to stderr
         let err_reader = scope.spawn(|| {
+            let mut tally = DownloadTally::default();
             let mut tail: VecDeque<String> = VecDeque::new();
             for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                if let Some((done, total)) = tally.line(&line) {
+                    report(SetupUpdate::Download { done, total });
+                }
                 report(SetupUpdate::Log { line: line.clone() });
                 tail.push_back(line);
                 if tail.len() > 20 {
@@ -158,10 +239,7 @@ fn run_streamed(cmd: &mut Command, report: &(dyn Fn(SetupUpdate) + Sync)) -> Res
             Vec::from(tail).join("\n")
         });
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            match parse_pip_progress(&line) {
-                Some((done, total)) => report(SetupUpdate::Download { done, total }),
-                None => report(SetupUpdate::Log { line }),
-            }
+            report(SetupUpdate::Log { line });
         }
         err_reader.join().unwrap_or_default()
     });
@@ -170,107 +248,107 @@ fn run_streamed(cmd: &mut Command, report: &(dyn Fn(SetupUpdate) + Sync)) -> Res
     Ok((status.success(), stderr_tail))
 }
 
-/// `pip install` with byte-level download progress. pip older than 24.1 has no raw
-/// progress bar, so it's tried again without one if pip rejects the option.
-fn pip_install(python: &Path, args: &[&str], report: &(dyn Fn(SetupUpdate) + Sync)) -> Result<(bool, String), String> {
-    let run = |progress: bool| {
-        let mut cmd = Command::new(python);
-        cmd.args(["-m", "pip", "install", "--disable-pip-version-check"]);
-        if progress {
-            cmd.arg("--progress-bar=raw");
-        }
-        cmd.args(args);
-        run_streamed(&mut cmd, report)
-    };
-    let (ok, stderr) = run(true)?;
-    if !ok && stderr.contains("invalid choice") {
-        return run(false);
-    }
-    Ok((ok, stderr))
+/// `uv pip install` into the venv.
+fn uv_pip_install(
+    uv: &Path,
+    app_data: &Path,
+    args: &[&str],
+    report: &(dyn Fn(SetupUpdate) + Sync),
+) -> Result<(bool, String), String> {
+    let mut cmd = uv_command(uv, app_data);
+    cmd.args(["pip", "install", "--python"]).arg(venv_python(app_data)).args(args);
+    run_streamed(&mut cmd, report)
 }
 
-/// Set up the Python venv and install dependencies, reporting each step and
-/// pip's output through `report` as it goes.
+fn require_uv() -> Result<PathBuf, String> {
+    find_uv().ok_or_else(|| {
+        "TensorBloom's installer tool (uv) is missing from this copy of the app. Reinstall TensorBloom, or if you built it from source, run `node scripts/fetch-uv.mjs` in the app folder.".to_string()
+    })
+}
+
+const SETUP_STEPS: u32 = 5;
+
+/// Set up Python and PyTorch, reporting each step and uv's output through `report`.
 pub fn setup_env(app_data: &Path, report: &(dyn Fn(SetupUpdate) + Sync)) -> Result<PythonEnvStatus, String> {
     let step = |n: u32, label: &str| report(SetupUpdate::Step { step: n, total: SETUP_STEPS, label: label.to_string() });
-
-    // 1. Find system Python
-    step(1, "Finding Python");
-    let system_python = find_system_python()
-        .ok_or("TensorBloom needs Python 3.9 or newer and couldn't find it. Install it from python.org, then try again.")?;
-    report(SetupUpdate::Log { line: format!("Using {}", system_python) });
-
+    let uv = require_uv()?;
     let venv = venv_dir(app_data);
     let python = venv_python(app_data);
 
-    // 2. Create venv if it doesn't exist
-    step(2, "Creating the Python environment");
+    // 1–2. A Python of TensorBloom's own, and a venv made with it. A venv left by an
+    // earlier version (made with the system Python) is kept as it is.
     if !python.exists() {
-        let parts: Vec<&str> = system_python.split_whitespace().collect();
+        step(1, "Downloading Python");
+        let (ok, stderr) = run_streamed(uv_command(&uv, app_data).args(["python", "install", PYTHON_VERSION]), report)
+            .map_err(|e| format!("Couldn't run uv: {}", e))?;
+        if !ok {
+            return Err(format!("Couldn't download Python: {}", stderr));
+        }
+
+        step(2, "Creating the Python environment");
         let (ok, stderr) = run_streamed(
-            Command::new(parts[0]).args(&parts[1..]).arg("-m").arg("venv").arg(&venv),
+            uv_command(&uv, app_data).args(["venv", "--python", PYTHON_VERSION]).arg(&venv),
             report,
         )
-        .map_err(|e| format!("Failed to create venv: {}", e))?;
-
+        .map_err(|e| format!("Couldn't run uv: {}", e))?;
         if !ok {
-            return Err(format!("Failed to create venv: {}", stderr));
+            return Err(format!("Couldn't create the Python environment: {}", stderr));
         }
     }
 
-    // 3. Upgrade pip (a newer pip also reports download progress)
-    step(3, "Updating pip");
-    let _ = pip_install(&python, &["--upgrade", "pip"], report);
-
-    // 4. Install PyTorch. The CUDA index only hosts PyTorch packages, so torch is
-    // installed on its own first; mixing other packages into this command makes
-    // pip fail and silently fall back to CPU-only wheels (on Windows).
-    step(4, "Downloading PyTorch");
-    let torch_packages = ["torch", "torchvision", "torchaudio"];
-    let torch_index = if cfg!(windows) || cfg!(target_os = "linux") {
-        // CUDA 12.6 wheels
-        Some("--index-url=https://download.pytorch.org/whl/cu126")
-    } else {
-        // macOS — CPU/MPS wheels from PyPI
-        None
-    };
-
-    let mut torch_args: Vec<&str> = torch_packages.to_vec();
-    if let Some(index) = torch_index {
-        torch_args.push(index);
+    // 3. PyTorch, CPU build. The PyTorch index serves torch and its dependencies,
+    // so it replaces PyPI for this step rather than being added to it.
+    step(3, "Downloading PyTorch");
+    let mut torch_args: Vec<&str> = TORCH_PACKAGES.to_vec();
+    if cfg!(not(target_os = "macos")) {
+        torch_args.extend(["--index-url", TORCH_CPU_INDEX]);
     }
-
-    let (ok, stderr) = pip_install(&python, &torch_args, report)
-        .map_err(|e| format!("Failed to install PyTorch: {}", e))?;
-
+    let (ok, stderr) = uv_pip_install(&uv, app_data, &torch_args, report)
+        .map_err(|e| format!("Couldn't run uv: {}", e))?;
     if !ok {
-        // No CUDA build for this platform/Python version — fall back to PyPI wheels
-        if torch_index.is_some()
-            && (stderr.contains("No matching distribution") || stderr.contains("Could not find"))
-        {
-            report(SetupUpdate::Log { line: "No CUDA build of PyTorch for this system, installing the standard one".to_string() });
-            let (ok2, stderr2) = pip_install(&python, &torch_packages, report)
-                .map_err(|e| format!("Failed to install CPU packages: {}", e))?;
-
-            if !ok2 {
-                return Err(format!("Failed to install PyTorch: {}", stderr2));
-            }
-        } else {
-            return Err(format!("Failed to install PyTorch: {}", stderr));
-        }
+        return Err(format!("Failed to install PyTorch: {}", stderr));
     }
 
-    // 5. Install the remaining dependencies from PyPI
-    step(5, "Installing the other packages");
-    let (ok, stderr) = pip_install(&python, &["onnx", "onnxscript", "datasets", "soundfile"], report)
-        .map_err(|e| format!("Failed to install packages: {}", e))?;
-
+    // 4. The remaining dependencies, from PyPI
+    step(4, "Installing the other packages");
+    let (ok, stderr) = uv_pip_install(&uv, app_data, &OTHER_PACKAGES, report)
+        .map_err(|e| format!("Couldn't run uv: {}", e))?;
     if !ok {
         return Err(format!("Failed to install dependencies: {}", stderr));
     }
 
-    // 6. Make sure torch imports
-    step(6, "Checking the install");
+    // 5. Make sure torch imports
+    step(5, "Checking the install");
+    Ok(check_env(app_data))
+}
+
+const GPU_STEPS: u32 = 2;
+
+/// Swap the CPU build of PyTorch for the CUDA build, so training can use an NVIDIA GPU.
+pub fn install_cuda_torch(app_data: &Path, report: &(dyn Fn(SetupUpdate) + Sync)) -> Result<PythonEnvStatus, String> {
+    if !cuda_upgrade_supported() {
+        return Err("GPU support with CUDA is only available on Windows and Linux.".to_string());
+    }
+    let uv = require_uv()?;
+    if !venv_python(app_data).exists() {
+        return Err("Set up Python first.".to_string());
+    }
+    let step = |n: u32, label: &str| report(SetupUpdate::Step { step: n, total: GPU_STEPS, label: label.to_string() });
+
+    step(1, "Downloading PyTorch with GPU support");
+    // The installed CPU build already satisfies "torch", so ask for these to be replaced
+    let mut args: Vec<&str> = TORCH_PACKAGES.to_vec();
+    for p in TORCH_PACKAGES {
+        args.extend(["--reinstall-package", p]);
+    }
+    args.extend(["--index-url", TORCH_CUDA_INDEX]);
+    let (ok, stderr) = uv_pip_install(&uv, app_data, &args, report)
+        .map_err(|e| format!("Couldn't run uv: {}", e))?;
+    if !ok {
+        return Err(format!("Failed to install PyTorch with GPU support: {}", stderr));
+    }
+
+    step(2, "Checking the install");
     Ok(check_env(app_data))
 }
 
@@ -286,13 +364,25 @@ pub fn get_python_path(app_data: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_pip_progress;
+    use super::{parse_size, DownloadTally};
 
     #[test]
-    fn reads_pip_raw_progress() {
-        assert_eq!(parse_pip_progress("Progress 1024 of 2048"), Some((1024, 2048)));
-        assert_eq!(parse_pip_progress("  Progress 0 of 0\r"), Some((0, 0)));
-        assert_eq!(parse_pip_progress("Collecting torch"), None);
-        assert_eq!(parse_pip_progress("Progress a of b"), None);
+    fn reads_uv_sizes() {
+        assert_eq!(parse_size("2.0MiB"), Some(2 * 1024 * 1024));
+        assert_eq!(parse_size("1.5GiB"), Some(1536 * 1024 * 1024));
+        assert_eq!(parse_size("512B"), Some(512));
+        assert_eq!(parse_size("12 parsecs"), None);
+    }
+
+    #[test]
+    fn tallies_uv_downloads() {
+        let mut t = DownloadTally::default();
+        assert_eq!(t.line("Resolved 38 packages in 3.40s"), None);
+        assert_eq!(t.line("Downloading torch (512.0MiB)"), Some((0, 512 << 20)));
+        assert_eq!(t.line("Downloading numpy (16.0MiB)"), Some((0, 528 << 20)));
+        assert_eq!(t.line(" Downloaded numpy"), Some((16 << 20, 528 << 20)));
+        // A finish for something never announced changes nothing
+        assert_eq!(t.line(" Downloaded pillow"), None);
+        assert_eq!(t.line(" Downloaded torch"), Some((528 << 20, 528 << 20)));
     }
 }

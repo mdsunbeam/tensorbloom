@@ -113,6 +113,7 @@ export default function App() {
         const { invoke } = await import("@tauri-apps/api/core");
         const result = await invoke<{ name: string; memory_total_mb: number } | null>("detect_gpu");
         if (result) {
+          usePythonStore.setState({ nvidiaGpu: result.name });
           const mem = result.memory_total_mb ? ` ${Math.round(result.memory_total_mb / 1024)}GB` : "";
           setGpuInfo(`${result.name}${mem}`);
         } else {

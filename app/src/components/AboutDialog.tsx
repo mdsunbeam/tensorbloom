@@ -1,6 +1,6 @@
 import { version } from "../../package.json";
 import { getCachedEnvironment } from "../lib/sidecar";
-import { usePythonStore } from "../store/python-store";
+import { usePythonStore, gpuUpgradeAvailable } from "../store/python-store";
 import { openExternal } from "../lib/open-external";
 import { LINKS } from "../lib/links";
 import Dialog from "./ui/Dialog";
@@ -9,6 +9,7 @@ import { LogoMark, Wordmark } from "./ui/Logo";
 
 export default function AboutDialog({ open, onClose, gpuInfo }: { open: boolean; onClose: () => void; gpuInfo: string | null }) {
   const pythonStatus = usePythonStore((s) => s.status);
+  const offerGpu = usePythonStore(gpuUpgradeAvailable);
   // Known once Python has started, i.e. after the first run or code import this session
   const env = getCachedEnvironment();
 
@@ -46,6 +47,12 @@ export default function AboutDialog({ open, onClose, gpuInfo }: { open: boolean;
           </div>
         ))}
       </dl>
+      {offerGpu && (
+        <div className="mx-5 mb-5 -mt-2 flex items-center justify-between gap-3 rounded-lg bg-surface-sunken px-3 py-2.5 text-xs">
+          <p className="text-fg-secondary">PyTorch is using the CPU. Add GPU support (CUDA, about 3 GB) to train on your NVIDIA GPU.</p>
+          <Button size="sm" variant="primary" onClick={() => { onClose(); void usePythonStore.getState().installGpu(); }}>Add GPU support</Button>
+        </div>
+      )}
     </Dialog>
   );
 }
