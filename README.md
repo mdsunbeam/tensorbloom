@@ -44,6 +44,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Every run is kept with its curves, settings, and model, saved in the project file
 - The **Runs** tab overlays runs on shared charts and puts their results and settings side by side, highlighting what differs
 - **Restore** brings back a run's graph and settings
+- **Change one thing** starts from a run, tracks what you change, and puts the new run next to it with the graph diff beside the curves
 - **Try it** runs a trained model on validation samples it didn't train on, shows its top guesses, filters to mistakes, or tries your own image
 
 **Help Built In**

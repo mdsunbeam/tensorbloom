@@ -23,6 +23,7 @@ import { canvasView, groupRect, GROUP_NODE_TYPE } from "../lib/groups";
 import { CanvasViewContext } from "./canvas-view";
 import ShapeEdge from "./ShapeEdge";
 import ContextMenu from "./ContextMenu";
+import ExperimentBanner from "./ExperimentBanner";
 import LayerOverlayControl from "./LayerOverlayControl";
 import type { Node, Edge, Connection, NodeChange } from "@xyflow/react";
 import type { ConnectFromContext } from "./SpotlightDialog";
@@ -507,6 +508,7 @@ export default function GraphEditor({ onShowSpotlight, minimapVisible }: GraphEd
 
       {/* Batch size display toggle */}
       <BatchToggleButton />
+      <ExperimentBanner />
       <LayerOverlayControl />
 
     </div>
