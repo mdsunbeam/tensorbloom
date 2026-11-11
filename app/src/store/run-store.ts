@@ -35,6 +35,10 @@ export interface RunRecord {
   graph: { nodes: Node<NodeData>[]; edges: Edge[]; groups?: LayerGroup[] };
   /** The last checkpoint the run saved. Its epoch can be earlier than the run's last when it stopped early. */
   checkpoint?: { path: string; epoch: number };
+  /** The run this one was a "change one thing" experiment on */
+  baseRunId?: string;
+  /** What the experiment changed from that run, in a few words */
+  change?: string;
   /** What training did to each layer: the last captured batch and each layer's history */
   layers?: RunLayerStats;
 }

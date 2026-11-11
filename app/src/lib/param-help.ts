@@ -84,6 +84,7 @@ const PARAM_HELP: Record<string, string> = {
   // Data
   source: "Where the training data comes from: a built-in dataset or your own files.",
   val_split: "Share of the data held out to check the model on, e.g. 0.2 for 20%.",
+  max_samples: "Train on only this many samples, for quick experiments. Validation uses a fifth as many. 0 uses the whole dataset.",
 };
 
 /** Where a parameter name means something different for a particular layer */

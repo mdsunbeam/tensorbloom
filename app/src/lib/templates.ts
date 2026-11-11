@@ -17,7 +17,11 @@ export interface TemplateTrainingDefaults {
   loss?: string;
   epochs?: number;
   batchSize?: number;
-  dataset?: { type: string; root: string };
+  /**
+   * maxSamples: train on this many samples (unset: all), so the first run is quick on a laptop CPU.
+   * params: other Data node settings, e.g. a shorter max_length for text.
+   */
+  dataset?: { type: string; root: string; maxSamples?: number; params?: Record<string, unknown> };
 }
 
 export interface Template {
@@ -94,13 +98,14 @@ export function prependDatasetNode(
   result: { nodes: Node<NodeData>[]; edges: Edge[] },
   datasetType: string,
   supervised: boolean = true,
+  extraParams: Record<string, unknown> = {},
 ): { nodes: Node<NodeData>[]; edges: Edge[] } {
   // Map sidecar dataset type strings to source values
   const sourceMap: Record<string, string> = { "Custom CSV": "CSV", CustomCSV: "CSV" };
   const source = sourceMap[datasetType] ?? datasetType;
 
   // Create a universal Data node with the appropriate source preset
-  const dsNode = makeNode("Data", { source, domain: "auto" });
+  const dsNode = makeNode("Data", { source, domain: "auto", ...extraParams });
 
   // Find root computation nodes (no incoming edges, not loss nodes)
   const targetsWithEdges = new Set(result.edges.map(e => e.target));
@@ -146,8 +151,9 @@ export function prependDatasetNode(
 /** A template's graph as it opens on the canvas: a Data node in front when it names a dataset, then laid out */
 export function templateGraph(tpl: Template): { nodes: Node<NodeData>[]; edges: Edge[] } {
   const raw = tpl.build();
-  const dsType = tpl.trainingDefaults?.dataset?.type;
-  const { nodes, edges } = dsType ? prependDatasetNode(raw, dsType, tpl.supervised !== false) : raw;
+  const ds = tpl.trainingDefaults?.dataset;
+  const extra = { ...ds?.params, ...(ds?.maxSamples ? { max_samples: ds.maxSamples } : {}) };
+  const { nodes, edges } = ds ? prependDatasetNode(raw, ds.type, tpl.supervised !== false, extra) : raw;
   return { nodes: autoLayout(nodes, edges), edges };
 }
 
@@ -174,7 +180,7 @@ export const TEMPLATES: Template[] = [
     name: "Simple MLP",
     description: "Flatten → 3-layer feedforward network for MNIST digit classification",
     category: "getting-started",
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 10, batchSize: 64, dataset: { type: "MNIST", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 64, dataset: { type: "MNIST", root: "./data", maxSamples: 10000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -201,7 +207,7 @@ export const TEMPLATES: Template[] = [
     category: "vision",
     year: 1998,
     paper: "LeCun et al., 1998",
-    trainingDefaults: { optimizer: { type: "SGD", lr: 0.01, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 15, batchSize: 64, dataset: { type: "MNIST", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "SGD", lr: 0.01, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 5, batchSize: 64, dataset: { type: "MNIST", root: "./data", maxSamples: 10000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -228,7 +234,7 @@ export const TEMPLATES: Template[] = [
     category: "vision",
     year: 2015,
     paper: "He et al., 2015",
-    trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 100, batchSize: 128, dataset: { type: "CIFAR10", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 128, dataset: { type: "CIFAR10", root: "./data", maxSamples: 5000 } },
     build() {
       _id = 0;
       // Stem
@@ -294,7 +300,7 @@ export const TEMPLATES: Template[] = [
     category: "vision",
     year: 2020,
     paper: "Dosovitskiy et al., 2020",
-    trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 128, dataset: { type: "CIFAR10", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 2, batchSize: 128, dataset: { type: "CIFAR10", root: "./data", maxSamples: 4000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -321,7 +327,7 @@ export const TEMPLATES: Template[] = [
     category: "vision",
     year: 2018,
     paper: "Sandler et al., 2018",
-    trainingDefaults: { optimizer: { type: "SGD", lr: 0.01, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 64, dataset: { type: "CIFAR10", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "SGD", lr: 0.01, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 2, batchSize: 64, dataset: { type: "CIFAR10", root: "./data", maxSamples: 4000 } },
     build() {
       _id = 0;
       // Initial conv
@@ -449,7 +455,7 @@ export const TEMPLATES: Template[] = [
     category: "language",
     year: 2017,
     paper: "Vaswani et al., 2017",
-    trainingDefaults: { optimizer: { type: "AdamW", lr: 5e-4, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 20, batchSize: 32, dataset: { type: "WikiText2", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "AdamW", lr: 5e-4, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 1, batchSize: 32, dataset: { type: "WikiText2", root: "./data", maxSamples: 256, params: { max_length: 64 } } },
     build() {
       _id = 0;
       const src_embed = makeNode("Embedding", { num_embeddings: 30000, embedding_dim: 512 }, "src_embed");
@@ -479,7 +485,7 @@ export const TEMPLATES: Template[] = [
     category: "language",
     year: 2022,
     paper: "Karpathy, 2022",
-    trainingDefaults: { optimizer: { type: "AdamW", lr: 3e-4, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 20, batchSize: 64, dataset: { type: "TinyShakespeare", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "AdamW", lr: 3e-4, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 1, batchSize: 32, dataset: { type: "TinyShakespeare", root: "./data", maxSamples: 512, params: { max_length: 64 } } },
     build() {
       _id = 0;
       const nodes = [
@@ -504,7 +510,7 @@ export const TEMPLATES: Template[] = [
     category: "language",
     year: 2018,
     paper: "Devlin et al., 2018",
-    trainingDefaults: { optimizer: { type: "AdamW", lr: 2e-5, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 16, dataset: { type: "AGNews", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "AdamW", lr: 2e-5, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 1, batchSize: 16, dataset: { type: "AGNews", root: "./data", maxSamples: 160, params: { max_length: 64 } } },
     build() {
       _id = 0;
       // Encoder output [B,T,768] → pool to [B,768] → classify
@@ -538,7 +544,7 @@ export const TEMPLATES: Template[] = [
     description: "Embedding → bidirectional LSTM → pool → linear head for sentiment analysis",
     category: "language",
     paper: undefined,
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 10, batchSize: 32, dataset: { type: "IMDB", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 2, batchSize: 32, dataset: { type: "IMDB", root: "./data", maxSamples: 1500 } },
     build() {
       _id = 0;
       // LSTM output is [B, T, 512] — permute+pool to get [B, 512] for classification
@@ -565,7 +571,7 @@ export const TEMPLATES: Template[] = [
     category: "audio",
     year: 2022,
     paper: "Radford et al., 2022",
-    trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 30, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "AdamW", lr: 1e-3, weightDecay: 0.01 }, loss: "CrossEntropyLoss", epochs: 2, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data", maxSamples: 1500 } },
     build() {
       _id = 0;
       // Input: mel spectrogram [B, 80, 100] from SpeechCommands
@@ -595,7 +601,7 @@ export const TEMPLATES: Template[] = [
     category: "audio",
     year: 2016,
     paper: "van den Oord et al., 2016",
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 30, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 32, dataset: { type: "SpeechCommands", root: "./data", maxSamples: 5000 } },
     build() {
       _id = 0;
       // Adapted for SpeechCommands mel spectrograms [B, 80, 100]
@@ -664,7 +670,7 @@ export const TEMPLATES: Template[] = [
     description: "Symmetric encoder-decoder with bottleneck for representation learning",
     category: "generative",
     supervised: false,
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "MSELoss", epochs: 20, batchSize: 128, dataset: { type: "MNIST", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "MSELoss", epochs: 5, batchSize: 128, dataset: { type: "MNIST", root: "./data", maxSamples: 10000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -691,7 +697,7 @@ export const TEMPLATES: Template[] = [
     description: "Convolutional encoder-decoder for unsupervised image reconstruction (MNIST)",
     category: "generative",
     supervised: false,
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "MSELoss", epochs: 20, batchSize: 128, dataset: { type: "MNIST", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "MSELoss", epochs: 3, batchSize: 128, dataset: { type: "MNIST", root: "./data", maxSamples: 10000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -716,7 +722,7 @@ export const TEMPLATES: Template[] = [
     name: "Embedding Classifier",
     description: "Conv feature extractor with learned embedding and classification head",
     category: "generative",
-    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 20, batchSize: 64, dataset: { type: "MNIST", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "Adam", lr: 1e-3, weightDecay: 0 }, loss: "CrossEntropyLoss", epochs: 3, batchSize: 64, dataset: { type: "MNIST", root: "./data", maxSamples: 10000 } },
     build() {
       _id = 0;
       const nodes = [
@@ -745,7 +751,7 @@ export const TEMPLATES: Template[] = [
     category: "other",
     year: 2017,
     paper: "Huang et al., 2017",
-    trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 50, batchSize: 64, dataset: { type: "CIFAR10", root: "./data" } },
+    trainingDefaults: { optimizer: { type: "SGD", lr: 0.1, weightDecay: 0, momentum: 0.9 }, loss: "CrossEntropyLoss", epochs: 2, batchSize: 64, dataset: { type: "CIFAR10", root: "./data", maxSamples: 3000 } },
     build() {
       _id = 0;
       const init_conv = makeNode("Conv2d", { in_channels: 3, out_channels: 64, kernel_size: 3, padding: 1 }, "init_conv");

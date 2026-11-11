@@ -16,6 +16,8 @@ import { buildSidecarGraph } from "./sidecar-graph";
 import { requirePython } from "../store/python-store";
 import { useRunStore, epochSummary, architectureKey, graphSnapshot, type RunRecord } from "../store/run-store";
 import { computeModelSummary } from "./model-summary";
+import { useExperimentStore, runDiff } from "../store/experiment-store";
+import { changeSummary } from "./experiment-diff";
 import { useLayerStatsStore, liveRunLayerStats } from "../store/layer-stats-store";
 import type { FeatureMaps, LayerStat } from "./layer-health";
 
@@ -302,8 +304,19 @@ function recordRun(start: RunStart, status: RunRecord["status"], error?: string)
     epochs,
     ...(layers ? { layers } : {}),
   };
+  // A "change one thing" experiment: name what changed, and put the run next to the one it started from
+  const baseRunId = useExperimentStore.getState().baseRunId;
+  const base = baseRunId ? runs.find((r) => r.id === baseRunId) : undefined;
+  if (base) {
+    run.baseRunId = base.id;
+    run.change = changeSummary(runDiff(base, run));
+  }
   addRun(run);
   useLayerStatsStore.getState().liveBecameRun(run);
+  if (base) {
+    useRunStore.getState().setCompare([base.id, run.id]);
+    useExperimentStore.getState().end();
+  }
 }
 
 export async function stopTraining() {
