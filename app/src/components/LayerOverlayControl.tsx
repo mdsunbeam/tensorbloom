@@ -50,7 +50,7 @@ export default function LayerOverlayControl() {
 
   const range = snapshot && overlay !== "off" ? overlayScale(snapshot, overlay).range : null;
   const from = source?.kind === "run"
-    ? `Run ${source.runNumber}${snapshot ? `, epoch ${snapshot.epoch}` : ""}${changed ? ". The model has changed since." : ""}`
+    ? `Run ${source.runNumber}${snapshot ? `, epoch ${snapshot.epoch}` : ""}${changed ? ". The model has changed since" : ""}`
     : snapshot ? `Training now, epoch ${snapshot.epoch}` : "Waiting for the first batch";
 
   return (
