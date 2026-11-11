@@ -3,12 +3,14 @@
  * dialogs, so each one checks for unsaved changes the same way.
  */
 
+import { settlePendingChanges } from "./assistant/change-set";
 import type { Node, Edge } from "@xyflow/react";
 import { useGraphStore, type NodeData } from "../store/graph-store";
 import { useHistoryStore } from "../store/history-store";
 import { useDocumentStore } from "../store/document-store";
 import { useRunStore } from "../store/run-store";
 import { useLLMStore } from "../store/llm-store";
+import { useLessonStore } from "../store/lesson-store";
 import { normalizeGroups, type LayerGroup } from "./groups";
 import type { LLMSpec } from "./llm";
 import { writeProjectFile, loadProjectFile, deserializeProject } from "./project";
@@ -49,6 +51,7 @@ export async function saveProject({ saveAs = false } = {}): Promise<boolean> {
 
 /** Replaces the graph with a different project. Undo can still bring the old graph back. */
 export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName: string, groups: LayerGroup[] = [], llm: LLMSpec | null = null) {
+  settlePendingChanges();
   useHistoryStore.getState().pushSnapshot();
   // The pretrained LLM the graph came from, if any
   useLLMStore.getState().setSpec(llm);
@@ -58,6 +61,8 @@ export function replaceGraph(nodes: Node<NodeData>[], edges: Edge[], projectName
 
 export async function newProject() {
   if (!(await confirmDiscardChanges("starting a new project"))) return;
+  settlePendingChanges();
+  useLessonStore.getState().exit();
   useHistoryStore.getState().pushSnapshot();
   useGraphStore.getState().clearGraph();
   useLLMStore.getState().setSpec(null);
@@ -72,6 +77,7 @@ export async function openProject() {
   const opened = await loadProjectFile();
   if (!opened) return;
   const { project, path } = opened;
+  useLessonStore.getState().exit();
   const { nodes, edges, groups, warnings } = deserializeProject(project);
   replaceGraph(nodes, edges, project.name, groups, project.llm ?? null);
   useDocumentStore.getState().markSaved(path);
@@ -82,6 +88,7 @@ export async function openProject() {
 
 /** Brings back unsaved work from the last session. It stays unsaved until the user saves it. */
 export function restoreAutoSave(data: AutoSaveData) {
+  useLessonStore.getState().exit();
   replaceGraph(data.nodes, data.edges, data.projectName, normalizeGroups(data.groups), data.llm ?? null);
   useRunStore.getState().setRuns(data.runs ?? []);
   useDocumentStore.getState().markSaved(data.filePath ?? null);

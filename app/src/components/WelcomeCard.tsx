@@ -7,13 +7,14 @@ import Button from "./ui/Button";
 const FEATURED = ["Simple MLP", "LeNet-5", "nanoGPT"];
 
 /** What an empty canvas shows: ways to get a first model on it */
-export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowImport, onShowImportLLM, onAddData, onShowGettingStarted }: {
+export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowImport, onShowImportLLM, onAddData, onShowGettingStarted, onShowLessons }: {
   onSelectTemplate: (index: number) => void;
   onShowTemplates: () => void;
   onShowImport: () => void;
   onShowImportLLM: () => void;
   onAddData: () => void;
   onShowGettingStarted: () => void;
+  onShowLessons: () => void;
 }) {
   const featured = FEATURED
     .map((name) => TEMPLATES.findIndex((t) => t.name === name))
@@ -41,6 +42,7 @@ export default function WelcomeCard({ onSelectTemplate, onShowTemplates, onShowI
       </button>
 
       <div className="flex items-center justify-center gap-2 mb-4">
+        <Button size="sm" onClick={onShowLessons}>Learn with guided lessons</Button>
         <Button size="sm" onClick={onAddData}>Start with a Data node</Button>
         <Button size="sm" onClick={onShowImport}>Import PyTorch code</Button>
         <Button size="sm" onClick={onShowImportLLM}>Import a language model</Button>

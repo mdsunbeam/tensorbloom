@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "node scripts/fetch-uv.mjs && npm run dev",
+    "beforeBuildCommand": "node scripts/fetch-uv.mjs && npm run build"
   },
   "app": {
     "windows": [
@@ -27,6 +27,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/uv"],
+    "createUpdaterArtifacts": true,
     "resources": {
       "../../python/tensorbloom_sidecar.py": "python/tensorbloom_sidecar.py",
       "../../python/tensorbloom_llm.py": "python/tensorbloom_llm.py",
@@ -43,6 +45,15 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "updater": {
+      "pubkey": "REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/mdsunbeam/tensorbloom/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

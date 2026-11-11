@@ -41,6 +41,7 @@ export const MODULE_REGISTRY: Record<string, ModuleDef> = {
         "TensorFile",
       ], label: "Source" },
       { name: "val_split", type: "float", default: 0.2, label: "Val Split", min: 0, max: 0.5 },
+      { name: "max_samples", type: "int", default: 0, label: "Training samples", min: 0 },
     ],
     inputHandles: [],
     outputHandles: [tensorOut],

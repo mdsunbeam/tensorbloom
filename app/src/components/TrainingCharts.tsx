@@ -4,6 +4,7 @@ import { useTrainingStore, runFraction, type TrainingErrorKind, type TrainingRes
 import { startTraining } from "../lib/training";
 import { explainTrainingError } from "../lib/training-errors";
 import Button from "./ui/Button";
+import { useExperimentStore } from "../store/experiment-store";
 import { formatLoss } from "./RunControls";
 import { formatDuration } from "../lib/format-time";
 import { useRunStore } from "../store/run-store";
@@ -220,8 +221,10 @@ function RunSummary({ results, onExport, onShowRuns, onTryModel }: { results: Tr
   const stoppedEarly = results.stoppedByUser || results.earlyStopped;
   // The run that just ended is the last one kept; offer to put it next to the one before
   const runs = useRunStore((s) => s.runs);
-  const previous = runs.length >= 2 ? runs[runs.length - 2] : null;
   const latest = runs[runs.length - 1];
+  // An experiment's run goes next to the run it started from
+  const base = latest?.baseRunId ? runs.find((r) => r.id === latest.baseRunId) : undefined;
+  const previous = base ?? (runs.length >= 2 ? runs[runs.length - 2] : null);
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-line bg-surface-raised" role="status">
@@ -240,10 +243,15 @@ function RunSummary({ results, onExport, onShowRuns, onTryModel }: { results: Tr
       </div>
       {previous && (
         <Button size="sm" variant="ghost" onClick={() => { useRunStore.getState().setCompare([previous.id, runs[runs.length - 1].id]); onShowRuns(); }}>
-          Compare with Run {previous.number}
+          {base ? `See what changed from Run ${base.number}` : `Compare with Run ${previous.number}`}
         </Button>
       )}
       {latest && <Button size="sm" onClick={() => onTryModel(latest.id)}>Try it</Button>}
+      {latest && latest.status !== "failed" && (
+        <Button size="sm" onClick={() => useExperimentStore.getState().start(latest)} title="Change one thing from this run, then train to see what it does">
+          Change one thing
+        </Button>
+      )}
       <Button size="sm" onClick={onExport}>Export model</Button>
       <Button size="sm" variant="primary" onClick={() => void startTraining()} title="Ctrl+Enter">Train again</Button>
     </div>
