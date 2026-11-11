@@ -32,6 +32,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 **Training**
 - One-click training (Ctrl+Enter) with a live status in the toolbar: download, epoch progress, and the result
 - Live loss/accuracy charts with a hover readout, and a summary card when the run ends
+- Training shows on the graph: each layer is colored by its gradient size or output spread, flags dead ReLUs and vanishing or exploding gradients, and shows its output histogram and feature maps on hover
 - Plain-language error panel with hints for shape mismatches, out-of-memory, bad labels, missing packages, and more
 - Pre-flight fixes are listed for review (Fix and train, Train without changes, or Cancel) instead of being applied silently
 - 10+ built-in datasets: MNIST, CIFAR-10/100, TinyShakespeare, WikiText-2, IMDB, AG News, SpeechCommands
@@ -43,6 +44,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Every run is kept with its curves, settings, and model, saved in the project file
 - The **Runs** tab overlays runs on shared charts and puts their results and settings side by side, highlighting what differs
 - **Restore** brings back a run's graph and settings
+- **Change one thing** starts from a run, tracks what you change, and puts the new run next to it with the graph diff beside the curves
 - **Try it** runs a trained model on validation samples it didn't train on, shows its top guesses, filters to mistakes, or tries your own image
 
 **Help Built In**
@@ -55,6 +57,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Live PyTorch code generation — see the equivalent `nn.Module` as you build
 - Import existing PyTorch code into the graph editor
 - Export to ONNX (for deployment) or TorchScript (for PyTorch-native use)
+- Export a 3D architecture diagram for papers and slides as vector PDF, SVG or PNG (File > Export Diagram)
 
 <details>
 <summary>Compare training runs</summary>
@@ -115,7 +118,7 @@ Grab the latest installer from the [releases page](https://github.com/mdsunbeam/
 - **Windows** — `.exe` installer or `.msi`
 - **Linux** — `.deb`, `.rpm`, or `.AppImage`
 
-**Requirement:** Python 3.9+ must be installed. The editor opens right away; if PyTorch isn't set up yet, a card on the canvas offers to install it and shows its progress while you keep building.
+Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download.
 
 ### Building from Source
 
@@ -128,7 +131,7 @@ npm install
 npx tauri dev
 ```
 
-Requires Node.js 18+, [Rust](https://rustup.rs/), and Python 3.9+.
+Requires Node.js 18+ and [Rust](https://rustup.rs/). `npx tauri dev` and `npx tauri build` download the [uv](https://github.com/astral-sh/uv) binary that the app bundles to install Python (`app/scripts/fetch-uv.mjs`). Python 3.10+ is only needed to run the Python tests.
 **Windows:** also needs [C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
 **Linux:** `sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev`
 

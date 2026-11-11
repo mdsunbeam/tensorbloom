@@ -15,8 +15,9 @@ jobs:
             args: ""
           - platform: ubuntu-22.04
             args: ""
-          # - platform: macos-latest
-          #   args: "--target aarch64-apple-darwin"
+          # Apple Silicon (M1 and later)
+          - platform: macos-latest
+            args: "--target aarch64-apple-darwin"
 
     runs-on: ${{ matrix.platform }}
 
@@ -31,6 +32,31 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.platform, 'macos') && 'aarch64-apple-darwin' || '' }}
+
+      # Signs and notarizes the Mac app once the Apple secrets are added to the
+      # repository. Without them the app is ad-hoc signed: it runs, but macOS
+      # asks the user to allow it in System Settings > Privacy & Security first.
+      - name: Configure macOS signing
+        if: startsWith(matrix.platform, 'macos')
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "Signing with the Developer ID certificate"
+            for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              echo "$name=${!name}" >> "$GITHUB_ENV"
+            done
+          else
+            echo "::warning::No Apple certificate set. The Mac app will be ad-hoc signed and not notarized."
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+          fi
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -42,9 +68,23 @@ jobs:
         run: npm ci
         working-directory: app
 
+      # Installed apps only accept updates signed with this key (see
+      # plugins.updater.pubkey in tauri.conf.json)
+      - name: Check the updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Add the TAURI_SIGNING_PRIVATE_KEY secret (and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) so the build can sign updates."
+            exit 1
+          fi
+        shell: bash
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: app
           tagName: ${{ github.ref_name }}
@@ -52,7 +92,9 @@ jobs:
           releaseBody: |
             Download the installer for your platform below.
 
-            **Requirements:** Python 3.9+ (PyTorch is installed automatically on first launch).
+            Nothing else needs to be installed: TensorBloom downloads its own Python and PyTorch the first time you train.
+
+            **macOS:** builds are for Apple Silicon (M1 and later). If macOS says it can't open TensorBloom, open System Settings → Privacy & Security and click Open Anyway.
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

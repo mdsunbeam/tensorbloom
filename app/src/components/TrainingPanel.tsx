@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useMemo, useRef, useEffect, useId } from "react";
-import { OPTIMIZERS, SCHEDULERS, LOSSES, DEVICES } from "../lib/training-options";
+import { OPTIMIZERS, SCHEDULERS, LOSSES } from "../lib/training-options";
 import { useReactFlow } from "@xyflow/react";
 import { useTrainingStore } from "../store/training-store";
 import { useGraphStore } from "../store/graph-store";
@@ -9,6 +9,7 @@ import ThemedSelect from "./ui/Select";
 import Button from "./ui/Button";
 import HelpTip from "./ui/HelpTip";
 import { trainingHelp } from "../lib/param-help";
+import { deviceOptions } from "../lib/devices";
 import {
   DATASET_METADATA,
   checkDatasetCompatibility,
@@ -171,7 +172,7 @@ export default function TrainingPanel() {
             onChange={(v) => updateConfig({ loss: v })} />
         </Field>
         <Field label="Device">
-          <Select value={config.device} options={DEVICES}
+          <Select value={config.device} options={deviceOptions(config.device)}
             onChange={(v) => updateConfig({ device: v })} />
         </Field>
       </Section>
