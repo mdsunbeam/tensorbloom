@@ -54,9 +54,38 @@ struct GpuDetectResult {
     memory_total_mb: u64,
 }
 
-/// Detect GPU via nvidia-smi (independent of Python/sidecar).
+/// Detect the GPU of an Apple Silicon Mac. Its memory is shared with the CPU,
+/// so the size reported is the Mac's unified memory.
+#[cfg(target_os = "macos")]
+fn detect_apple_gpu() -> Option<GpuDetectResult> {
+    let sysctl = |key: &str| {
+        Command::new("sysctl")
+            .args(["-n", key])
+            .output()
+            .ok()
+            .filter(|out| out.status.success())
+            .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+    };
+    // "Apple M2 Pro" on Apple Silicon; an Intel Mac has no MPS-capable GPU
+    let chip = sysctl("machdep.cpu.brand_string")?;
+    if !chip.starts_with("Apple") {
+        return None;
+    }
+    let memory_bytes: u64 = sysctl("hw.memsize").and_then(|s| s.parse().ok()).unwrap_or(0);
+    Some(GpuDetectResult {
+        name: format!("{chip} GPU"),
+        memory_total_mb: memory_bytes / 1024 / 1024,
+    })
+}
+
+/// Detect GPU via nvidia-smi, or the Apple Silicon GPU on a Mac (independent of Python/sidecar).
 #[tauri::command]
 async fn detect_gpu() -> Result<Option<GpuDetectResult>, String> {
+    #[cfg(target_os = "macos")]
+    if let Some(gpu) = detect_apple_gpu() {
+        return Ok(Some(gpu));
+    }
+
     let output = Command::new("nvidia-smi")
         .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
         .output();
@@ -96,6 +125,11 @@ pub fn run() {
             sidecar_manager::stop_sidecar,
         ])
         .setup(|app| {
+            #[cfg(desktop)]
+            {
+                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle().plugin(tauri_plugin_process::init())?;
+            }
             // Set the window icon from pre-decoded RGBA data
             if let Some(window) = app.get_webview_window("main") {
                 let icon = tauri::image::Image::new(

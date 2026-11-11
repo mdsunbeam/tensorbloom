@@ -12,6 +12,7 @@ const SHORTCUTS = [
   { key: "Ctrl+S", action: "Save project" },
   { key: "Ctrl+Shift+S", action: "Save as" },
   { key: "Ctrl+E", action: "Export model (ONNX/TorchScript)" },
+  { key: "Ctrl+Shift+E", action: "Export a 3D diagram (PDF/SVG/PNG)" },
 
   { section: "Edit" },
   { key: "Ctrl+Z", action: "Undo" },
