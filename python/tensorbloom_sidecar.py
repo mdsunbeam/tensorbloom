@@ -849,10 +849,46 @@ def _build_model_from_graph(graph_json: dict) -> nn.Module:
     return torch.fx.GraphModule(root, graph)
 
 
+def _mps_available() -> bool:
+    """True on Apple Silicon Macs where PyTorch can use the GPU through Metal (MPS)."""
+    mps = getattr(torch.backends, "mps", None)
+    try:
+        return bool(mps is not None and mps.is_available())
+    except Exception:
+        return False
+
+
+def _gpu_name() -> "str | None":
+    if torch.cuda.is_available():
+        return torch.cuda.get_device_name(0)
+    if _mps_available():
+        return "Apple GPU (MPS)"
+    return None
+
+
 def _get_device(device_str: str) -> torch.device:
     if device_str == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        if _mps_available():
+            return torch.device("mps")
+        return torch.device("cpu")
+    if device_str.startswith("cuda") and not torch.cuda.is_available():
+        raise ValueError(f"The device is set to {device_str}, but this computer has no CUDA GPU. "
+                         "Set Device to auto or cpu in the Training panel.")
+    if device_str == "mps" and not _mps_available():
+        raise ValueError("The device is set to mps, but Apple GPU support (MPS) isn't available here. "
+                         "It needs an Apple Silicon Mac. Set Device to auto or cpu in the Training panel.")
     return torch.device(device_str)
+
+
+def _to_device(t, device: torch.device):
+    """Move a batch to the device. MPS has no float64, so float64 data becomes float32 there."""
+    if isinstance(t, torch.Tensor):
+        if device.type == "mps" and t.dtype == torch.float64:
+            t = t.float()
+        return t.to(device)
+    return t.to(device)
 
 
 def _build_optimizer(config: dict, params) -> torch.optim.Optimizer:
@@ -1712,9 +1748,12 @@ def _train_loop(graph_json: dict, config: dict):
         param_count = sum(p.numel() for p in model.parameters())
         print(f"Model: {param_count:,} parameters")
         print(f"Device: {device}")
-        if not torch.cuda.is_available():
-            print("WARNING: CUDA not available. Training on CPU (slow).", file=sys.stderr)
-            print("To enable GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126", file=sys.stderr)
+        if device.type == "cpu" and device_str == "auto":
+            if platform.system() == "Darwin":
+                print("WARNING: Apple GPU (MPS) not available. Training on CPU (slow).", file=sys.stderr)
+            else:
+                print("WARNING: CUDA not available. Training on CPU (slow).", file=sys.stderr)
+                print("To enable GPU: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126", file=sys.stderr)
 
         # Detect multi-input models (e.g. encoder-decoder Transformer)
         num_inputs = sum(1 for n in graph_json["nodes"]
@@ -1780,6 +1819,7 @@ def _train_loop(graph_json: dict, config: dict):
             send_notification("train.progress", {"status": "checkpoint", "path": resume_path, "epoch": start_epoch - 1})
 
         steps_per_epoch = len(train_loader)
+        mps_peak_mb = 0.0  # MPS has no peak-memory counter, so track it per epoch
         for epoch in range(start_epoch, epochs + 1):
             if _train_stop_event.is_set():
                 break
@@ -1792,9 +1832,9 @@ def _train_loop(graph_json: dict, config: dict):
                 if _train_stop_event.is_set():
                     break
 
-                data = data.to(device)
+                data = _to_device(data, device)
                 # Reconstruction: use input as target (Data.x → Loss.target)
-                target = data if is_reconstruction else target.to(device)
+                target = data if is_reconstruction else _to_device(target, device)
                 optimizer.zero_grad()
 
                 # For multi-input models (e.g. encoder-decoder), duplicate input
@@ -1851,7 +1891,7 @@ def _train_loop(graph_json: dict, config: dict):
                     for data_b, target_b in train_loader:
                         if _train_stop_event.is_set():
                             break
-                        data_b, target_b = data_b.to(device), target_b.to(device)
+                        data_b, target_b = _to_device(data_b, device), _to_device(target_b, device)
                         out_b = model(*((data_b,) * num_inputs))
                         c, t = _compute_correct(out_b, target_b)
                         correct += c
@@ -1874,8 +1914,8 @@ def _train_loop(graph_json: dict, config: dict):
                     for data_b, target_b in test_loader:
                         if _train_stop_event.is_set():
                             break
-                        data_b = data_b.to(device)
-                        target_b = data_b if is_reconstruction else target_b.to(device)
+                        data_b = _to_device(data_b, device)
+                        target_b = data_b if is_reconstruction else _to_device(target_b, device)
                         output_b = model(*((data_b,) * num_inputs))
                         total_val += _compute_loss(criterion, output_b, target_b, data_b).item()
                         n_val += 1
@@ -1896,6 +1936,14 @@ def _train_loop(graph_json: dict, config: dict):
                     "reserved_mb": round(torch.cuda.memory_reserved(device) / 1024 / 1024, 1),
                     "max_allocated_mb": round(torch.cuda.max_memory_allocated(device) / 1024 / 1024, 1),
                     "total_mb": round(props.total_memory / 1024 / 1024, 1),
+                }
+            elif device.type == "mps":
+                allocated_mb = round(torch.mps.current_allocated_memory() / 1024 / 1024, 1)
+                mps_peak_mb = max(mps_peak_mb, allocated_mb)
+                gpu_info = {
+                    "allocated_mb": allocated_mb,
+                    "reserved_mb": round(torch.mps.driver_allocated_memory() / 1024 / 1024, 1),
+                    "max_allocated_mb": mps_peak_mb,
                 }
 
             # Log epoch summary
@@ -2005,7 +2053,7 @@ def system_gpu_info(params: dict) -> dict:
                 "memory_free": props.total_memory - reserved,
                 "utilization_percent": round(allocated / props.total_memory * 100, 1) if props.total_memory > 0 else 0,
             })
-    return {"cuda_available": torch.cuda.is_available(), "gpus": gpus}
+    return {"cuda_available": torch.cuda.is_available(), "mps_available": _mps_available(), "gpus": gpus}
 
 
 def _apply_weight_init(model: nn.Module, init_type: str = "default"):
@@ -2235,7 +2283,7 @@ def model_predict(params: dict) -> dict:
 
         def run(xb: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
-                return model(*((xb.to(device),) * num_inputs)).float().cpu()
+                return model(*((_to_device(xb, device),) * num_inputs)).float().cpu()
 
         def describe(x: torch.Tensor, out: torch.Tensor, y) -> dict:
             label = _label_of(y) if y is not None else None
@@ -2883,7 +2931,8 @@ def _system_environment(params: dict) -> dict:
         "cudaVersion": torch.version.cuda if torch.cuda.is_available() else None,
         "pythonVersion": platform.python_version(),
         "platform": platform.platform(),
-        "gpuName": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpuName": _gpu_name(),
+        "mpsAvailable": _mps_available(),
     }
 
 
@@ -2893,7 +2942,8 @@ def main():
         "cuda_version": torch.version.cuda if torch.cuda.is_available() else None,
         "python_version": platform.python_version(),
         "platform": platform.platform(),
-        "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "gpu_name": _gpu_name(),
+        "mps_available": _mps_available(),
     })
 
     for line in sys.stdin:
