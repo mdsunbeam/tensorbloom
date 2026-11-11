@@ -6,7 +6,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { sendRequest, type Message, type MessageParam } from "./api";
 import { SYSTEM_PROMPT, appState } from "./prompt";
-import { ToolError, validateInput, type AssistantTool } from "./tool-types";
+import { ToolError, validateInput, type AssistantTool, type ApprovalRequest } from "./tool-types";
 
 /** Stops a turn that keeps calling tools without answering */
 export const MAX_STEPS = 16;
@@ -18,6 +18,8 @@ export interface TurnEvents {
   onTool: (call: { id: string; name: string; label: string; status: "running" | "done" | "error"; detail?: string }) => void;
   /** Called before each request; return true to stop the turn */
   cancelled: () => boolean;
+  /** Asks the user to approve a tool that runs code; resolves to their answer */
+  approve?: (request: ApprovalRequest) => Promise<boolean>;
 }
 
 export interface TurnOptions {
@@ -39,13 +41,25 @@ export type TurnOutcome =
 type ToolResult = Anthropic.Beta.BetaToolResultBlockParam;
 
 /** Runs one tool call, turning every failure into an error result the model can read */
-export async function runToolCall(tools: AssistantTool[], block: { id: string; name: string; input: unknown }): Promise<{ result: ToolResult; ok: boolean; detail?: string }> {
+export async function runToolCall(
+  tools: AssistantTool[],
+  block: { id: string; name: string; input: unknown },
+  approve?: (request: ApprovalRequest) => Promise<boolean>,
+): Promise<{ result: ToolResult; ok: boolean; detail?: string }> {
   const tool = tools.find((t) => t.definition.name === block.name);
   const error = (message: string) => ({ result: { type: "tool_result" as const, tool_use_id: block.id, content: message, is_error: true }, ok: false, detail: message });
   if (!tool) return error(`There is no tool called ${block.name}.`);
   const invalid = validateInput(tool.definition.input_schema as Parameters<typeof validateInput>[0], block.input);
   if (invalid) return error(`Invalid input: ${invalid}.`);
   try {
+    if (tool.confirm) {
+      // Never run code the user hasn't seen and approved
+      const request = tool.confirm(block.input as Record<string, unknown>);
+      const approved = approve ? await approve(request) : false;
+      if (!approved) {
+        return { result: { type: "tool_result", tool_use_id: block.id, content: "The user didn't approve this, so it didn't run. Ask what they'd like instead; don't retry it unchanged." }, ok: false, detail: "Not approved" };
+      }
+    }
     const value = await tool.run(block.input as Record<string, unknown>);
     const content = typeof value === "string" ? value : JSON.stringify(value);
     return { result: { type: "tool_result", tool_use_id: block.id, content }, ok: true };
@@ -102,7 +116,7 @@ export async function runTurn(text: string, options: TurnOptions, events: TurnEv
       let label = c.name;
       try { label = tool ? tool.describe(c.input as Record<string, unknown>) : c.name; } catch { /* keep the name */ }
       events.onTool({ id: c.id, name: c.name, label, status: "running" });
-      const r = await runToolCall(tools, c);
+      const r = await runToolCall(tools, c, events.approve);
       events.onTool({ id: c.id, name: c.name, label, status: r.ok ? "done" : "error", detail: r.detail });
       return r.result;
     }));

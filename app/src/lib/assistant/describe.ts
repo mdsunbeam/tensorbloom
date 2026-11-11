@@ -213,7 +213,7 @@ export function graphDiff(a: { nodes: Node<NodeData>[]; edges: Edge[] }, b: { no
   const bm = new Map(b.nodes.map((n) => [n.id, n]));
   for (const [id, n] of bm) {
     const o = am.get(id);
-    if (!o) { out.push(`added ${id} ${n.data.moduleType}`); continue; }
+    if (!o) { out.push(`added ${id} ${n.data.codeBlock ? `custom code layer "${n.data.label}"` : n.data.moduleType}`); continue; }
     if (o.data.moduleType !== n.data.moduleType) { out.push(`${id}: ${o.data.moduleType} → ${n.data.moduleType}`); continue; }
     const op = visibleParams(o.data.params), np = visibleParams(n.data.params);
     for (const k of new Set([...Object.keys(op), ...Object.keys(np)])) {
@@ -240,7 +240,7 @@ export function friendlyDiff(a: { nodes: Node<NodeData>[]; edges: Edge[] }, b: {
     if (!o) {
       const into = b.edges.find((e) => e.target === id);
       const from = into ? bm.get(into.source) : undefined;
-      out.push(`Add ${name(n)}${from ? ` after ${from.data.label}` : ""}`);
+      out.push(`Add ${n.data.codeBlock ? `custom layer ${n.data.label}` : name(n)}${from ? ` after ${from.data.label}` : ""}`);
       continue;
     }
     if (o.data.label !== n.data.label) out.push(`Rename ${o.data.label} to ${n.data.label}`);
