@@ -47,7 +47,7 @@ import { useHistoryStore, startHistoryTracking } from "./store/history-store";
 import { useTrainingStore } from "./store/training-store";
 import { useDocumentStore, startDirtyTracking } from "./store/document-store";
 import { autoLayout } from "./lib/auto-layout";
-import { TEMPLATES, templateGraph } from "./lib/templates";
+import { TEMPLATES } from "./lib/templates";
 import { packedModelFromHash, decodeModel, templateSlug } from "./lib/share";
 import { buildLLMGraph, type LLMSpec } from "./lib/llm";
 import { startAutoSave, readAutoSave, writeAutoSave, clearAutoSave, type AutoSaveData } from "./lib/auto-save";
