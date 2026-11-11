@@ -2,7 +2,7 @@ import { version } from "../../package.json";
 import { getCachedEnvironment } from "../lib/sidecar";
 import { usePythonStore, gpuUpgradeAvailable } from "../store/python-store";
 import { openExternal } from "../lib/open-external";
-import { LINKS } from "../lib/links";
+import { LINKS, feedbackUrl, osName } from "../lib/links";
 import Dialog from "./ui/Dialog";
 import Button from "./ui/Button";
 import { LogoMark, Wordmark } from "./ui/Logo";
@@ -29,6 +29,7 @@ export default function AboutDialog({ open, onClose, gpuInfo }: { open: boolean;
       title="About TensorBloom"
       footer={
         <>
+          <Button onClick={() => void openExternal(feedbackUrl(version, osName()))}>Send feedback</Button>
           <Button onClick={() => void openExternal(LINKS.releases)}>Release notes</Button>
           <Button variant="primary" onClick={onClose}>Close</Button>
         </>

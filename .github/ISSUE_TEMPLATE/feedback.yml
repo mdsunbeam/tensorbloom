@@ -1,0 +1,30 @@
+name: Feedback
+description: Tell us what worked, what was confusing, or where you got stuck
+labels: ["feedback"]
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Your feedback
+      description: Anything helps, big or small.
+      placeholder: "I got stuck when... / I expected... / I loved..."
+    validations:
+      required: true
+  - type: dropdown
+    id: experience
+    attributes:
+      label: How much have you used neural networks before?
+      options:
+        - I'm just starting to learn
+        - I've followed some tutorials or a course
+        - I build and train models regularly
+  - type: input
+    id: version
+    attributes:
+      label: TensorBloom version
+      description: Filled in when you open this from the app
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Filled in when you open this from the app
