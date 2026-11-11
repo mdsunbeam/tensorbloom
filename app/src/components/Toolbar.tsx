@@ -19,6 +19,7 @@ interface ToolbarProps {
   onShowImportLLM: () => void;
   onShowTemplates: () => void;
   onShowExport: () => void;
+  onShowDiagram: () => void;
   onShowSpotlight: () => void;
   onShowCustomBlock: () => void;
   /** Opens the Charts tab, where the run's details are */
@@ -29,7 +30,7 @@ interface ToolbarProps {
   gpuInfo: string | null;
 }
 
-export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates, onShowExport, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowAbout, gpuInfo }: ToolbarProps) {
+export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates, onShowExport, onShowDiagram, onShowSpotlight, onShowCustomBlock, onShowRun, onShowShortcuts, onShowGettingStarted, onShowAbout, gpuInfo }: ToolbarProps) {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const nodes = useGraphStore((s) => s.nodes);
@@ -74,6 +75,7 @@ export default function Toolbar({ onShowImport, onShowImportLLM, onShowTemplates
         { label: "Import PyTorch Code...", shortcut: "Ctrl+I", action: onShowImport },
         { label: "Import Language Model...", action: onShowImportLLM },
         { label: "Export Model...", shortcut: "Ctrl+E", action: onShowExport },
+        { label: "Export Diagram...", shortcut: "Ctrl+Shift+E", action: onShowDiagram },
       ],
     },
     {

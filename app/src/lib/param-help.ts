@@ -141,7 +141,7 @@ const TRAINING_HELP: Record<string, string> = {
   Epochs: "How many full passes over the training data.",
   "Batch Size": "Samples per update. Larger batches use more memory and give fewer, smoother updates.",
   "Loss Function": "What training minimizes. Cross-entropy for picking a class, MSE for predicting numbers.",
-  Device: "Where training runs. Auto uses the GPU when there is one.",
+  Device: "Where training runs. Auto uses the GPU when there is one: an NVIDIA GPU (cuda) or, on Apple Silicon Macs, the built-in GPU (mps).",
   "Random Rotation (degrees)": "Turns each training image by a random angle up to this many degrees.",
   "Random Seed": "Makes runs repeatable: the same seed gives the same starting weights and data order. Left empty, a new one is picked and saved with the run.",
   "Deterministic Mode": "Makes GPU results exactly repeatable, at some cost in speed.",
