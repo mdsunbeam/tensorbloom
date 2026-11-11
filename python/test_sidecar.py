@@ -218,6 +218,64 @@ try:
 except ValueError as e:
     check("an image file is refused for a model without images", "doesn't take images" in str(e), str(e))
 
+# --- Layer stats while training ---
+print("Layer stats")
+layer_msgs = [p for m, p in notifications if m == "train.layers"]
+batches = [p for p in layer_msgs if "layers" in p]
+check("each epoch reports layer stats", len({p["epoch"] for p in batches}) >= 1 and all(p["total_steps"] >= 1 for p in batches), str(layer_msgs[:1])[:200])
+fc = batches[-1]["layers"].get("fc", {})
+check("stats are keyed by graph node id", "fc" in batches[-1]["layers"] and "flat" in batches[-1]["layers"], str(list(batches[-1]["layers"])))
+check("a layer reports its output spread, histogram, and gradients",
+      fc.get("std", 0) > 0 and sum(fc["hist"]["counts"]) > 0 and fc.get("grad", 0) > 0
+      and fc.get("grad_norm", 0) > 0 and fc.get("weight_norm", 0) > 0, str(fc)[:300])
+
+# A conv net whose ReLU is mostly dead (large negative bias), to check dead units and feature maps
+def conv_graph():
+    n = lambda id, mt, params: {"id": id, "type": "call_module", "moduleType": mt, "label": id, "params": params}
+    nodes = [
+        {"id": "inp", "type": "placeholder", "moduleType": "Input", "label": "Input", "params": {"shape": "[1, 1, 8, 8]"}},
+        n("conv", "Conv2d", {"in_channels": 1, "out_channels": 4, "kernel_size": 3, "padding": 1}),
+        n("relu", "ReLU", {}),
+        n("flat", "Flatten", {}),
+        n("fc", "Linear", {"in_features": 256, "out_features": 3}),
+        {"id": "out", "type": "output", "moduleType": "Output", "label": "Output", "params": {}},
+    ]
+    order = ["inp", "conv", "relu", "flat", "fc", "out"]
+    edges = [{"id": f"e{i}", "source": a, "target": b, "sourceHandle": "out", "targetHandle": "in"} for i, (a, b) in enumerate(zip(order, order[1:]))]
+    return {"nodes": nodes, "edges": edges}
+
+model = sc._build_model_from_graph(conv_graph())
+with torch.no_grad():
+    model.conv.bias.copy_(torch.tensor([-100.0, -100.0, -100.0, 0.0]))
+monitor = sc._LayerMonitor(model, conv_graph())
+monitor.begin()
+out = model(torch.rand(6, 1, 8, 8))
+out.sum().backward()
+stats = monitor.end()
+check("dead ReLU units are counted", abs(stats["relu"].get("dead", -1) - 0.75) < 1e-6, str(stats["relu"])[:200])
+check("layers that can go negative don't count dead units", "dead" not in stats["conv"], str(stats["conv"])[:200])
+check("layers without weights still report their gradient", stats["relu"].get("grad", 0) > 0 and "grad_norm" not in stats["relu"])
+maps = monitor.feature_maps(model, torch.rand(1, 8, 8), 1)
+check("feature maps for image-like layers", set(maps["layers"]) == {"conv", "relu"} and len(maps["layers"]["conv"]["png"]) == 4
+      and maps["layers"]["conv"]["size"] == [8, 8] and maps["input"]["kind"] == "image", str({k: v["size"] for k, v in maps["layers"].items()}))
+monitor.end()  # nothing captured: must not fail
+monitor.close()
+model.zero_grad()
+model(torch.rand(2, 1, 8, 8)).sum().backward()
+check("closing the monitor removes its hooks", all(not m._forward_hooks for m in model.modules()))
+
+monitor = sc._LayerMonitor(model, conv_graph())
+with torch.no_grad():
+    model.fc.weight.fill_(float("nan"))
+monitor.begin()
+model(torch.rand(2, 1, 8, 8)).sum().backward()
+stats = monitor.end()
+check("NaN is reported, not passed on", stats["fc"].get("nonfinite") is True and stats["fc"].get("weight_norm") is None, str(stats["fc"])[:200])
+import json
+json.dumps(stats, allow_nan=False)
+check("stats are valid JSON with NaN in the model", True)
+monitor.close()
+
 sc._last_trained_state = None
 try:
     sc.model_predict({"graph": graph(), "config": config})

@@ -32,6 +32,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 **Training**
 - One-click training (Ctrl+Enter) with a live status in the toolbar: download, epoch progress, and the result
 - Live loss/accuracy charts with a hover readout, and a summary card when the run ends
+- Training shows on the graph: each layer is colored by its gradient size or output spread, flags dead ReLUs and vanishing or exploding gradients, and shows its output histogram and feature maps on hover
 - Plain-language error panel with hints for shape mismatches, out-of-memory, bad labels, missing packages, and more
 - Pre-flight fixes are listed for review (Fix and train, Train without changes, or Cancel) instead of being applied silently
 - 10+ built-in datasets: MNIST, CIFAR-10/100, TinyShakespeare, WikiText-2, IMDB, AG News, SpeechCommands
