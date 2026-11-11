@@ -10,6 +10,10 @@ import { formatParamCount } from "../lib/model-summary";
 import { DATASET_METADATA, DATA_PRESETS, resolveDataNodeShape } from "../lib/dataset-metadata";
 import { quickParamCount, getParamSummary } from "../lib/node-summary";
 import { CategoryBadge, tint } from "../lib/category-icons";
+import { useExperimentStore } from "../store/experiment-store";
+import { useNodeOverlay } from "../lib/use-layer-overlay";
+import { overlayColor, overlayTextColor, type LayerFlag } from "../lib/layer-health";
+import LayerStatsCard, { FloatingLayerCard } from "../components/LayerStatsCard";
 
 type TLNodeProps = NodeProps<Node<NodeData>>;
 
@@ -50,7 +54,22 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(data.label);
   const [hovered, setHovered] = useState(false);
+  // In a "change one thing" experiment: whether this layer is new or changed since the starting run
+  const mark = useExperimentStore((s) => s.marks.get(id));
+  const markColor = mark === "added" ? "var(--success)" : mark === "changed" ? "var(--warning)" : null;
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // What training did to this layer, when the training overlay is on
+  const health = useNodeOverlay(id, data.category === "activation");
+  const worstFlag = health.flags[0];
+  // The stats card opens after a short pause on the layer, so passing over the canvas doesn't flash cards
+  const [showStats, setShowStats] = useState(false);
+  useEffect(() => {
+    if (!hovered || !health.stat || editing) { setShowStats(false); return; }
+    const t = setTimeout(() => setShowStats(true), 350);
+    return () => clearTimeout(t);
+  }, [hovered, !!health.stat, editing]);
 
   useEffect(() => {
     if (editing) {
@@ -81,7 +100,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
   const nodeMinHeight = rightHandleCount > 2 ? 66 + rightHandleCount * 22 : isDataNode && !compact ? 88 : undefined;
 
   return (
+    <>
+    {health.stat && showStats && rootRef.current && (
+      <FloatingLayerCard anchor={rootRef.current}>
+        <LayerStatsCard nodeId={id} label={data.label} stat={health.stat} flags={health.flags} unitsCanDie={data.category === "activation"} />
+      </FloatingLayerCard>
+    )}
     <div
+      ref={rootRef}
       className="relative rounded-lg overflow-hidden"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -89,12 +115,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         width: nodeWidth,
         minHeight: nodeMinHeight,
         background: "var(--bg-secondary)",
-        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : hovered ? "var(--bg-elevated)" : "var(--border)"}`,
+        border: `1.5px solid ${rootError ? "var(--danger)" : selected ? color : markColor ?? (hovered ? "var(--bg-elevated)" : "var(--border)")}`,
         boxShadow: selected
           ? `var(--node-shadow-hover), 0 0 0 3px ${tint(rootError ? "var(--danger)" : color, 20)}`
-          : hovered
-            ? "var(--node-shadow-hover)"
-            : "var(--node-shadow)",
+          : markColor
+            ? `var(--node-shadow), 0 0 0 3px ${tint(markColor, 25)}`
+            : hovered
+              ? "var(--node-shadow-hover)"
+              : "var(--node-shadow)",
         transition: "border-color 0.15s ease, box-shadow 0.2s ease",
       }}
     >
@@ -127,6 +155,14 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
             >
               {data.label}
             </span>
+            {mark && !compact && (
+              <span
+                className={`ml-auto flex-shrink-0 text-[11px] font-medium px-1.5 rounded ${mark === "added" ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning"}`}
+                title="Different from the run this experiment started from"
+              >
+                {mark === "added" ? "New" : "Changed"}
+              </span>
+            )}
             {isCodeBlock && (
               <span
                 className="text-[11px] px-1 py-0.5 rounded font-mono flex-shrink-0"
@@ -136,6 +172,7 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
                 &lt;/&gt;
               </span>
             )}
+            {!rootError && worstFlag && <FlagIcon flag={worstFlag} size={compact ? 28 : 15} />}
             {rootError && (
               <span className="ml-auto flex-shrink-0 text-danger" title={rootError.message} role="img" aria-label="Shape problem">
                 <svg width={compact ? 28 : 15} height={compact ? 28 : 15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -186,6 +223,21 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
               N={batchSize}
             </span>
           )}
+        </div>
+      )}
+
+      {/* Training overlay: the layer's gradient or output spread, colored on a shared scale, and what looks wrong */}
+      {health.label && health.position != null && (
+        <div
+          className={`flex items-center gap-1.5 px-3 font-mono tabular-nums ${compact ? "py-2 text-[22px]" : "py-1 text-[11px]"}`}
+          style={{ background: overlayColor(health.position), color: overlayTextColor(health.position) }}
+        >
+          <span className="truncate">{health.label}</span>
+        </div>
+      )}
+      {!compact && worstFlag && (
+        <div className={`px-3 py-1 text-[11px] font-medium truncate ${worstFlag.severity === "bad" ? "bg-danger-subtle text-danger" : "bg-warning-subtle text-warning"}`}>
+          {health.flags.map((f) => f.title).join(" · ")}
         </div>
       )}
 
@@ -276,6 +328,18 @@ function TensorBloomNode({ id, data, selected }: TLNodeProps) {
         );
       })}
     </div>
+    </>
+  );
+}
+
+/** Marks a layer whose training stats look wrong. The hover card explains. */
+function FlagIcon({ flag, size }: { flag: LayerFlag; size: number }) {
+  return (
+    <span className={`ml-auto flex-shrink-0 ${flag.severity === "bad" ? "text-danger" : "text-warning"}`} title={flag.title} role="img" aria-label={`Training problem: ${flag.title}`}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    </span>
   );
 }
 

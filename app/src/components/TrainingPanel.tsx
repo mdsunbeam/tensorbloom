@@ -9,6 +9,7 @@ import ThemedSelect from "./ui/Select";
 import Button from "./ui/Button";
 import HelpTip from "./ui/HelpTip";
 import { trainingHelp } from "../lib/param-help";
+import { deviceOptions } from "../lib/devices";
 import {
   DATASET_METADATA,
   checkDatasetCompatibility,
@@ -171,7 +172,7 @@ export default function TrainingPanel() {
             onChange={(v) => updateConfig({ loss: v })} />
         </Field>
         <Field label="Device">
-          <Select value={config.device} options={DEVICES}
+          <Select value={config.device} options={deviceOptions(config.device)}
             onChange={(v) => updateConfig({ device: v })} />
         </Field>
       </Section>
