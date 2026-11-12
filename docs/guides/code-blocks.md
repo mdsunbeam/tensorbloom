@@ -2,6 +2,8 @@
 
 Code blocks let you write custom PyTorch `forward()` logic for any node. When the built-in module library doesn't have what you need, convert a node to a code block and write arbitrary Python.
 
+![The custom block editor, with a name, parameters and PyTorch code](../screenshot-custom-blocks.png)
+
 ## Converting a Node
 
 1. Click any node in the graph

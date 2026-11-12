@@ -4,6 +4,8 @@ TensorBloom ships with guided lessons: short, hands-on exercises that start from
 
 While a lesson is open, a panel at the top left of the canvas shows the goal, the current step, a checklist, and hints. A step is done when its check passes; the panel then explains what just happened, and **Next step** moves on.
 
+![The "Fix a shape error" lesson: the panel shows step 1 of 3 and its checklist beside the broken model](../screenshot-lessons.png)
+
 ## The built-in lessons
 
 | # | Lesson | Starts from | Teaches |

@@ -2,16 +2,17 @@
 
 **[tensorbloom.org](https://tensorbloom.org)** · [Try it in your browser](https://tensorbloom.org/app/) · [Docs](https://tensorbloom.org/docs) · [Download](https://github.com/mdsunbeam/tensorbloom/releases/latest) · [Roadmap](ROADMAP.md)
 
-Build, train, and export PyTorch neural networks visually. Drag-and-drop layers, connect them, train on real datasets with GPU acceleration, and export to ONNX or TorchScript — all without writing boilerplate code.
+Build, train, and export PyTorch neural networks visually. Drag-and-drop layers, connect them, train on real datasets with GPU acceleration, watch what training does to every layer, and export to ONNX or TorchScript — all without writing boilerplate code.
 
-![TensorBloom: ResNet-18 after a training run, with the run summary, loss and accuracy charts, and the model summary](docs/screenshot-hero.png)
+![TensorBloom: ResNet-18 after a training run on CIFAR-10, each layer colored by the gradient reaching it, with the run summary and charts](docs/screenshot-hero.png)
 
 ## Why TensorBloom?
 
 - **See your architecture** — No more debugging invisible dimension mismatches in code. The graph shows every layer, every connection, and every tensor shape.
-- **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection.
-- **See what changed** — Every run is kept, so you can compare runs side by side and try a trained model on samples it never saw.
-- **Learn by doing** — 7 guided lessons that check your work as you go, and 16 starter templates from Simple MLP to nanoGPT. Load one, modify it, train it, see what happens.
+- **Train instantly** — Built-in datasets (MNIST, CIFAR, IMDB, and more), one-click training with live loss curves, and GPU auto-detection on NVIDIA and Apple Silicon.
+- **Watch training on the graph** — Each layer is colored by its gradient or output spread while it trains, with dead ReLUs and vanishing or exploding gradients flagged, and feature maps on hover.
+- **See what changed** — Every run is kept. **Change one thing** trains a variation and puts the two runs side by side with what changed, and **Try it** runs a trained model on samples it never saw.
+- **Learn by doing** — 7 guided lessons that check your work as you go, an optional AI assistant that explains your model and can tutor the lessons, and 16 starter templates from Simple MLP to nanoGPT.
 - **Real PyTorch underneath** — Every graph generates real `nn.Module` code. Export your model and use it anywhere.
 
 ## Features
@@ -52,6 +53,12 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Guided lessons (**Help > Lessons**): fix a shape error, find a learning rate, stop overfitting, add BatchNorm, and more. Each starts from a real model and checks each step with hints when you're stuck
 - A "?" next to every layer parameter and training setting explains what it does
 - Each layer links to its PyTorch documentation
+- **Help > Send Feedback** opens a feedback form with your app version filled in
+
+**Assistant** (optional, with your own Anthropic API key)
+- Ask about the model on your canvas, its shape errors, and your training runs
+- Have it add or change layers, write a custom layer, or set up training: every change is previewed on the canvas for you to apply or discard
+- It can tutor the guided lessons, with hints that don't give the answer away
 
 **Language Models**
 - Import an LLM from Hugging Face or a `.gguf`/`.safetensors` file without downloading it, and see its architecture as a graph
@@ -64,16 +71,47 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 - Export to ONNX (for deployment) or TorchScript (for PyTorch-native use)
 - Export a 3D architecture diagram for papers and slides as vector PDF, SVG or PNG (File > Export Diagram)
 
-<details>
-<summary>Compare training runs</summary>
+**Desktop App**
+- Windows, Linux and Apple Silicon Macs; training uses the Mac GPU (MPS) on a Mac
+- No Python needed first: the app installs a Python and PyTorch of its own the first time you train
+- Updates itself: when a new version is out, a banner offers **Update and restart** (or **Help > Check for Updates**)
 
-![The Runs tab comparing two runs' validation curves](docs/screenshot-runs.png)
+<details>
+<summary>Training on the graph</summary>
+
+![LeNet-5 after training, each layer colored by its gradient, with conv2's gradient history, output histogram and feature maps on hover](docs/screenshot-layer-stats.png)
+</details>
+
+<details>
+<summary>Change one thing and compare</summary>
+
+![Two runs compared: the learning rate change beside the validation curves and the result it made](docs/screenshot-change-one-thing.png)
+
+![The Runs tab with the two runs' settings side by side](docs/screenshot-runs.png)
 </details>
 
 <details>
 <summary>Try a trained model</summary>
 
-![A grid of validation digits with the model's top three guesses and whether each was right](docs/screenshot-try-model.png)
+![The model's mistakes on validation digits, with its top three guesses for each](docs/screenshot-try-model.png)
+</details>
+
+<details>
+<summary>Guided lessons</summary>
+
+![The "Fix a shape error" lesson panel beside the broken model](docs/screenshot-lessons.png)
+</details>
+
+<details>
+<summary>The assistant</summary>
+
+![The assistant's proposed changes previewed on the canvas, with Apply and Discard](docs/screenshot-assistant.png)
+</details>
+
+<details>
+<summary>Language models</summary>
+
+![Qwen2.5-0.5B imported as a graph, with the memory it needs to run and fine-tune](docs/screenshot-llm.png)
 </details>
 
 <details>
@@ -89,9 +127,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 </details>
 
 <details>
-<summary>Training configuration and parameter help</summary>
-
-![Training panel with optimizer, scheduler, and run settings](docs/screenshot-training.png)
+<summary>Parameter help</summary>
 
 ![Help text for a Conv2d padding parameter](docs/screenshot-param-help.png)
 </details>
@@ -122,8 +158,11 @@ Grab the latest installer from the [releases page](https://github.com/mdsunbeam/
 
 - **Windows** — `.exe` installer or `.msi`
 - **Linux** — `.deb`, `.rpm`, or `.AppImage`
+- **macOS** (Apple Silicon) — `.dmg`, from the next release on (v0.1.0 has Windows and Linux only)
 
-Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download.
+Or try it in your browser first at **[tensorbloom.org/app](https://tensorbloom.org/app/)**: building, shape checking and code generation work there, and training needs the desktop app.
+
+Nothing else needs to be installed. The editor opens right away; the first time you train, a card on the canvas downloads a Python and PyTorch of TensorBloom's own (about 500 MB, CPU build) and shows its progress while you keep building. If you have an NVIDIA GPU, the card then offers GPU support (CUDA) as an extra download. On a Mac, PyTorch uses the Apple GPU with nothing extra to install.
 
 ### Building from Source
 
@@ -148,11 +187,12 @@ Requires Node.js 18+ and [Rust](https://rustup.rs/). `npx tauri dev` and `npx ta
 
 2. Press **Train** in the toolbar (or `Ctrl+Enter`) and watch the loss drop and accuracy climb in real time
 
-![Simple MLP after training, with the run summary and charts](docs/screenshot-training.png)
+![Simple MLP after training, with the run summary, charts, and relu1 flagged for dead units](docs/screenshot-training.png)
 
-3. Press **Try it** in the run summary to see the model's predictions on digits it didn't train on
+3. Look at the graph: each layer is colored by the gradient reaching it, and the **Training on the graph** card flags layers to look at. Hover a layer for its details.
+4. Press **Try it** in the run summary to see the model's predictions on digits it didn't train on, or **Change one thing** to train a variation and compare
 
-From here: click any node to edit parameters, swap the dataset, add layers, or try a different template. New to TensorBloom? **Help > Getting Started** walks through the steps.
+From here: click any node to edit parameters, swap the dataset, add layers, or try a different template. New to TensorBloom? **Help > Getting Started** walks through the steps, and **Help > Lessons** has seven guided lessons.
 
 ## Templates
 
@@ -177,6 +217,7 @@ Go to **Insert > From Template** to load any template. Each card shows a preview
 |----------|--------|
 | `Ctrl+Enter` | Start training |
 | `Ctrl+K` | Add any layer (spotlight search) |
+| `Ctrl+J` | Open the assistant |
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / Save As |
 | `Ctrl+O` | Open project |
 | `Ctrl+N` | New project |
@@ -190,6 +231,7 @@ Go to **Insert > From Template** to load any template. Each card shows a preview
 | `Ctrl+E` | Export model |
 | `Ctrl+B` / `Ctrl+.` | Toggle side panels |
 | `Ctrl+M` | Toggle minimap |
+| `Ctrl+\` | Focus on the canvas (hide every panel) |
 | `Ctrl+/` | Show all shortcuts |
 | `Delete` | Delete selected |
 | `Escape` | Close the open dialog or menu |

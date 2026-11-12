@@ -35,6 +35,8 @@ The **Language model** tab's **Overview** shows the architecture and a table of 
 - **LoRA fine-tune**: the frozen weights, the small trainable adapters with their optimizer state, and the activations of one training step (with gradient checkpointing)
 - **Full fine-tune**: every weight with its gradient and optimizer state, about 16 bytes per parameter
 
+![Qwen2.5-0.5B imported as a graph, with its architecture and the memory table in the Language model tab](../screenshot-llm.png)
+
 for 16-bit, 8-bit and 4-bit weights. Each cell is marked green (fits), amber (tight) or red (too big) against your GPU's memory. On Apple silicon it's measured against about three quarters of the shared memory, and without a GPU against RAM. Hover a cell for the breakdown. These are estimates with batch size 1: real use varies with the library version and settings.
 
 8-bit and 4-bit loading uses bitsandbytes, which needs an NVIDIA GPU. On a Mac, models run at 16 bits on the GPU.

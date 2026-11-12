@@ -5,19 +5,21 @@ Technical overview of TensorBloom's internals for contributors and curious users
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                   Tauri v2 Shell                     │
-│  ┌──────────────────────┐  ┌──────────────────────┐  │
-│  │   React Frontend     │  │   Python Sidecar     │  │
-│  │   (Vite + TS)        │  │   (PyTorch)          │  │
-│  │                      │  │                      │  │
-│  │  Graph Editor         │◄─JSON-RPC─►│  Compile     │  │
-│  │  Property Panel      │  over stdio │  Train       │  │
-│  │  Code Generator      │            │  Export      │  │
-│  │  Shape Inference     │            │  Data Scan   │  │
-│  └──────────────────────┘  └──────────────────────┘  │
-│              Rust (window management, sidecar IPC)    │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                       Tauri v2 Shell                       │
+│  ┌────────────────────────┐    ┌────────────────────────┐  │
+│  │  React Frontend        │    │  Python Sidecar        │  │
+│  │  (Vite + TS)           │    │  (PyTorch)             │  │
+│  │                        │    │                        │  │
+│  │  Graph Editor          │◄──►│  Compile / Decompile   │  │
+│  │  Property Panel        │JSON│  Train + layer stats   │  │
+│  │  Code Generator        │-RPC│  Export / Predict      │  │
+│  │  Shape Inference       │    │  Data Scan             │  │
+│  │  Assistant, Lessons    │    │  LLM import/chat/LoRA  │  │
+│  └────────────────────────┘    └────────────────────────┘  │
+│  Rust: windows, sidecar IPC, Python setup, assistant API,  │
+│        API key in the OS keychain, in-app updates          │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## Frontend (`app/src/`)
@@ -26,7 +28,7 @@ Technical overview of TensorBloom's internals for contributors and curious users
 
 The frontend handles all UI rendering. Key frameworks:
 - **React Flow** (xyflow) — Node graph rendering, edge routing, viewport controls
-- **Zustand** — State management (graph, history, document, runs, Python setup, theme, training stores)
+- **Zustand** — State management (graph, history, document, runs, layer stats, experiments, lessons, assistant, LLM, Python setup, updates, theme, training stores)
 - **Tailwind CSS** — Styling
 
 ### Directory Structure
@@ -50,6 +52,16 @@ app/src/
 │   ├── TryModelDialog.tsx # Predictions from a trained model
 │   ├── GroupPanel.tsx   # Properties for a layer group
 │   ├── TrainingLogs.tsx # Training log output
+│   ├── LayerOverlayControl.tsx # "Training on the graph" card (gradients/activations)
+│   ├── LayerStatsCard.tsx # Per-layer hover card: gradient history, histogram, feature maps
+│   ├── ExperimentBanner.tsx # "Change one thing" card
+│   ├── RunChanges.tsx   # What changed between two runs, with the graph diff map
+│   ├── LessonsDialog.tsx / LessonPanel.tsx # Guided lessons
+│   ├── assistant/       # Assistant chat panel and the change-set review
+│   ├── LLMPanel.tsx     # Language model tab: overview, chat, fine-tune
+│   ├── ImportLLMDialog.tsx # Read an LLM's architecture from Hugging Face or a file
+│   ├── DiagramExportDialog.tsx # 3D architecture diagram export
+│   ├── UpdateBanner.tsx # In-app update offer
 │   └── Toast.tsx        # Notification system
 ├── lib/                 # Core logic
 │   ├── registry.ts      # 70+ PyTorch module definitions
@@ -66,6 +78,14 @@ app/src/
 │   ├── document-actions.ts # New, open, save shared by menus and shortcuts
 │   ├── auto-save.ts     # Recovery copy while there are unsaved changes
 │   ├── auto-layout.ts   # Dagre-based graph layout
+│   ├── layer-health.ts  # Dead units, vanishing/exploding gradient checks
+│   ├── experiment-diff.ts # Graph and settings diff for "Change one thing"
+│   ├── diagram-3d.ts    # 3D diagram layout and PDF/SVG/PNG rendering
+│   ├── llm.ts / llm-runtime.ts # LLM config parsing, memory estimates, runtime calls
+│   ├── assistant/       # Assistant agent loop, tools, prompt, change sets
+│   ├── lessons/         # Lesson catalog, checks, and edits
+│   ├── share.ts         # Share links (#m= fragment) for the web version
+│   ├── platform.ts      # Desktop (Tauri) vs web
 │   └── dataset-metadata.ts # Dataset definitions, shape resolution
 ├── nodes/
 │   ├── TensorBloomNode.tsx # Custom React Flow node component
@@ -75,6 +95,12 @@ app/src/
     ├── history-store.ts # Undo/redo (settled-state snapshots, with tests)
     ├── document-store.ts # File path and unsaved-changes tracking
     ├── run-store.ts     # Run history kept with the project
+    ├── layer-stats-store.ts # Per-layer training stats for the graph overlay
+    ├── experiment-store.ts # The "Change one thing" experiment in progress
+    ├── lesson-store.ts  # The open lesson and its progress
+    ├── assistant-store.ts # Assistant chat and pending changes
+    ├── llm-store.ts     # Imported language model, chat and fine-tuning
+    ├── update-store.ts  # In-app updates
     ├── python-store.ts  # Python environment status and setup progress
     ├── theme-store.ts   # Dark/light theme
     └── training-store.ts # Training state (status, metrics, config)
@@ -92,15 +118,16 @@ User action → Zustand store update → React re-render → React Flow update
 
 ## Rust Backend (`app/src-tauri/`)
 
-The Rust layer is thin — it manages the window and the Python sidecar process:
+The Rust layer is thin — it manages the window, the Python sidecar process, and anything that needs a secret:
 
 - `sidecar_manager.rs` — Spawns Python process, pipes stdin/stdout, routes JSON-RPC messages
-- `python_env.rs` — Provisions a Python venv with PyTorch in the background, streaming `python-setup` progress events
-- `lib.rs` — Tauri command handlers, GPU detection
+- `python_env.rs` — Installs Python and PyTorch with the bundled [uv](https://github.com/astral-sh/uv) binary (no Python needed first), adds the CUDA build on request, and streams `python-setup` progress events
+- `assistant.rs` — Keeps the Anthropic API key in the OS keychain and sends the assistant's requests, so the interface never holds the key
+- `lib.rs` — Tauri command handlers, GPU detection, and the updater and process plugins for in-app updates
 
 ## Python Sidecar (`python/`)
 
-A single-file JSON-RPC server that handles all PyTorch operations:
+A JSON-RPC server (`tensorbloom_sidecar.py`) that handles all PyTorch operations, with language model support in `tensorbloom_llm.py` next to it:
 
 ### RPC Methods
 
@@ -116,8 +143,14 @@ A single-file JSON-RPC server that handles all PyTorch operations:
 | `export.onnx` | Export to ONNX format |
 | `export.torchscript` | Export to TorchScript |
 | `model.predict` | Run a trained model on validation samples or an image file |
+| `node.probe` | Run a code block on dummy tensors to find its output shapes |
 | `system.gpu_info` | Return CUDA device info |
+| `system.environment` | PyTorch, CUDA/MPS and memory details |
 | `validate` | Check graph for structural errors |
+| `llm.inspect` | Read an LLM's architecture from Hugging Face or a file, without the weights |
+| `llm.install` / `llm.status` | Install and check the extra packages for language models |
+| `llm.load` / `llm.unload` / `llm.generate` / `llm.stop` | Load a model, chat with it (streamed as `llm.token`) |
+| `llm.finetune.start` | LoRA, QLoRA or full fine-tuning with progress notifications |
 
 ### Model Building
 
@@ -135,7 +168,7 @@ The sidecar builds a runnable `nn.Module` from graph JSON using `torch.fx.Graph`
 2. Detect loss function from graph (Loss node)
 3. Load dataset (presets, custom tensors, HuggingFace, CSV, ImageFolder)
 4. Train with gradient clipping, mixed precision, early stopping, checkpointing
-5. Report progress via JSON-RPC notifications (`train.progress`, `train.log`)
+5. Report progress via JSON-RPC notifications (`train.progress`, `train.log`), and per-layer gradients, output histograms and feature maps every 50 batches (`train.layers`)
 
 ## Module Registry
 
