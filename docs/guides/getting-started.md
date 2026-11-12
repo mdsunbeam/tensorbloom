@@ -2,6 +2,20 @@
 
 This guide walks you through building and training your first neural network in TensorBloom.
 
+## Install
+
+Download the latest installer for your platform from the [releases page](https://github.com/mdsunbeam/tensorbloom/releases/latest).
+
+| Platform | Format |
+|----------|--------|
+| Windows | `.exe` installer or `.msi` |
+| Linux | `.deb`, `.rpm`, or `.AppImage` |
+| macOS (Apple Silicon) | `.dmg`, from the next release on |
+
+Nothing else needs to be installed first: TensorBloom sets up its own Python and PyTorch (see [Python Setup](#python-setup)). Once installed, the app [updates itself](#updates-and-feedback).
+
+To look around before installing, the editor also runs in your browser at [tensorbloom.org/app](https://tensorbloom.org/app/). Building, shape checking and code generation work there; training, code import and ONNX export need the desktop app. To build from source, see the [README](https://github.com/mdsunbeam/tensorbloom#building-from-source).
+
 ## Python Setup
 
 TensorBloom trains with PyTorch in a Python environment of its own. The editor opens right away, so you can start building while that environment is set up:
@@ -46,9 +60,10 @@ Each layer's color and icon show its family (data, dense, spatial, regularizatio
 1. Press **Train** in the toolbar, or **Ctrl+Enter**. The optimizer, learning rate, epochs, and loss function are pre-configured in the **Training** tab of the right panel.
 2. The toolbar shows the run's status: the dataset download, then "Epoch 3 of 10" with a progress bar. Click it to open the **Charts** tab.
 3. Watch the loss and accuracy curves. Hover a chart to read each value at that epoch.
-4. When the run ends, a summary card shows how long it took and the best validation accuracy, with **Try it**, **Export model**, and **Train again**.
+4. Watch the graph too: each layer is colored by the gradient reaching it, and layers that look wrong, such as a ReLU with many dead units, get a warning mark. Hover a layer for its details. See [Training on the Graph](training.md#training-on-the-graph).
+5. When the run ends, a summary card shows how long it took and the best validation accuracy, with **Try it**, **Change one thing**, **Export model**, and **Train again**.
 
-![Simple MLP after training](../screenshot-training.png)
+![Simple MLP after training, with relu1 marked for dead units](../screenshot-training.png)
 
 If the run can't start or fails, an error panel explains the likely cause in plain language, with **Try again**, **Show logs**, and **Copy error**.
 
@@ -143,6 +158,12 @@ This is useful when the built-in modules don't cover your needs — for example,
 **Ctrl+Z** undoes the last change on the first press, and **Ctrl+Shift+Z** or **Ctrl+Y** redoes it. Typing in one field counts as one step, and so does a whole drag.
 
 While there are unsaved changes, TensorBloom keeps a copy every 30 seconds and when the window closes. If you relaunch with leftover work, a banner offers **Restore** or **Discard**. Copies are cleared after you save or start a new project, and last 7 days.
+
+## Updates and Feedback
+
+The desktop app checks for a new version when it starts. When one is out, a banner at the top of the canvas offers **What's new**, **Later**, and **Update and restart**; the update waits while a model is training. **Help > Check for Updates** checks right away.
+
+**Help > Send Feedback** opens a feedback form on GitHub with your app version and operating system filled in, and **Help > Report a Problem** opens a bug report.
 
 ## Exporting
 

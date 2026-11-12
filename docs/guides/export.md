@@ -68,6 +68,8 @@ The **Code** panel at the bottom of the app always shows the generated PyTorch c
 - **Export .py** — Click `Export .py` to save as a Python file
 - **Edit** — Click `Edit` to open the code in an editable text area, make changes, and re-import
 
+![The Code panel with the generated nn.Module for LeNet-5](../screenshot-code.png)
+
 The generated code is a standard `nn.Module` class that you can use in any PyTorch project:
 
 ```python

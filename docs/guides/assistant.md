@@ -38,11 +38,15 @@ The assistant's changes show on the canvas as a preview while it works: added la
 - **Apply** keeps them. All of them together are one undo step, so **Ctrl+Z** takes them back.
 - **Discard** puts the model and training settings back exactly as they were.
 
+![The assistant's changes previewed on the canvas, with the list of changes and Apply or Discard](../screenshot-assistant.png)
+
 While a preview is showing, the canvas can't be edited and undo is off. The assistant checks every layer type and setting against the catalog, and fixes the shape errors its changes cause before it hands them over. Opening another project or template keeps pending changes as an undo step.
 
 ## Tutoring a lesson
 
 While a [guided lesson](lessons.md) is open, the assistant acts as its tutor. It knows the lesson's goal, the step you're on, whether the step passes yet and which hints you've seen. It answers questions and explains ideas, but it nudges you toward the step rather than doing it for you. When you need more, it reveals the lesson's next hint in the lesson panel, so the panel and the chat stay in step. Ask it to just do the step and it will, then explain why it works.
+
+![The assistant tutoring a lesson beside the lesson panel](../screenshot-assistant-lesson.png)
 
 **Ask the tutor** on the lesson panel opens the chat with a question about the step, which you can edit before sending.
 
