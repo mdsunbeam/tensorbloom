@@ -16,7 +16,8 @@
     "build:web": "tsc && vite build --base=/app/ --outDir dist-web",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs:modules": "node scripts/gen-module-docs.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",

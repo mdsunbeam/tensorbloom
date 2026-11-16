@@ -18,7 +18,7 @@ Build, train, and export PyTorch neural networks visually. Drag-and-drop layers,
 ## Features
 
 **Graph Editor**
-- 70+ PyTorch modules: Linear, Conv2d, Transformer, LSTM, BatchNorm, and more
+- 80+ PyTorch modules: Linear, Conv2d, Transformer, LSTM, BatchNorm, the DecoderBlock that current LLMs are built from, and more
 - Drag-and-drop from the layer palette, Enter on a focused layer, or Ctrl+K spotlight search
 - Eight layer color families, each with its own icon, so a layer's kind reads without relying on color
 - Skip connections, concatenation, multi-branch architectures; skip connections run dotted beside the block they skip
@@ -262,6 +262,7 @@ Full docs at **[tensorbloom.org/docs](https://tensorbloom.org/docs)**, or browse
 - [Exporting Models](docs/guides/export.md) — ONNX, TorchScript, and Python export
 - [Language Models](docs/guides/language-models.md) — Import an LLM, size it for your computer, chat with it, and fine-tune it with LoRA
 - [Template Reference](docs/guides/templates.md) — All 16 built-in architectures
+- [Module Reference](docs/guides/modules.md) — Every layer in the palette, with its parameters
 - [Lessons](docs/guides/lessons.md) — The guided lessons, and the lesson format for adding your own
 - [Architecture](docs/guides/architecture.md) — Technical internals for contributors
 - [Roadmap](ROADMAP.md) — Planned features and development direction
@@ -283,6 +284,8 @@ The same app runs in a plain browser with no install. Building, shape checking, 
 cd app
 npm run build:web   # static files in app/dist-web, served from /app/
 ```
+
+![ResNet-18 in the web version at tensorbloom.org/app, with the card that points training to the desktop app](docs/screenshot-web.png)
 
 Links can open a model: `/app/?template=resnet-18` opens a template (its name in lowercase, with dashes), and File > Copy Share Link packs the current model into the link's `#m=` fragment, so nothing is stored on a server.
 

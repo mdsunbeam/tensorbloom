@@ -14,7 +14,11 @@ Download the latest installer for your platform from the [releases page](https:/
 
 Nothing else needs to be installed first: TensorBloom sets up its own Python and PyTorch (see [Python Setup](#python-setup)). Once installed, the app [updates itself](#updates-and-feedback).
 
-To look around before installing, the editor also runs in your browser at [tensorbloom.org/app](https://tensorbloom.org/app/). Building, shape checking and code generation work there; training, code import and ONNX export need the desktop app. To build from source, see the [README](https://github.com/mdsunbeam/tensorbloom#building-from-source).
+To look around before installing, the editor also runs in your browser at [tensorbloom.org/app](https://tensorbloom.org/app/). Building, shape checking and code generation work there; training, code import and ONNX export need the desktop app, and pressing **Train** says so and offers to save the model for it. Links like [tensorbloom.org/app/?template=resnet-18](https://tensorbloom.org/app/?template=resnet-18) open a template, and **File > Copy Share Link** puts the whole model in the link.
+
+![ResNet-18 in the web version, with the card that points training to the desktop app](../screenshot-web.png)
+
+To build from source, see the [README](https://github.com/mdsunbeam/tensorbloom#building-from-source).
 
 ## Python Setup
 
