@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import Dialog from "./ui/Dialog";
 import Button from "./ui/Button";
 import Segmented from "./ui/Segmented";
@@ -10,9 +10,11 @@ import { useTrainingStore } from "../store/training-store";
 import { formatLoss } from "./RunControls";
 
 /** What the sidecar's model.predict sends back for one input */
-type Payload =
-  | { kind: "image"; png: string; width: number; height: number }
-  | { kind: "values"; values: number[]; shape: number[]; total: number };
+type ImagePayload = { kind: "image"; png: string; width: number; height: number };
+type ValuesPayload = { kind: "values"; values: number[]; shape: number[]; total: number };
+/** Decoded token ids, with the full token count in case the text was cut for display */
+type TextPayload = { kind: "text"; text: string; token_count: number; truncated: boolean };
+type Payload = ImagePayload | ValuesPayload | TextPayload;
 
 interface Sample {
   index: number | null;
@@ -244,8 +246,8 @@ function SampleCard({ sample, classNames, task }: { sample: Sample; classNames: 
           </>
         ) : task === "reconstruction" ? null : (
           <>
-            <div className="text-fg-secondary">Predicted <Values payload={out} /></div>
-            {sample.target && <div className="text-fg-muted">Actual {sample.target.kind === "class" ? <span className="text-fg">{className(classNames, sample.target.index)}</span> : <Values payload={sample.target} />}</div>}
+            <div className="text-fg-secondary">Predicted <PayloadView payload={out} variant="inline" /></div>
+            {sample.target && <div className="text-fg-muted">Actual {sample.target.kind === "class" ? <span className="text-fg">{className(classNames, sample.target.index)}</span> : <PayloadView payload={sample.target} variant="inline" />}</div>}
           </>
         )}
       </div>
@@ -272,25 +274,64 @@ function Verdict({ sample, classNames }: { sample: Sample; classNames: string[] 
 function Figure({ payload, caption }: { payload: Payload; caption?: string }) {
   return (
     <figure className="bg-surface-sunken flex flex-col items-center justify-center h-[104px] p-2">
-      {payload.kind === "image" ? (
-        <img
-          src={`data:image/png;base64,${payload.png}`}
-          alt={caption ?? "Sample"}
-          // Small images are scaled up with hard pixel edges so they stay legible
-          style={{ imageRendering: payload.width < 64 ? "pixelated" : "auto", width: Math.min(88, payload.width * 3), height: "auto", maxHeight: 88, objectFit: "contain" }}
-        />
-      ) : (
-        <div className="w-full text-[11px] font-mono text-fg-secondary leading-snug break-all line-clamp-5">
-          <Values payload={payload} />
-        </div>
-      )}
+      <PayloadView payload={payload} variant="figure" />
       {caption && <figcaption className="mt-1 text-[11px] text-fg-muted">{caption}</figcaption>}
     </figure>
   );
 }
 
-function Values({ payload }: { payload: Payload }) {
-  if (payload.kind !== "values") return null;
+type PayloadKind = Payload["kind"];
+type PayloadVariant = "figure" | "inline";
+type PayloadOf<K extends PayloadKind> = Extract<Payload, { kind: K }>;
+type PayloadViewProps<K extends PayloadKind> = { payload: PayloadOf<K>; variant: PayloadVariant };
+
+/**
+ * Every payload kind must have an entry. Adding a kind to Payload without adding a
+ * view here is a TypeScript error, and the switch below makes the narrowing explicit.
+ */
+const PAYLOAD_VIEWS: { [K in PayloadKind]: ComponentType<PayloadViewProps<K>> } = {
+  image: ImagePayloadView,
+  values: ValuesPayloadView,
+  text: TextPayloadView,
+};
+
+function PayloadView({ payload, variant }: { payload: Payload; variant: PayloadVariant }) {
+  switch (payload.kind) {
+    case "image":
+      return <PAYLOAD_VIEWS.image payload={payload} variant={variant} />;
+    case "values":
+      return <PAYLOAD_VIEWS.values payload={payload} variant={variant} />;
+    case "text":
+      return <PAYLOAD_VIEWS.text payload={payload} variant={variant} />;
+    default:
+      return assertNever(payload);
+  }
+}
+
+function ImagePayloadView({ payload, variant }: PayloadViewProps<"image">) {
+  // Images only appear in a Figure or a reconstruction card, never inline.
+  if (variant === "inline") return <span className="text-fg-muted">(image)</span>;
+  return (
+    <img
+      src={`data:image/png;base64,${payload.png}`}
+      alt="Sample"
+      // Small images are scaled up with hard pixel edges so they stay legible
+      style={{ imageRendering: payload.width < 64 ? "pixelated" : "auto", width: Math.min(88, payload.width * 3), height: "auto", maxHeight: 88, objectFit: "contain" }}
+    />
+  );
+}
+
+function ValuesPayloadView({ payload, variant }: PayloadViewProps<"values">) {
+  const values = <ValueList payload={payload} />;
+  if (variant === "inline") return values;
+  return (
+    <div className="w-full text-[11px] font-mono text-fg-secondary leading-snug break-all line-clamp-5">
+      {values}
+    </div>
+  );
+}
+
+function ValueList({ payload }: { payload: ValuesPayload }) {
   if (payload.total === 1) return <span className="font-mono text-fg">{formatLoss(payload.values[0])}</span>;
   const more = payload.total - payload.values.length;
   return (
@@ -298,6 +339,37 @@ function Values({ payload }: { payload: Payload }) {
       [{payload.values.map((v) => formatLoss(v)).join(", ")}{more > 0 ? `, … ${more} more` : ""}]
     </span>
   );
+}
+
+function TextPayloadView({ payload, variant }: PayloadViewProps<"text">) {
+  const empty = payload.text.length === 0;
+  const label = empty ? "(empty)" : payload.text;
+  const title = empty
+    ? "No tokens to show"
+    : `${payload.text}${payload.truncated ? `\n\nTruncated; ${payload.token_count} tokens total` : ""}`;
+  const suffix = payload.truncated && !empty ? " …" : "";
+  if (variant === "inline") {
+    return (
+      <span
+        className={`font-mono whitespace-pre-wrap break-words line-clamp-3 ${empty ? "text-fg-muted" : "text-fg"}`}
+        title={title}
+      >
+        {label}{suffix}
+      </span>
+    );
+  }
+  return (
+    <div
+      className={`w-full text-[11px] font-mono leading-snug whitespace-pre-wrap break-words line-clamp-5 ${empty ? "text-fg-muted" : "text-fg-secondary"}`}
+      title={title}
+    >
+      {label}{suffix}
+    </div>
+  );
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled payload kind: ${JSON.stringify(value)}`);
 }
 
 function Notice({ title, body, action, tone = "neutral" }: { title: string; body: string; action?: React.ReactNode; tone?: "neutral" | "danger" }) {
