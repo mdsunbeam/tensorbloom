@@ -70,6 +70,8 @@ jobs:
         run: pip install onnx onnxscript
       - name: Run template tests
         run: python python/test_templates.py
+      - name: Run payload tests
+        run: python python/test_payloads.py
       - name: Run sidecar tests
         run: python python/test_sidecar.py
       - name: Run LLM tests

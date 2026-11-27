@@ -27,6 +27,15 @@ import torch.fx
 import os as _os
 sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 import tensorbloom_llm  # noqa: E402  (shipped next to this file)
+from tensorbloom_payloads import (  # noqa: E402  (shipped next to this file)
+    DatasetSemantics,
+    VocabDecoder,
+    dataset_attr as _dataset_attr,
+    dataset_semantics,
+    describe_sample,
+    image_payload,
+    is_image,
+)
 
 # Preserve real stdout before any redirection — all JSON-RPC goes through this
 _real_stdout = sys.stdout
@@ -1303,6 +1312,10 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
                     _hf_vocab[w] = i + 2
 
                 _hf_max_len = max_length
+                # Built once and shared by the train and validation datasets. This is
+                # the vocabulary used to encode text, so it is also the table needed
+                # to decode token ids back into readable text for the Try it view.
+                _hf_decoder = VocabDecoder.from_vocab(_hf_vocab)
 
                 def _hf_encode(text):
                     tokens = [_hf_vocab.get(w, 1) for w in str(text).lower().split()[:_hf_max_len]]
@@ -1312,6 +1325,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
                     def __init__(self, split):
                         self.texts = split[txt_col]
                         self.labels = split[label_col]
+                        self.semantics = DatasetSemantics(decoder=_hf_decoder)
                     def __len__(self):
                         return len(self.labels)
                     def __getitem__(self, idx):
@@ -1420,6 +1434,9 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
             text = f.read()
         chars = sorted(set(text))
         stoi = {ch: i for i, ch in enumerate(chars)}
+        # Character ids are real characters, so this decoder joins without spaces and
+        # never treats id 0 as padding.
+        _char_decoder = VocabDecoder.from_chars(chars)
         data = torch.tensor([stoi[ch] for ch in text], dtype=torch.long)
         seq_len = config.get("max_length", 256)
         n = int(0.9 * len(data))
@@ -1427,6 +1444,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         class CharLMDataset(torch.utils.data.Dataset):
             def __init__(self, data_tensor):
                 self.data = data_tensor
+                self.semantics = DatasetSemantics(decoder=_char_decoder)
             def __len__(self):
                 return max(0, len(self.data) - seq_len)
             def __getitem__(self, idx):
@@ -1458,10 +1476,13 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         train_ids = torch.tensor(_wt2_encode(train_text), dtype=torch.long)
         test_ids = torch.tensor(_wt2_encode(test_text), dtype=torch.long)
         seq_len = config.get("max_length", 128)
+        # Word-level vocabulary, built once for both the train and test datasets.
+        _wt2_decoder = VocabDecoder.from_vocab(vocab)
 
         class WordLMDataset(torch.utils.data.Dataset):
             def __init__(self, data_tensor):
                 self.data = data_tensor
+                self.semantics = DatasetSemantics(decoder=_wt2_decoder)
             def __len__(self):
                 return max(0, len(self.data) - seq_len)
             def __getitem__(self, idx):
@@ -1501,10 +1522,15 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
             tokens = [_txt_vocab.get(w, 1) for w in text.lower().split()[:seq_len]]
             return tokens + [0] * (seq_len - len(tokens))
 
+        # The same word-level vocabulary that encodes IMDB and AG News samples is
+        # attached for decoding them in the Try it view.
+        _txt_decoder = VocabDecoder.from_vocab(_txt_vocab)
+
         class TextClassDataset(torch.utils.data.Dataset):
             def __init__(self, split):
                 self.texts = split[text_col]
                 self.labels = split[label_col]
+                self.semantics = DatasetSemantics(decoder=_txt_decoder)
             def __len__(self):
                 return len(self.labels)
             def __getitem__(self, idx):
@@ -1884,7 +1910,7 @@ class _LayerMonitor:
         finally:
             self._maps = None
             model.train(was_training)
-        sample = _image_payload(x, norm) if _is_image(x.cpu()) else None
+        sample = image_payload(x, norm) if is_image(x.cpu()) else None
         return {"input": sample, "layers": maps}
 
     def _map_payload(self, t: torch.Tensor) -> dict:
@@ -2416,15 +2442,8 @@ def export_torchscript(params: dict) -> dict:
 # Trying a trained model on samples
 # ---------------------------------------------------------------------------
 
-def _dataset_attr(ds, name: str):
-    """An attribute of the dataset under any random_split wrappers, e.g. its classes or transform."""
-    while ds is not None:
-        if hasattr(ds, name):
-            return getattr(ds, name)
-        ds = getattr(ds, "dataset", None)
-    return None
-
-
+# dataset_attr is imported from tensorbloom_payloads. It walks random_split and
+# Subset wrappers to reach the original dataset's transform or semantics.
 def _find_normalize(ds):
     """The Normalize step the dataset applies, so images can be shown as they looked before it."""
     import torchvision.transforms as T
@@ -2433,45 +2452,8 @@ def _find_normalize(ds):
     return next((s for s in steps if isinstance(s, T.Normalize)), None)
 
 
-def _is_image(x: torch.Tensor) -> bool:
-    return x.dim() == 3 and x.shape[0] in (1, 3) and x.shape[1] >= 4 and x.shape[2] >= 4
-
-
-def _image_payload(x: torch.Tensor, norm) -> dict:
-    """A [C, H, W] tensor as a small PNG, undoing the dataset's normalization."""
-    import base64
-    from PIL import Image
-    img = x.detach().float().cpu()
-    if norm is not None:
-        img = img * torch.tensor(norm.std).view(-1, 1, 1) + torch.tensor(norm.mean).view(-1, 1, 1)
-    elif img.min() < 0 or img.max() > 1:
-        img = (img - img.min()) / (img.max() - img.min() + 1e-8)
-    arr = (img.clamp(0, 1) * 255).round().to(torch.uint8)
-    pil = Image.fromarray(arr[0].numpy() if arr.shape[0] == 1 else arr.permute(1, 2, 0).numpy())
-    pil.thumbnail((160, 160))
-    buf = io.BytesIO()
-    pil.save(buf, format="PNG")
-    return {"kind": "image", "png": base64.b64encode(buf.getvalue()).decode("ascii"),
-            "width": pil.width, "height": pil.height}
-
-
-def _values_payload(t: torch.Tensor, limit: int = 12) -> dict:
-    flat = t.detach().float().cpu().reshape(-1)
-    return {"kind": "values", "values": [round(v, 4) for v in flat[:limit].tolist()],
-            "shape": list(t.shape), "total": flat.numel()}
-
-
-def _sample_payload(x: torch.Tensor, norm) -> dict:
-    return _image_payload(x, norm) if _is_image(x) else _values_payload(x)
-
-
-def _label_of(y) -> int | None:
-    """The class index a target holds, or None when it isn't a single class."""
-    if isinstance(y, int):
-        return y
-    if isinstance(y, torch.Tensor) and y.numel() == 1 and not y.is_floating_point():
-        return int(y.item())
-    return None
+# The payload builders (images, values, classes, text, reconstruction) live in
+# tensorbloom_payloads. model_predict only loads the model and calls describe_sample.
 
 
 def model_predict(params: dict) -> dict:
@@ -2521,33 +2503,18 @@ def model_predict(params: dict) -> dict:
         split = "validation" if test_loader else "training"
         ds = (test_loader or train_loader).dataset
         norm = _find_normalize(ds)
-        classes = _dataset_attr(ds, "classes")
-        class_names = [str(c) for c in classes] if classes else None
+        semantics = dataset_semantics(ds)
+        class_names = list(semantics.class_names) if semantics.class_names else None
         first_x = ds[0][0]
-        accepts_images = isinstance(first_x, torch.Tensor) and _is_image(first_x)
+        accepts_images = isinstance(first_x, torch.Tensor) and is_image(first_x)
 
         def run(xb: torch.Tensor) -> torch.Tensor:
             with torch.no_grad():
                 return model(*((_to_device(xb, device),) * num_inputs)).float().cpu()
 
         def describe(x: torch.Tensor, out: torch.Tensor, y) -> dict:
-            label = _label_of(y) if y is not None else None
-            sample = {"input": _sample_payload(x, norm), "target": None, "output": None, "correct": None}
-            if not is_reconstruction and out.dim() == 1 and out.numel() > 1:
-                probs = torch.softmax(out, dim=0)
-                top = probs.topk(min(3, probs.numel()))
-                sample["output"] = {"kind": "classes",
-                                    "top": [{"index": int(i), "prob": round(float(p), 4)} for p, i in zip(top.values, top.indices)]}
-                if label is not None:
-                    sample["target"] = {"kind": "class", "index": label}
-                    sample["correct"] = int(top.indices[0]) == label
-            elif is_reconstruction and out.numel() == x.numel():
-                sample["output"] = _sample_payload(out.reshape(x.shape), norm)
-            else:
-                sample["output"] = _values_payload(out)
-                if y is not None:
-                    sample["target"] = {"kind": "class", "index": label} if label is not None else _values_payload(torch.as_tensor(y))
-            return sample
+            return describe_sample(x, out, y, semantics=semantics,
+                                   is_reconstruction=is_reconstruction, normalization=norm)
 
         result = {"split": split, "dataset_size": len(ds), "class_names": class_names, "weights": weights,
                   "accepts_images": accepts_images, "task": "reconstruction" if is_reconstruction else "prediction"}

@@ -127,7 +127,7 @@ The Rust layer is thin — it manages the window, the Python sidecar process, an
 
 ## Python Sidecar (`python/`)
 
-A JSON-RPC server (`tensorbloom_sidecar.py`) that handles all PyTorch operations, with language model support in `tensorbloom_llm.py` next to it:
+A JSON-RPC server (`tensorbloom_sidecar.py`) that handles all PyTorch operations, with language model support in `tensorbloom_llm.py` and prediction presentation in `tensorbloom_payloads.py` next to it:
 
 ### RPC Methods
 
@@ -151,6 +151,22 @@ A JSON-RPC server (`tensorbloom_sidecar.py`) that handles all PyTorch operations
 | `llm.install` / `llm.status` | Install and check the extra packages for language models |
 | `llm.load` / `llm.unload` / `llm.generate` / `llm.stop` | Load a model, chat with it (streamed as `llm.token`) |
 | `llm.finetune.start` | LoRA, QLoRA or full fine-tuning with progress notifications |
+
+### Prediction Payloads
+
+`model.predict` cannot send tensors to the interface, so each sample is described by a small JSON payload with a `kind` discriminator. `tensorbloom_payloads.py` chooses the payload with an ordered list of encoders per role: input, output, and target.
+
+| `kind` | Fields | Shown as |
+|--------|--------|----------|
+| `image` | `png`, `width`, `height` | A sample image, with normalization undone |
+| `values` | `values`, `shape`, `total` | The first 12 numbers, with the full shape and count |
+| `classes` | `top` with `index` and `prob` | The top three guesses as probabilities |
+| `class` | `index` | The actual class, with a Right/Wrong verdict |
+| `text` | `text`, `token_count`, `truncated` | Decoded words or characters, for text input and language-model output |
+
+Text datasets attach a `DatasetSemantics` object with a vocabulary decoder when they are loaded. The decoder lives in Python because that is where the vocabulary is built; the interface only lays out the decoded text. A Hugging Face tokenizer can later implement the same `TokenDecoder` interface without changing the encoders or the renderer.
+
+Adding a payload kind requires a new encoder and a new entry in the interface's payload-view registry. The TypeScript build fails until a renderer exists, so a new kind cannot silently render as blank.
 
 ### Model Building
 

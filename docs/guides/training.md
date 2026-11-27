@@ -269,6 +269,8 @@ With two runs checked in the Runs tab, **Curves** shows **What changed** beside 
 
 Regression models show predicted values, and autoencoders show the reconstructed image.
 
+Text models show the words or characters behind the token ids instead of raw numbers. A language model also shows the tokens it predicted next and the tokens that actually came next, side by side.
+
 The latest run uses the weights still in memory. Older runs use their last checkpoint, and the footer says which is used. It runs the model each run actually trained, so edits to the canvas since then don't get in the way.
 
 ![Trying a trained model](../screenshot-try-model.png)
