@@ -282,7 +282,146 @@ try:
     check("trying with no trained weights is refused", False)
 except ValueError as e:
     check("trying with no trained weights is refused", "No trained weights" in str(e), str(e))
+
+# --- Text payloads through model.predict ---
+print("Text payloads")
+import tensorbloom_payloads as tbp
+
+TEXT_VOCAB = {"<pad>": 0, "<unk>": 1, "the": 2, "cat": 3, "sat": 4, "on": 5}
+TEXT_SEMANTICS = tbp.DatasetSemantics(decoder=tbp.VocabDecoder.from_vocab(TEXT_VOCAB))
+
+
+class ToyTextClass(torch.utils.data.Dataset):
+    """A tiny token-classification dataset; no download and no real text needed."""
+    semantics = TEXT_SEMANTICS
+
+    def __init__(self):
+        x = torch.tensor([[2, 3, 4, 5, 0], [4, 0, 0, 0, 0],
+                          [2, 3, 0, 0, 0], [5, 2, 3, 4, 0]], dtype=torch.long)
+        self.x = x.repeat(16, 1)
+        self.y = torch.tensor([0, 1, 0, 1], dtype=torch.long).repeat(16)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
+
+
+class ToyTextLM(torch.utils.data.Dataset):
+    """A tiny next-token dataset: x is four ids and y is the same ids shifted by one."""
+    semantics = TEXT_SEMANTICS
+
+    def __init__(self):
+        seq = torch.tensor([2, 3, 4, 5], dtype=torch.long)
+        self.x = seq.repeat(16, 1)
+        self.y = torch.stack([torch.tensor([3, 4, 5, 2], dtype=torch.long)] * 16)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
+
+
+def text_class_graph():
+    """Input -> Embedding -> Flatten -> Linear -> CrossEntropyLoss."""
+    return {
+        "nodes": [
+            {"id": "inp", "type": "placeholder", "moduleType": "Input", "label": "tokens",
+             "params": {"shape": "[1, 5]", "dtype": "int64"}},
+            {"id": "emb", "type": "call_module", "moduleType": "Embedding", "label": "embed",
+             "params": {"num_embeddings": len(TEXT_VOCAB), "embedding_dim": 4}},
+            {"id": "flat", "type": "call_module", "moduleType": "Flatten", "label": "flat",
+             "params": {"start_dim": 1, "end_dim": -1}},
+            {"id": "fc", "type": "call_module", "moduleType": "Linear", "label": "fc",
+             "params": {"in_features": 20, "out_features": 2}},
+            {"id": "loss", "type": "call_module", "moduleType": "CrossEntropyLoss",
+             "label": "loss", "params": {}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "inp", "target": "emb", "sourceHandle": "out", "targetHandle": "in"},
+            {"id": "e2", "source": "emb", "target": "flat", "sourceHandle": "out", "targetHandle": "in"},
+            {"id": "e3", "source": "flat", "target": "fc", "sourceHandle": "out", "targetHandle": "in"},
+            {"id": "e4", "source": "fc", "target": "loss", "sourceHandle": "out", "targetHandle": "input"},
+            # The target edge tells _extract_loss_from_graph this is supervised, not reconstruction.
+            {"id": "e5", "source": "inp", "target": "loss", "sourceHandle": "y", "targetHandle": "target"},
+        ],
+    }
+
+
+def text_lm_graph():
+    """Input -> Embedding -> Linear(vocab) -> CrossEntropyLoss."""
+    return {
+        "nodes": [
+            {"id": "inp", "type": "placeholder", "moduleType": "Input", "label": "tokens",
+             "params": {"shape": "[1, 4]", "dtype": "int64"}},
+            {"id": "emb", "type": "call_module", "moduleType": "Embedding", "label": "embed",
+             "params": {"num_embeddings": len(TEXT_VOCAB), "embedding_dim": 4}},
+            {"id": "fc", "type": "call_module", "moduleType": "Linear", "label": "lm_head",
+             "params": {"in_features": 4, "out_features": len(TEXT_VOCAB)}},
+            {"id": "loss", "type": "call_module", "moduleType": "CrossEntropyLoss",
+             "label": "loss", "params": {}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "inp", "target": "emb", "sourceHandle": "out", "targetHandle": "in"},
+            {"id": "e2", "source": "emb", "target": "fc", "sourceHandle": "out", "targetHandle": "in"},
+            {"id": "e3", "source": "fc", "target": "loss", "sourceHandle": "out", "targetHandle": "input"},
+            {"id": "e4", "source": "inp", "target": "loss", "sourceHandle": "y", "targetHandle": "target"},
+        ],
+    }
+
+
+text_config = {
+    "optimizer": {"type": "Adam", "lr": 0.01},
+    "loss": "CrossEntropyLoss",
+    "epochs": 1,
+    "batch_size": 16,
+    "dataset": {"type": "TensorFile", "root": "toy-text"},
+    "device": "cpu",
+    "seed": 0,
+}
+
+
+def toy_loader(ds, batch_size=16):
+    # model_predict and the train loop only need a loader; a single dataset is enough.
+    return (torch.utils.data.DataLoader(ds, batch_size=batch_size, shuffle=False), None)
+
+
+sc._load_dataset = lambda *_args, **_kwargs: toy_loader(ToyTextClass())
+sc._train_stop_event.clear()
+sc._train_loop(text_class_graph(), text_config)
+res = sc.model_predict({"graph": text_class_graph(), "config": text_config,
+                        "count": 3, "sample_seed": 1})
+check("a text classifier shows its input as text",
+      all(s["input"]["kind"] == "text" for s in res["samples"])
+      and res["samples"][0]["input"]["text"] in ("the cat sat on", "sat", "the cat", "the cat sat"),
+      str(res["samples"][0]["input"]))
+check("a text classifier still shows class probabilities",
+      res["samples"][0]["output"]["kind"] == "classes", str(res["samples"][0]["output"]))
+check("a text classifier keeps a class target",
+      res["samples"][0]["target"]["kind"] == "class", str(res["samples"][0]["target"]))
+
+sc._load_dataset = lambda *_args, **_kwargs: toy_loader(ToyTextLM(), batch_size=8)
+sc._train_stop_event.clear()
+sc._train_loop(text_lm_graph(), dict(text_config, batch_size=8))
+lm = sc.model_predict({"graph": text_lm_graph(), "config": dict(text_config, batch_size=8),
+                       "count": 2, "sample_seed": 1})
+lm0 = lm["samples"][0]
+check("a language model shows its input tokens as text",
+      lm0["input"]["kind"] == "text" and lm0["input"]["text"] == "the cat sat on",
+      str(lm0["input"]))
+check("a language model shows predicted next tokens as text",
+      lm0["output"]["kind"] == "text" and lm0["output"]["token_count"] == 4
+      and len(lm0["output"]["text"].split()) == 4, str(lm0["output"]))
+check("a language model shows the actual next tokens as text",
+      lm0["target"]["kind"] == "text" and lm0["target"]["text"] == "cat sat on the",
+      str(lm0["target"]))
+check("language-model text does not claim a right/wrong verdict", lm0["correct"] is None,
+      str(lm0["correct"]))
+
 sc._load_dataset = _real_load
+sc._last_trained_state = None
 
 # --- Training on a subset ---
 print("Max samples")

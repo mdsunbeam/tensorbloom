@@ -32,6 +32,7 @@
     "resources": {
       "../../python/tensorbloom_sidecar.py": "python/tensorbloom_sidecar.py",
       "../../python/tensorbloom_llm.py": "python/tensorbloom_llm.py",
+      "../../python/tensorbloom_payloads.py": "python/tensorbloom_payloads.py",
       "../../python/requirements.txt": "python/requirements.txt"
     },
     "icon": [

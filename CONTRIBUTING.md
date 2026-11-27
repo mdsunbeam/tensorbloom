@@ -27,8 +27,9 @@ Thanks for your interest in contributing! Here's how to get started.
 3. Run `npm run build` in `app/` to verify TypeScript compiles
 4. Run `npm test` in `app/` to run the frontend tests (undo/redo history)
 5. Run `python python/test_templates.py` to verify template models
-6. Run `python python/test_sidecar.py` to verify training, checkpoints, and export
-7. Open a pull request
+6. Run `python python/test_payloads.py` to verify prediction payloads and text decoding
+7. Run `python python/test_sidecar.py` to verify training, checkpoints, and export
+8. Open a pull request
 
 ## Guidelines
 

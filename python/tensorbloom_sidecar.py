@@ -33,6 +33,7 @@ from tensorbloom_payloads import (  # noqa: E402  (shipped next to this file)
     dataset_attr as _dataset_attr,
     dataset_semantics,
     describe_sample,
+    image_payload,
     is_image,
 )
 
@@ -1311,6 +1312,10 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
                     _hf_vocab[w] = i + 2
 
                 _hf_max_len = max_length
+                # Built once and shared by the train and validation datasets. This is
+                # the vocabulary used to encode text, so it is also the table needed
+                # to decode token ids back into readable text for the Try it view.
+                _hf_decoder = VocabDecoder.from_vocab(_hf_vocab)
 
                 def _hf_encode(text):
                     tokens = [_hf_vocab.get(w, 1) for w in str(text).lower().split()[:_hf_max_len]]
@@ -1320,6 +1325,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
                     def __init__(self, split):
                         self.texts = split[txt_col]
                         self.labels = split[label_col]
+                        self.semantics = DatasetSemantics(decoder=_hf_decoder)
                     def __len__(self):
                         return len(self.labels)
                     def __getitem__(self, idx):
@@ -1428,6 +1434,9 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
             text = f.read()
         chars = sorted(set(text))
         stoi = {ch: i for i, ch in enumerate(chars)}
+        # Character ids are real characters, so this decoder joins without spaces and
+        # never treats id 0 as padding.
+        _char_decoder = VocabDecoder.from_chars(chars)
         data = torch.tensor([stoi[ch] for ch in text], dtype=torch.long)
         seq_len = config.get("max_length", 256)
         n = int(0.9 * len(data))
@@ -1435,6 +1444,7 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         class CharLMDataset(torch.utils.data.Dataset):
             def __init__(self, data_tensor):
                 self.data = data_tensor
+                self.semantics = DatasetSemantics(decoder=_char_decoder)
             def __len__(self):
                 return max(0, len(self.data) - seq_len)
             def __getitem__(self, idx):
@@ -1466,10 +1476,13 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
         train_ids = torch.tensor(_wt2_encode(train_text), dtype=torch.long)
         test_ids = torch.tensor(_wt2_encode(test_text), dtype=torch.long)
         seq_len = config.get("max_length", 128)
+        # Word-level vocabulary, built once for both the train and test datasets.
+        _wt2_decoder = VocabDecoder.from_vocab(vocab)
 
         class WordLMDataset(torch.utils.data.Dataset):
             def __init__(self, data_tensor):
                 self.data = data_tensor
+                self.semantics = DatasetSemantics(decoder=_wt2_decoder)
             def __len__(self):
                 return max(0, len(self.data) - seq_len)
             def __getitem__(self, idx):
@@ -1509,10 +1522,15 @@ def _load_dataset(config: dict, batch_size: int, aug_config: dict | None = None,
             tokens = [_txt_vocab.get(w, 1) for w in text.lower().split()[:seq_len]]
             return tokens + [0] * (seq_len - len(tokens))
 
+        # The same word-level vocabulary that encodes IMDB and AG News samples is
+        # attached for decoding them in the Try it view.
+        _txt_decoder = VocabDecoder.from_vocab(_txt_vocab)
+
         class TextClassDataset(torch.utils.data.Dataset):
             def __init__(self, split):
                 self.texts = split[text_col]
                 self.labels = split[label_col]
+                self.semantics = DatasetSemantics(decoder=_txt_decoder)
             def __len__(self):
                 return len(self.labels)
             def __getitem__(self, idx):
@@ -1892,7 +1910,7 @@ class _LayerMonitor:
         finally:
             self._maps = None
             model.train(was_training)
-        sample = _image_payload(x, norm) if _is_image(x.cpu()) else None
+        sample = image_payload(x, norm) if is_image(x.cpu()) else None
         return {"input": sample, "layers": maps}
 
     def _map_payload(self, t: torch.Tensor) -> dict:

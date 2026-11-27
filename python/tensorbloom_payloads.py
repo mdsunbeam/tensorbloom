@@ -142,7 +142,7 @@ class VocabDecoder:
         # Ids are normally 0..n with no gaps, but using max() keeps the decoder safe
         # if a dataset ever reserves a sparse range. Unassigned slots stay as <i>.
         size = max(vocab.values()) + 1
-        itos = [f"<{i}>"] * size
+        itos = [f"<{i}>" for i in range(size)]
         for token, idx in vocab.items():
             if 0 <= idx < size:
                 itos[idx] = token
@@ -349,15 +349,20 @@ class SampleContext:
     semantics: DatasetSemantics = EMPTY_SEMANTICS
     is_reconstruction: bool = False
     normalization: Any | None = None
-    # Set after the output is encoded. The target encoders need to know whether the
-    # output was text, classes, an image, or numbers.
+    # Set after the output is encoded. The target encoders need to know both the
+    # payload kind and which encoder produced it: a reconstruction leaves its target
+    # empty, while a normal numeric output keeps one.
     output_kind: str | None = None
+    output_encoder: str | None = None
 
 
 @dataclass(frozen=True)
 class EncodedPayload:
     payload: SampleValue | None
     correct: bool | None = None
+    # The name of the encoder that produced this payload. The target stage uses it to
+    # distinguish a reconstruction output from an ordinary numeric output.
+    encoder: str | None = None
 
 
 @dataclass(frozen=True)
@@ -496,10 +501,10 @@ def _encode_output_values(ctx: SampleContext) -> EncodedPayload:
 # The conditions below preserve that behavior and add token text for text output.
 
 def _target_class_applies(ctx: SampleContext) -> bool:
-    # Reconstruction samples have never shown a target, so an image output excludes
-    # this encoder. A scalar label excludes the text and value encoders by running
-    # first.
-    return ctx.output_kind != "image" and _label_of(ctx.target) is not None
+    # Reconstruction samples have never shown a target, whether they were shown as an
+    # image or as numbers. A scalar label excludes the text and value encoders by
+    # running first.
+    return ctx.output_encoder != "reconstruction" and _label_of(ctx.target) is not None
 
 
 def _encode_target_class(ctx: SampleContext) -> EncodedPayload:
@@ -510,9 +515,10 @@ def _encode_target_class(ctx: SampleContext) -> EncodedPayload:
 
 
 def _target_text_applies(ctx: SampleContext) -> bool:
-    # Only decode a target as text when the output was text. This prevents per-token
-    # class labels from being mistaken for words in a future token-classification model.
-    return (ctx.output_kind == "text" and ctx.semantics.decoder is not None
+    # Only decode a target as text when the text encoder produced the output. This
+    # prevents per-token class labels from being mistaken for words in a future
+    # token-classification model.
+    return (ctx.output_encoder == "text" and ctx.semantics.decoder is not None
             and _token_ids_target(ctx.target) is not None)
 
 
@@ -525,10 +531,12 @@ def _encode_target_text(ctx: SampleContext) -> EncodedPayload:
 
 
 def _target_values_applies(ctx: SampleContext) -> bool:
-    # Matches the old else branch: numbers for a non-class target. Reconstruction
-    # output is image or values but is excluded because its target has always been
-    # left empty.
-    return ctx.output_kind in ("values", "text") and ctx.target is not None
+    # Matches the old else branch: numbers for a non-class target. Reconstruction is
+    # excluded because its target has always been left empty, even when the
+    # reconstructed output itself is numeric.
+    return (ctx.output_kind in ("values", "text")
+            and ctx.output_encoder != "reconstruction"
+            and ctx.target is not None)
 
 
 def _encode_target_values(ctx: SampleContext) -> EncodedPayload:
@@ -564,7 +572,10 @@ _ENCODERS = {"input": INPUT_ENCODERS, "output": OUTPUT_ENCODERS, "target": TARGE
 def _encode(role: str, ctx: SampleContext) -> EncodedPayload:
     for encoder in _ENCODERS[role]:
         if encoder.applies(ctx):
-            return encoder.encode(ctx)
+            result = encoder.encode(ctx)
+            # Tag the result with the encoder name so later stages can tell a
+            # reconstruction output from an ordinary numeric output.
+            return EncodedPayload(result.payload, result.correct, encoder.name)
     return EncodedPayload(None)
 
 
@@ -585,7 +596,8 @@ def describe_sample(x: torch.Tensor, out: torch.Tensor | None, y,
     output_kind = output_enc.payload["kind"] if output_enc.payload is not None else None
     target_enc = _encode("target", replace(base, out=out, target=y,
                                            is_reconstruction=is_reconstruction,
-                                           output_kind=output_kind))
+                                           output_kind=output_kind,
+                                           output_encoder=output_enc.encoder))
 
     # Values is a total fallback for inputs and outputs, but this keeps the types
     # honest if an encoder is ever changed.
